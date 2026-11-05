@@ -57,7 +57,7 @@ The dotted memory relationship is a proposal boundary, not an implemented automa
 stateDiagram-v2
     [*] --> queued
     queued --> running
-    running --> needs_clarification: destination or intent unclear
+    running --> needs_clarification: essential research parameter missing
     needs_clarification --> queued: operator clarification
     running --> completed: sufficient capture, no blocking issue
     running --> blocked: policy denial or incomplete objective
