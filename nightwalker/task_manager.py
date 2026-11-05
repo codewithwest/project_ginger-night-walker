@@ -93,7 +93,9 @@ class TaskManager:
             self.tasks[task_id] = record
             checkpoint = record.get("checkpoint")
             status = record.get("status")
-            saved_plan = record.get("plan") or {}
+            saved_plan = record.get("plan")
+            if not isinstance(saved_plan, dict):
+                saved_plan = {}
             saved_question = str(saved_plan.get("clarification_question") or "").casefold()
             legacy_site_prompt = (
                 status == DecisionStatus.NEEDS_CLARIFICATION.value
@@ -302,9 +304,23 @@ class TaskManager:
                     if not available:
                         next_url = ""
                         research_complete = True
+                        self._save_checkpoint(
+                            task_id, initial_plan, sources=sources, findings=findings,
+                            evidence=evidence, visited_urls=visited_urls, candidates=candidates,
+                            structured_data=structured_data, limitations=limitations,
+                            loop_guard=loop_guard, round_count=round_count,
+                            next_url="", next_assignment=next_assignment, research_complete=True,
+                        )
                         break
                     next_url = available[0]["url"]
                     next_assignment = "Recovery: inspect a different source after repeat detection"
+                    self._save_checkpoint(
+                        task_id, initial_plan, sources=sources, findings=findings,
+                        evidence=evidence, visited_urls=visited_urls, candidates=candidates,
+                        structured_data=structured_data, limitations=limitations,
+                        loop_guard=loop_guard, round_count=round_count,
+                        next_url=next_url, next_assignment=next_assignment,
+                    )
                     continue
 
                 one_page_plan = initial_plan.model_copy(update={
