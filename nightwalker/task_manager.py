@@ -96,6 +96,7 @@ class TaskManager:
 
     async def restore_and_resume(self) -> int:
         """Restore saved tasks and resume work interrupted by process/container restart."""
+        self.shutting_down = False
         restored = 0
         for record in self.state_store.load_all():
             task_id = record["task_id"]
