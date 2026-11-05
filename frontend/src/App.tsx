@@ -37,6 +37,12 @@ type BrowserResult = {
   products?: Product[];
   evidence_id?: string;
   issues?: string[];
+  findings?: { claim: string; type?: string; confidence?: string }[];
+  sources?: { url: string; title?: string; retrieved_at?: string }[];
+  evidence?: { evidence_id?: string; source_url?: string; captured_text?: string; visited_urls?: string[] }[];
+  structured_data?: Record<string, unknown>;
+  limitations?: string[];
+  suggested_memory?: string[];
 };
 
 type Task = {
@@ -150,6 +156,51 @@ function extractProducts(text: string): Product[] {
   });
 
   return products;
+}
+
+function ResearchReport({ result }: { result: BrowserResult }) {
+  const findings = result.findings || [];
+  const sources = result.sources || (result.final_url ? [{ url: result.final_url, title: result.title }] : []);
+  const products = result.products || [];
+  const limitations = result.limitations || result.issues || [];
+  return (
+    <section className="answer-panel research-report">
+      <div className="answer-panel__topline">
+        <span className="eyebrow"><Check size={13} /> RESEARCH REPORT</span>
+        <span className="result-count">{findings.length} observations · {sources.length} sources</span>
+      </div>
+      <div className="research-report__answer">
+        <span className="answer-highlight__label">ANSWER</span>
+        <h2>{result.answer || "The page was captured. Review the findings and source evidence below."}</h2>
+      </div>
+      {findings.length > 0 && <div className="research-section">
+        <h3>Findings</h3>
+        <ul className="finding-list">{findings.map((finding, index) => <li key={index}>
+          <span>{finding.claim}</span><small>{finding.type?.replaceAll("_", " ") || "observation"} · {finding.confidence || "observed"}</small>
+        </li>)}</ul>
+      </div>}
+      {products.length > 0 && <div className="research-section">
+        <h3>Structured data · Products</h3>
+        <div className="product-list">{products.map((product, index) => <div className="product-row" key={index}>
+          <span className="product-row__number">{String(index + 1).padStart(2, "0")}</span>
+          <span className="product-row__name">{product.name}</span><strong className="product-row__price">{product.price}</strong>
+        </div>)}</div>
+      </div>}
+      {sources.length > 0 && <div className="research-section">
+        <h3>Sources</h3>
+        {sources.map((source, index) => <a className="source-link" href={source.url} target="_blank" rel="noreferrer" key={source.url + index}>
+          <ExternalLink size={14} />{source.title || new URL(source.url).hostname}<span>{new URL(source.url).hostname}</span>
+        </a>)}
+      </div>}
+      {limitations.length > 0 && <div className="research-section research-section--limitations">
+        <h3>Limitations</h3><ul>{limitations.map((item, index) => <li key={index}>{item}</li>)}</ul>
+      </div>}
+      {result.suggested_memory && result.suggested_memory.length > 0 && <div className="research-section">
+        <h3>Potential knowledge to retain</h3><ul>{result.suggested_memory.map((item, index) => <li key={index}>{item}</li>)}</ul>
+        <small>Suggestions only — Ginger's memory policy decides what is retained.</small>
+      </div>}
+    </section>
+  );
 }
 
 function ProductResult({ result }: { result: BrowserResult }) {
@@ -501,27 +552,8 @@ export default function App() {
                   </form>
                 )}
 
-                {selected.status === "completed" && selected.result && (
-                  selected.result.products?.length ||
-                  /\b(product|products|item|items|price|pricing)\b/i.test(selected.objective) ? (
-                    <ProductResult result={selected.result} />
-                  ) : selected.result.answer ? (
-                    <section className="answer-panel">
-                      <div className="eyebrow"><Check size={13} /> RESULT</div>
-                      <h2>{selected.result.answer}</h2>
-                      {selected.result.final_url && (
-                        <a className="source-link" href={selected.result.final_url} target="_blank" rel="noreferrer">
-                          <ExternalLink size={14} /> Open source page
-                        </a>
-                      )}
-                    </section>
-                  ) : (
-                    <section className="answer-panel answer-panel--plain">
-                      <div className="eyebrow"><Check size={13} /> TASK COMPLETED</div>
-                      <h2>Page content captured.</h2>
-                      <p>The browser finished successfully. Open the evidence details below to inspect the captured page.</p>
-                    </section>
-                  )
+                {selected.result && ["completed", "blocked"].includes(selected.status) && (
+                  <ResearchReport result={selected.result} />
                 )}
 
                 {selected.status === "running" || selected.status === "queued" ? (
