@@ -22,6 +22,7 @@ class TaskManager:
         self.scratchpad = TaskScratchpad()
         self.state_store = TaskStateStore()
         self.max_rounds = 30
+        self.shutting_down = False
 
     @staticmethod
     def _now() -> str:
@@ -76,6 +77,22 @@ class TaskManager:
             "round_in_progress": round_in_progress,
         }
         self._persist(task_id)
+
+    async def shutdown(self) -> None:
+        """Pause active tasks for restart instead of treating process shutdown as user cancel."""
+        self.shutting_down = True
+        active = [task for task in self.running.values() if not task.done()]
+        for task in active:
+            task.cancel()
+        if active:
+            await asyncio.gather(*active, return_exceptions=True)
+        for task_id, record in self.tasks.items():
+            if record.get("status") == "running":
+                record["status"] = "queued"
+                record["current_step"] = None
+                self._log(task_id, "Service is shutting down; task queued for checkpoint recovery", "warning")
+            elif record.get("status") == "queued":
+                self._persist(task_id)
 
     async def restore_and_resume(self) -> int:
         """Restore saved tasks and resume work interrupted by process/container restart."""
@@ -618,17 +635,32 @@ class TaskManager:
             })
             self._log(task_id, f"Research finished: {len(sources)} sources, {len(findings)} findings.")
         except asyncio.CancelledError:
-            record["status"] = "stopped"
-            self._log(task_id, "Task cancelled by operator", "warning")
-            record["progress_events"].append({
-                "at": self._now(), "event_type": "cancelled", "status": "stopped",
-                "message": "Task cancelled; partial research and evidence have been preserved.",
-            })
-            self._note(task_id, {
-                "round": record.get("round", 0), "assignment": "Cancellation",
-                "status": "stopped", "remaining_work": ["Task cancelled before completion"],
-                "seed_for_next_round": [],
-            })
+            if self.shutting_down:
+                record["status"] = "queued"
+                self._log(task_id, "Service shutdown interrupted execution; task will resume from its saved checkpoint", "warning")
+                record["progress_events"].append({
+                    "at": self._now(), "event_type": "service_shutdown",
+                    "status": "queued",
+                    "message": "Task paused for automatic restart recovery.",
+                })
+                self._note(task_id, {
+                    "round": record.get("round", 0), "assignment": "Service shutdown",
+                    "status": "queued",
+                    "remaining_work": ["Resume from the last durable checkpoint after startup"],
+                    "seed_for_next_round": [],
+                })
+            else:
+                record["status"] = "stopped"
+                self._log(task_id, "Task cancelled by operator", "warning")
+                record["progress_events"].append({
+                    "at": self._now(), "event_type": "cancelled", "status": "stopped",
+                    "message": "Task cancelled; partial research and evidence have been preserved.",
+                })
+                self._note(task_id, {
+                    "round": record.get("round", 0), "assignment": "Cancellation",
+                    "status": "stopped", "remaining_work": ["Task cancelled before completion"],
+                    "seed_for_next_round": [],
+                })
             raise
         except (OllamaUnavailable, RuntimeError, ValueError, OSError, TypeError, KeyError) as exc:
             record["status"] = "failed"
