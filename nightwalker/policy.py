@@ -18,9 +18,15 @@ class AgentManifest:
 
 
 DEFAULT_MANIFESTS = {
-    "navigation": AgentManifest("navigation", frozenset({"browser.navigate", "browser.read_title"})),
-    "interaction": AgentManifest("interaction", frozenset({"browser.click", "browser.type", "browser.scroll"})),
-    "extraction": AgentManifest("extraction", frozenset({"browser.read_dom", "browser.read_text", "evidence.write"})),
+    "navigation": AgentManifest(
+        "navigation", frozenset({"browser.navigate", "browser.read_title"})
+    ),
+    "interaction": AgentManifest(
+        "interaction", frozenset({"browser.click", "browser.type", "browser.scroll"})
+    ),
+    "extraction": AgentManifest(
+        "extraction", frozenset({"browser.read_dom", "browser.read_text", "evidence.write"})
+    ),
     "recovery": AgentManifest("recovery", frozenset({"browser.read_status", "browser.reload"})),
 }
 
@@ -63,5 +69,5 @@ class PolicyEngine:
             raise PolicyDenied("Hostname did not resolve to an address")
         if not allow_private_networks and any(not address.is_global for address in addresses):
             raise PolicyDenied(
-                "Private, loopback, link-local, reserved, and non-global network targets are blocked"
+                "Private, loopback, link-local, reserved, and non-global targets are blocked"
             )
