@@ -38,6 +38,9 @@ def test_third_attempt_is_blocked_and_fallback_selects_another_source():
     guard.begin(url, "Open")
     third = guard.begin(url, "Open")
     assert third["should_skip"] is True
+    repeated = guard.snapshot()["repeated_actions"]
+    assert repeated[0]["attempts"] == 3
+    assert repeated[0]["assignment"] == "open"
     fallback = guard.fallback_candidate(
         [{"url": url}, {"url": "https://example.com/other", "label": "other"}],
         [],
