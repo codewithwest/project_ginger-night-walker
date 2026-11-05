@@ -101,6 +101,37 @@ class OllamaClient:
         except (httpx.HTTPError, ValueError) as exc:
             raise OllamaUnavailable(f"Remote Ollama health check failed: {exc}") from exc
 
+    @staticmethod
+    def _explicit_target_url(objective: str) -> str | None:
+        """Return a URL only when the user explicitly included a domain or URL."""
+        import re
+
+        match = re.search(
+            r"(?i)(?:https?://)?(?:www\\.)?"
+            r"([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
+            r"(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+)"
+            r"(?::\\d{1,5})?(?:/[a-z0-9._~:/?#\\[\\]@!    async def decide_task(self, objective: str) -> DecisionPlan:
+'()*+,;=%-]*)?",
+            objective,
+        )
+        if not match:
+            return None
+        candidate = match.group(0).rstrip(".,;:!?)]}")
+        if not candidate.lower().startswith(("http://", "https://")):
+            candidate = "https://" + candidate
+        return candidate
+
+    @staticmethod
+    def _make_clarification(plan: DecisionPlan, question: str) -> DecisionPlan:
+        """Turn an unexecutable ready plan into a safe, operator-resolvable state."""
+        return DecisionPlan(
+            status="needs_clarification",
+            summary=plan.summary,
+            site_name=plan.site_name,
+            clarification_question=question,
+            steps=[],
+        )
+
     async def decide_task(self, objective: str) -> DecisionPlan:
         """Turn one natural-language request into a bounded, capability-scoped plan."""
         base_url = self._require_base_url()
@@ -143,6 +174,19 @@ class OllamaClient:
                 envelope = response.json()
                 content = self._chat_content(envelope, model=model, operation="Decider")
                 plan = DecisionPlan.model_validate_json(content)
+                if plan.status.value == "ready" and not plan.target_url:
+                    explicit_url = self._explicit_target_url(objective)
+                    if explicit_url:
+                        plan.target_url = explicit_url
+                        if not plan.site_name:
+                            from urllib.parse import urlsplit
+
+                            plan.site_name = urlsplit(explicit_url).hostname
+                    else:
+                        return self._make_clarification(
+                            plan,
+                            "Which website should I use? Please provide its exact public URL.",
+                        )
                 return DecisionPlan.validate_plan(plan)
         except OllamaUnavailable:
             raise
