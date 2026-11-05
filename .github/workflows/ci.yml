@@ -1,0 +1,36 @@
+name: Python CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.10.0"
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Resolve and install dependencies
+        run: |
+          uv lock
+          uv sync --locked --group dev
+
+      - name: Lint
+        run: uv run --locked ruff check .
+
+      - name: Test
+        run: uv run --locked pytest
