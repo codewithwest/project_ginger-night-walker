@@ -348,12 +348,12 @@ class TaskManager:
             "status": "accepted", "operator_input": instruction,
             "seed_for_next_round": [instruction],
         })
+        self._log(task_id, "User added a follow-up instruction for subsequent research rounds")
         record["progress_events"].append({
             "at": self._now(), "event_type": "user_follow_up",
             "status": record["status"],
             "message": "Additional user instruction received; it will guide subsequent research rounds.",
         })
-        self._log(task_id, "User added a follow-up instruction for subsequent research rounds")
         return self.snapshot(task_id)
 
     def _effective_objective(self, task_id: str, base_objective: str) -> str:
