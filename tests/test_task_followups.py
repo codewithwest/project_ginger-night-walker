@@ -4,11 +4,13 @@ import pytest
 
 from nightwalker.task_manager import TaskManager
 from nightwalker.scratchpad import TaskScratchpad
+from nightwalker.task_state_store import TaskStateStore
 
 
 def _manager(tmp_path):
     manager = TaskManager(orchestrator=object())
-    manager.scratchpad = TaskScratchpad(str(tmp_path))
+    manager.scratchpad = TaskScratchpad(str(tmp_path / "scratchpads"))
+    manager.state_store = TaskStateStore(str(tmp_path / "tasks"))
     manager.tasks["task-1"] = {
         "task_id": "task-1",
         "status": "running",
