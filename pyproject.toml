@@ -25,6 +25,7 @@ include = ["nightwalker*"]
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-q"
+asyncio_default_fixture_loop_scope = "function"
 
 [tool.ruff]
 line-length = 100
