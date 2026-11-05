@@ -1,0 +1,5 @@
+fastapi<1,>=0.115
+uvicorn[standard]<1,>=0.30
+pydantic<3,>=2.8
+playwright==1.64.1
+httpx<1,>=0.27

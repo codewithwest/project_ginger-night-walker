@@ -1,0 +1,10 @@
+Metadata-Version: 2.4
+Name: ginger-night-walker
+Version: 0.2.1
+Summary: Least-privilege, context-isolated Playwright agent runtime with remote Ollama inference
+Requires-Python: >=3.11
+Requires-Dist: fastapi<1,>=0.115
+Requires-Dist: uvicorn[standard]<1,>=0.30
+Requires-Dist: pydantic<3,>=2.8
+Requires-Dist: playwright==1.64.1
+Requires-Dist: httpx<1,>=0.27
