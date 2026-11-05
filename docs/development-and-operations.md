@@ -65,7 +65,11 @@ Vite proxies API requests to the local FastAPI service on port 8000.
 | `OLLAMA_BASE_URL` | Remote Ollama API base URL | Operator-controlled trusted endpoint |
 | `OLLAMA_API_KEY` | Optional bearer credential | Secret; never commit |
 | `OLLAMA_MODEL_DEFAULT` | Default inference model | Must exist on remote Ollama |
-| `OLLAMA_MODEL_DECIDER` | Research planner override | Optional |\n| `OLLAMA_MODEL_GOAL_STATE` | Small model for success criteria and evidence progress (default `qwen3:0.6b`) | Must exist on remote Ollama |\n| `STRANDS_DECIDER_URL` | Optional Strands Decider base URL | Leave empty to use the Ollama research planner |\n| `STRANDS_DECIDER_PATH` | Strands endpoint path (default `/v1/systemone`) | Match the deployed Strands API |\n| `STRANDS_DECIDER_API_KEY` | Optional Strands bearer token | Separate from Ollama credentials |
+| `OLLAMA_MODEL_DECIDER` | Research planner override | Optional |
+| `OLLAMA_MODEL_GOAL_STATE` | Small model for success criteria and evidence progress (default `qwen3:0.6b`) | Must exist on remote Ollama |
+| `STRANDS_DECIDER_URL` | Optional Strands Decider base URL | Leave empty to use the Ollama research planner |
+| `STRANDS_DECIDER_PATH` | Strands endpoint path (default `/v1/systemone`) | Match the deployed Strands API |
+| `STRANDS_DECIDER_API_KEY` | Optional Strands bearer token | Separate from Ollama credentials |
 | `OLLAMA_MODEL_NAVIGATE` | Navigation capability model | Falls back to default |
 | `OLLAMA_MODEL_INTERACT` | Interaction capability model | Falls back to default |
 | `OLLAMA_MODEL_EXTRACT` | Extraction capability model | Falls back to default |
@@ -145,7 +149,9 @@ Common diagnoses:
 - Task state is not durable; scratchpad and evidence files persist but are not yet sufficient to resume a task after restart.
 - Research runs up to 30 bounded page-inspection rounds, starting from Bing search results or a user-supplied URL; discovered links are the candidate source pool.
 - Source selection is model-assisted but constrained to URLs actually observed by the browser. Discovery quality depends on search results and page links.
-- The Goal State Manager tracks an immutable objective and up to six success criteria. The small model can propose completion only with an exact quote and evidence ID; Python verifies both against the current captured evidence. This is evidence linkage, not proof that the source itself is truthful.\n- An optional Strands Decider can select only among browser-discovered source URLs. If unavailable or misconfigured, the Ollama planner remains the fallback. The integrated Strands adapter has no browser tools.\n- Findings carry source/evidence IDs and visible-text excerpts; synthesis is bounded to those observations and is not yet a full fact-checking or source-authority engine.
+- The Goal State Manager tracks an immutable objective and up to six success criteria. The small model can propose completion only with an exact quote and evidence ID; Python verifies both against the current captured evidence. This is evidence linkage, not proof that the source itself is truthful.
+- An optional Strands Decider can select only among browser-discovered source URLs. If unavailable or misconfigured, the Ollama planner remains the fallback. The integrated Strands adapter has no browser tools.
+- Findings carry source/evidence IDs and visible-text excerpts; synthesis is bounded to those observations and is not yet a full fact-checking or source-authority engine.
 - Active tasks accept follow-up instructions; follow-ups after completion require a new task.
 - Cancellation preserves completed-round partial reports. Full task state remains in memory, so a service restart does not automatically resume the research loop.
 - Product price extraction is a narrow structured-data adapter.
