@@ -65,7 +65,7 @@ class TaskManager:
             "progress_events": [],
             "round": 0,
             "max_rounds": self.max_rounds,
-            "scratchpad": [],
+            "scratchpad": self.scratchpad.read(task_id),
         }
         self._log(task_id, "Natural-language task accepted; starting Decider")
         self.running[task_id] = asyncio.create_task(
@@ -76,79 +76,237 @@ class TaskManager:
     async def _execute_decided(self, task_id: str, objective: str) -> None:
         record = self.tasks[task_id]
         record["status"] = "running"
+        sources: list[dict[str, Any]] = []
+        findings: list[dict[str, Any]] = []
+        evidence: list[dict[str, Any]] = []
+        visited_urls: list[str] = []
+        candidates: list[dict[str, str]] = []
+        structured_data: dict[str, list[Any]] = {}
+        limitations: list[str] = []
         try:
-            self._log(task_id, "Decider analysing objective and identifying the likely site")
-            plan = await self.orchestrator.ollama.decide_task(objective)
-            record["plan"] = plan.model_dump(mode="json")
-            record["round"] = 1
-            self._note(task_id, {
-                "round": 1,
-                "assignment": "Resolve objective into a bounded execution plan",
-                "status": plan.status.value,
-                "findings": [plan.summary],
-                "seed_for_next_round": [step.objective for step in plan.steps],
-                "target_url": str(plan.target_url) if plan.target_url else None,
-            })
-            record["site_name"] = plan.site_name
-            record["target_url"] = str(plan.target_url) if plan.target_url else None
-            if plan.status != DecisionStatus.READY:
-                record["status"] = plan.status.value
-                self._log(task_id, plan.clarification_question or plan.summary, "warning")
+            self._log(task_id, "Decider analysing objective and identifying the starting point")
+            initial_plan = await self.orchestrator.ollama.decide_task(objective)
+            record["plan"] = initial_plan.model_dump(mode="json")
+            record["site_name"] = initial_plan.site_name
+            record["target_url"] = str(initial_plan.target_url) if initial_plan.target_url else None
+            if initial_plan.status != DecisionStatus.READY:
+                record["status"] = initial_plan.status.value
+                question = initial_plan.clarification_question or initial_plan.summary
+                self._log(task_id, question, "warning")
                 record["progress_events"].append({
                     "at": self._now(), "event_type": "clarification",
-                    "status": record["status"], "message": plan.clarification_question or plan.summary,
+                    "status": record["status"], "message": question,
+                })
+                self._note(task_id, {
+                    "round": 0, "assignment": "Resolve research objective",
+                    "status": "needs_clarification", "findings": [],
+                    "remaining_work": [question], "seed_for_next_round": [objective],
                 })
                 return
 
-            self._log(
-                task_id,
-                f"Decider selected {len(plan.steps)} steps; starting isolated Playwright session",
-            )
-            for index, step in enumerate(plan.steps, start=1):
+            self._note(task_id, {
+                "round": 0, "assignment": "Resolve research objective and starting URL",
+                "status": "completed", "target_url": record["target_url"],
+                "findings": [initial_plan.summary],
+                "seed_for_next_round": ["Inspect starting page and discover relevant sources"],
+            })
+            next_url = str(initial_plan.target_url)
+            next_assignment = "Inspect the starting page and discover relevant sources"
+            round_count = 0
+
+            while next_url and round_count < self.max_rounds:
+                round_count += 1
+                record["round"] = round_count
                 record["current_step"] = {
-                    "index": index,
-                    "total": len(plan.steps),
-                    "capability": step.capability.value,
-                    "objective": step.objective,
+                    "index": round_count, "total": self.max_rounds,
+                    "capability": "research", "objective": next_assignment,
+                    "url": next_url,
                 }
                 self._log(
                     task_id,
-                    f"Step {index}/{len(plan.steps)}: {step.capability.value} — {step.objective}",
+                    f"Round {round_count}/{self.max_rounds}: {next_assignment}",
                 )
+                if next_url in visited_urls:
+                    limitations.append(f"Skipped duplicate source URL: {next_url}")
+                    next_url = ""
+                    break
 
-            self._log(task_id, "Execution plan resolved; beginning browser research")
-            result = await self.orchestrator.run_browser_workflow(task_id, objective, plan)
-            record["round"] = 2
+                one_page_plan = initial_plan.model_copy(update={
+                    "target_url": next_url,
+                    "steps": [
+                        {"step_id": "open", "capability": "navigate", "objective": "Open this discovered public source."},
+                        {"step_id": "capture", "capability": "extract", "objective": next_assignment[:500]},
+                    ],
+                })
+                result = await self.orchestrator.run_browser_workflow(
+                    task_id, objective, one_page_plan
+                )
+                if result.get("status") not in {"completed", "blocked"}:
+                    issue_text = "; ".join(result.get("issues", [])) or "Source inspection failed"
+                    limitations.append(f"{next_url}: {issue_text}")
+                    self._note(task_id, {
+                        "round": round_count, "assignment": next_assignment,
+                        "status": result.get("status", "failed"),
+                        "sources": [{"url": next_url}],
+                        "remaining_work": [issue_text],
+                        "seed_for_next_round": ["Continue with another discovered source"],
+                    })
+                    candidates.extend(result.get("candidate_urls", []))
+                    next_url = ""
+                else:
+                    final_url = result.get("final_url") or next_url
+                    visited_urls.append(final_url)
+                    source_id = f"s-{len(sources) + 1:03d}"
+                    source_records = result.get("sources", [])
+                    source = dict(source_records[0]) if source_records else {
+                        "url": final_url, "title": result.get("title", ""),
+                        "retrieved_at": self._now(),
+                    }
+                    source["source_id"] = source_id
+                    sources.append(source)
+                    round_evidence = []
+                    for item in result.get("evidence", []):
+                        captured = dict(item)
+                        captured["source_id"] = source_id
+                        captured["evidence_id"] = result.get("evidence_id") or captured.get("evidence_id")
+                        round_evidence.append(captured)
+                    evidence.extend(round_evidence)
+                    for item in result.get("findings", []):
+                        finding = dict(item)
+                        finding["finding_id"] = f"f-{len(findings) + 1:03d}"
+                        finding["source_ids"] = [source_id]
+                        finding["evidence_ids"] = [result["evidence_id"]] if result.get("evidence_id") else []
+                        findings.append(finding)
+                    for key, values in (result.get("structured_data") or {}).items():
+                        if isinstance(values, list):
+                            structured_data.setdefault(key, []).extend(values)
+                        else:
+                            structured_data.setdefault(key, []).append(values)
+                    candidates.extend(result.get("candidate_urls", []))
+                    # Deduplicate candidates while preserving browser discovery order.
+                    deduped: dict[str, dict[str, str]] = {}
+                    for item in candidates:
+                        url_value = str(item.get("url", "")).split("#", 1)[0]
+                        if url_value and url_value not in visited_urls and url_value not in deduped:
+                            deduped[url_value] = {"url": url_value, "label": str(item.get("label", ""))[:240]}
+                    candidates = list(deduped.values())[:120]
+                    round_findings = [
+                        item["claim"][:300] for item in findings[-12:]
+                        if source_id in item.get("source_ids", [])
+                    ]
+                    note = self._note(task_id, {
+                        "round": round_count, "assignment": next_assignment,
+                        "status": result.get("status", "completed"),
+                        "actions": [final_url], "findings": round_findings,
+                        "sources": [source], "evidence_ids": [result["evidence_id"]] if result.get("evidence_id") else [],
+                        "discovered_source_count": len(candidates),
+                        "seed_for_next_round": [
+                            "Objective: " + objective[:500],
+                            "Visited: " + final_url,
+                            "Captured: " + "; ".join(round_findings[:5]),
+                        ],
+                    })
+                    record["step_results"].append({
+                        "round": round_count, "status": result.get("status"),
+                        "source": source, "evidence_id": result.get("evidence_id"),
+                    })
+                    self._log(
+                        task_id,
+                        f"Round {round_count} captured {source.get('title') or final_url}; "
+                        f"{len(candidates)} undiscovered links available.",
+                    )
+                    record["progress_events"].append({
+                        "at": self._now(), "event_type": "round_completed",
+                        "status": "running", "round": round_count,
+                        "message": f"Inspected {source.get('title') or final_url}",
+                    })
+                    if result.get("issues"):
+                        limitations.extend(str(issue) for issue in result["issues"])
+
+                # Persist a useful partial report after every resolved round. If cancelled,
+                # the operator still receives the evidence collected so far.
+                record["result"] = {
+                    "schema_version": "1.0",
+                    "answer": f"Research in progress: inspected {len(sources)} sources across {round_count} rounds.",
+                    "findings": list(findings), "sources": list(sources),
+                    "evidence": list(evidence), "structured_data": structured_data,
+                    "limitations": list(dict.fromkeys(limitations)),
+                    "suggested_memory": [], "rounds_completed": round_count,
+                    "max_rounds": self.max_rounds, "visited_urls": list(visited_urls),
+                }
+
+                if not candidates or round_count >= self.max_rounds:
+                    next_url = ""
+                    break
+                round_plan = await self.orchestrator.ollama.plan_research_round(
+                    objective=objective,
+                    round_number=round_count,
+                    max_rounds=self.max_rounds,
+                    scratchpad=self.scratchpad.read(task_id)[-8:],
+                    candidates=candidates,
+                    visited_urls=visited_urls,
+                )
+                if round_plan.done:
+                    self._log(task_id, "Research planner determined that the available evidence is sufficient")
+                    next_url = ""
+                    break
+                next_url = str(round_plan.next_url)
+                next_assignment = round_plan.assignment
+                self._log(task_id, f"Next source selected: {next_url}")
+
+            record["round"] = round_count
+            if round_count >= self.max_rounds and candidates:
+                limitations.append(f"Maximum research budget of {self.max_rounds} rounds reached.")
+            if sources:
+                try:
+                    synthesis = await self.orchestrator.ollama.synthesise_research(
+                        objective, findings, sources, round_count, self.max_rounds
+                    )
+                    answer = synthesis.answer
+                    if synthesis.coverage_summary:
+                        answer += "\\n\\n" + synthesis.coverage_summary
+                    limitations.extend(synthesis.gaps)
+                except OllamaUnavailable as exc:
+                    answer = (
+                        f"Captured {len(sources)} sources and {len(findings)} observations. "
+                        "Automated synthesis was unavailable; review the evidence-backed findings."
+                    )
+                    limitations.append(str(exc)[:500])
+                final_status = "completed" if sources and not limitations else "blocked"
+            else:
+                answer = "No usable sources could be inspected. Review the limitations and execution log."
+                final_status = "blocked"
+            record["result"] = {
+                "schema_version": "1.0", "answer": answer,
+                "findings": findings, "sources": sources, "evidence": evidence,
+                "structured_data": structured_data,
+                "limitations": list(dict.fromkeys(limitations)),
+                "suggested_memory": [], "rounds_completed": round_count,
+                "max_rounds": self.max_rounds, "visited_urls": visited_urls,
+            }
+            record["status"] = final_status
+            record["current_step"] = None
             self._note(task_id, {
-                "round": 2,
-                "assignment": "Execute browser workflow and capture evidence",
-                "status": result.get("status", "failed"),
-                "actions": result.get("visited_urls", []),
-                "findings": result.get("findings", []),
-                "evidence_ids": [result["evidence_id"]] if result.get("evidence_id") else [],
-                "sources": result.get("sources", []),
-                "remaining_work": result.get("limitations", result.get("issues", [])),
+                "round": round_count, "assignment": "Final evidence-constrained synthesis",
+                "status": final_status, "findings": [answer[:1200]],
+                "sources": sources[:30], "evidence_ids": [
+                    item.get("evidence_id") for item in evidence if item.get("evidence_id")
+                ],
+                "remaining_work": list(dict.fromkeys(limitations)),
                 "seed_for_next_round": [],
             })
-            record["step_results"] = [result]
-            record["current_step"] = None
-            record["result"] = result
-            record["status"] = result.get("status", "failed")
-            if result.get("evidence_id"):
-                self._log(
-                    task_id,
-                    f"Browser run saved evidence {result['evidence_id']}",
-                )
-            if result.get("issues"):
-                for issue in result["issues"]:
-                    self._log(task_id, issue, "warning")
-            self._log(task_id, f"Playwright workflow finished with status {record['status']}")
+            record["progress_events"].append({
+                "at": self._now(), "event_type": "milestone",
+                "status": final_status,
+                "message": f"Research finished after {round_count} rounds and {len(sources)} sources.",
+            })
+            self._log(task_id, f"Research finished: {len(sources)} sources, {len(findings)} findings.")
         except asyncio.CancelledError:
             record["status"] = "stopped"
-            self._log(task_id, "Task stopped by operator", "warning")
+            self._log(task_id, "Task cancelled by operator", "warning")
             record["progress_events"].append({
                 "at": self._now(), "event_type": "cancelled", "status": "stopped",
-                "message": "Task cancelled by operator",
+                "message": "Task cancelled; partial research and evidence have been preserved.",
             })
             self._note(task_id, {
                 "round": record.get("round", 0), "assignment": "Cancellation",
