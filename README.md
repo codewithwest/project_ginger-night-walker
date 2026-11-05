@@ -47,6 +47,7 @@ Implemented baseline:
 - iterative multi-source research across up to 30 bounded browser rounds;
 - repeat-action detection, canonical URL deduplication, bounded per-source retries and fallback to alternative discovered sources;
 - task-scoped scratchpad notes that seed subsequent rounds without replaying full chat history;
+- durable atomic task snapshots and round checkpoints, with automatic restart recovery from the last saved research position;
 - progressive round-completion updates, partial reports and operator cancellation;
 - remote Ollama structured planning plus a dedicated small-model Goal State Manager;
 - evidence-gated success criteria: the goal model must provide a quote from a captured evidence record, and Python verifies the quote before marking a criterion complete;
