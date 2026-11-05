@@ -8,6 +8,7 @@ from nightwalker.contracts import AgentTask
 from nightwalker.decision_contracts import DecisionStatus
 from nightwalker.ollama_client import OllamaUnavailable
 from nightwalker.orchestrator import Orchestrator
+from nightwalker.scratchpad import TaskScratchpad
 
 
 class TaskManager:
@@ -15,6 +16,8 @@ class TaskManager:
         self.orchestrator = orchestrator
         self.tasks: dict[str, dict[str, Any]] = {}
         self.running: dict[str, asyncio.Task[None]] = {}
+        self.scratchpad = TaskScratchpad()
+        self.max_rounds = 30
 
     @staticmethod
     def _now() -> str:
@@ -22,8 +25,15 @@ class TaskManager:
 
     def _log(self, task_id: str, message: str, level: str = "info") -> None:
         record = self.tasks[task_id]
-        record["logs"].append({"at": self._now(), "level": level, "message": message})
+        event = {"at": self._now(), "level": level, "message": message}
+        record["logs"].append(event)
+        record["progress_events"].append({**event, "event_type": "progress", "status": record["status"]})
         record["updated_at"] = self._now()
+
+    def _note(self, task_id: str, entry: dict[str, Any]) -> None:
+        note = self.scratchpad.append(task_id, entry)
+        self.tasks[task_id]["scratchpad"].append(note)
+        self.tasks[task_id]["updated_at"] = self._now()
 
     def snapshot(self, task_id: str) -> dict[str, Any] | None:
         record = self.tasks.get(task_id)
@@ -52,6 +62,10 @@ class TaskManager:
             "current_step": None,
             "step_results": [],
             "logs": [],
+            "progress_events": [],
+            "round": 0,
+            "max_rounds": self.max_rounds,
+            "scratchpad": [],
         }
         self._log(task_id, "Natural-language task accepted; starting Decider")
         self.running[task_id] = asyncio.create_task(
