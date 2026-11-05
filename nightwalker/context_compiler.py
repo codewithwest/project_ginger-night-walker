@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, ClassVar
 
 from nightwalker.contracts import AgentTask
 
@@ -17,13 +17,13 @@ class CompiledContext:
 
 
 class ContextCompiler:
-    INPUT_ALLOWLIST = {
+    INPUT_ALLOWLIST: ClassVar[dict[str, set[str]]] = {
         "navigate": {"url", "destination"},
         "interact": {"target_selector", "action", "value"},
         "extract": {"dom_snapshot", "url"},
         "recover": {"failure_code", "error_summary", "current_url"},
     }
-    REQUIREMENT_ALLOWLIST = {
+    REQUIREMENT_ALLOWLIST: ClassVar[dict[str, set[str]]] = {
         "navigate": {"wait_until", "timeout_ms"},
         "interact": {"expected_result"},
         "extract": {"fields", "minimum_results", "output_schema"},
