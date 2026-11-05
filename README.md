@@ -47,7 +47,7 @@ Implemented baseline:
 - iterative multi-source research across up to 30 bounded browser rounds;
 - task-scoped scratchpad notes that seed subsequent rounds without replaying full chat history;
 - progressive round-completion updates, partial reports and operator cancellation;
-- remote Ollama structured planning;
+- remote Ollama structured planning plus a dedicated small-model Goal State Manager;\n- evidence-gated success criteria: the goal model must provide a quote from a captured evidence record, and Python verifies the quote before marking a criterion complete;\n- optional Strands Decider integration for selecting among browser-discovered source URLs (no direct browser tools);
 - task-isolated Playwright browser contexts;
 - application-level public URL validation and request interception;
 - same-origin anchor navigation;
@@ -59,14 +59,14 @@ Implemented baseline:
 Partial or not yet implemented:
 - source discovery begins from a search-engine results page or explicit user URL, then follows links actually observed by the browser; coverage depends on those search results and links;
 - product name/price parsing is a specialised extraction adapter;
-- findings are linked to captured source/evidence records, but automated claim validation remains future work;
+- goal completion is evidence-gated but still model-assisted; it does not prove a source's real-world truth; broader claim validation remains future work;
 - synthesis uses captured page titles, headings and visible-text excerpts; deeper claim extraction, authority assessment and conflict reconciliation remain future work;
 - scratchpad/evidence records persist to the evidence volume, but task state is still in memory and cannot automatically resume after service restart;
 - automatic Ginger memory writes are intentionally not implemented;
 - arbitrary interactions, form submission, purchases, downloads and transactions are not supported;
 - the service is not hardened or authenticated for hostile multi-user workloads.
 
-See the architecture and security documents for the full implementation-status matrix and required hardening.
+The Goal-Aware Strands prototype is retained under `integrations/goal_aware_strands/`. Its goal-state and Strands decision concepts are integrated into the core; its direct Playwright MCP executor and coding-model tool-argument loop are intentionally not used because they bypass Night Walker's central BrowserRuntime and PolicyEngine.\n\nSee the architecture and security documents for the full implementation-status matrix and required hardening.
 
 ## Quick start
 
