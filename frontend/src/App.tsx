@@ -498,6 +498,14 @@ export default function App() {
                         <p key={(log.at || "") + index}>{log.message}</p>
                       ))}
                     </div>
+                    <form onSubmit={sendFollowUp} className="clarification">
+                      <label htmlFor="follow-up-message">Add an instruction for the next research rounds</label>
+                      <textarea id="follow-up-message" value={followUp} onChange={(event) => setFollowUp(event.target.value)} maxLength={2000} placeholder="Refine the research…" />
+                      <button className="launch-button" disabled={sendingFollowUp || !followUp.trim()}>
+                        {sendingFollowUp ? <LoaderCircle size={15} /> : <Send size={15} />}
+                        Add instruction
+                      </button>
+                    </form>
                   </section>
                 ) : null}
 
