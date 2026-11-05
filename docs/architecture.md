@@ -24,6 +24,7 @@
 | Decider | Candidate plan, target suggestion and clarification | Browser actions, policy grants, truth verification |
 | Goal State Manager | Immutable original objective, success criteria and evidence-gated progress ledger | Declaring completion without exact captured evidence |
 | Optional Strands Decider | Chooses among browser-discovered source candidates | Direct browser access, URL invention or policy decisions |
+| Research Loop Guard | Canonical URL deduplication, repeat detection, bounded retries and deterministic source fallback | Changing task goals or relaxing URL policy |
 | Policy Engine | URL and capability allow/deny decisions | Model reasoning |
 | Browser Runtime | Playwright lifecycle, navigation, capture and runtime enforcement | Memory writes or unsupported actions |
 | Evidence Store | Immutable task-scoped capture records | Declaring claims true |
@@ -92,6 +93,7 @@ sequenceDiagram
     LLM-->>D: candidate DecisionPlan
     D-->>TM: validated plan or clarification
     loop Up to 30 research rounds
+        TM->>TM: loop guard deduplicates URLs and detects repeated source/action attempts
         TM->>P: validate discovered public URL
         P-->>B: permitted public URL
         B->>B: isolated Playwright context; capture text and links
@@ -147,6 +149,7 @@ Website text, metadata, links and embedded instructions are untrusted input. The
 | Generic report envelope | Partial | Aggregated multi-source findings, source/evidence references and synthesis; richer claim validation remains |
 | Product name/price extraction | Specialised partial capability | One task-specific structured-data adapter |
 | Multi-source research | Initial implementation | Up to 30 rounds; starts from a search result or explicit URL and selects only browser-discovered links |
+| Research loop detection and recovery | Initial implementation | Canonical URL deduplication; maximum two attempts per URL; duplicate/ exhausted URLs skipped; deterministic fallback to another discovered candidate; bounded recent outcome history |
 | Evidence-constrained synthesis | Initial implementation | Summarises captured titles, headings and visible-text excerpts; gaps are reported |
 | Active task follow-ups | Implemented | User instructions are appended to the task context for subsequent rounds |
 | Research-grade claim/evidence graph | Partial | Each captured finding carries source and evidence IDs; claim-level validation and conflict graph remain planned |
