@@ -79,6 +79,12 @@ async def test_run_plan_uses_task_context_and_persists_evidence(tmp_path, monkey
     assert result["title"] == "Example"
     assert result["text"] == "Visible content"
     assert result["evidence_id"].startswith("ev-")
+    assert result["schema_version"] == "1.0"
+    assert result["sources"][0]["source_id"] == "s-001"
+    assert result["findings"][0]["finding_id"] == "f-001"
+    assert result["findings"][0]["source_ids"] == ["s-001"]
+    assert result["findings"][0]["evidence_ids"] == [result["evidence_id"]]
+    assert result["evidence"][0]["evidence_id"] == result["evidence_id"]
     assert context.closed
     assert (tmp_path / f"{result['evidence_id']}.json").exists()
 
