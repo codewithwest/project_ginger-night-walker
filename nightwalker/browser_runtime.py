@@ -197,6 +197,24 @@ class BrowserRuntime:
                     continue
 
             title = (await page.title())[:500]
+            candidate_links = await page.locator("a[href]").evaluate_all(
+                """nodes => nodes.slice(0, 500).map(a => ({
+                    label: (a.innerText || a.getAttribute('aria-label') || '').trim().slice(0, 240),
+                    url: a.href
+                })).filter(item => item.url && /^https?:\\/\\//i.test(item.url))"""
+            )
+            candidates = []
+            seen_candidates = set()
+            for item in candidate_links:
+                candidate_url = str(item.get("url", "")).split("#", 1)[0]
+                if candidate_url and candidate_url not in seen_candidates and candidate_url != page.url:
+                    seen_candidates.add(candidate_url)
+                    candidates.append({
+                        "url": candidate_url,
+                        "label": str(item.get("label", ""))[:240],
+                    })
+                if len(candidates) >= 40:
+                    break
             headings = [
                 text.strip()[:300]
                 for text in (await page.locator("h1, h2").all_text_contents())[:40]
@@ -279,6 +297,7 @@ class BrowserRuntime:
                 "headings": headings,
                 "text": body_text,
                 "visited_urls": visited[:10],
+                "candidate_urls": candidates,
                 "issues": issues,
             }
             evidence_id = self.evidence.save(task_id, payload)
