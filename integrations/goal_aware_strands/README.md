@@ -13,7 +13,7 @@ Python validates output, calls Playwright MCP, records trace evidence, and rejec
 ## Quickstart: offline demo (no downloads, no API calls)
 
 ```bash
-cd goal_aware_strands_agent
+cd integrations/goal_aware_strands
 python3 -m agent --demo --output demo_trace.json
 python3 -m pytest -q tests  # if pytest installed
 ```
