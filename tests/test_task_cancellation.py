@@ -4,8 +4,8 @@ import asyncio
 
 import pytest
 
-from nightwalker.task_manager import TaskManager
 from nightwalker.scratchpad import TaskScratchpad
+from nightwalker.task_manager import TaskManager
 from nightwalker.task_state_store import TaskStateStore
 
 
