@@ -96,5 +96,9 @@ class ResearchLoopGuard:
         return {
             "attempts": dict(self.attempts),
             "recent_outcomes": list(self.outcomes[-12:]),
+            "repeated_actions": [
+                {"url_key": key[0], "assignment": key[1], "attempts": count}
+                for key, count in self.action_attempts.most_common(12)
+            ],
             "max_attempts_per_url": self.max_attempts_per_url,
         }
