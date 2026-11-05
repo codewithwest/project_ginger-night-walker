@@ -106,6 +106,45 @@ class BrowserRuntime:
         )
         return page.url
 
+    @staticmethod
+    def _extract_products_from_text(text: str, limit: int = 12) -> list[dict[str, str]]:
+        """Extract ordered product names and prices from visible page text."""
+        lines = [re.sub(r"\\s+", " ", line).strip(" •|\\t") for line in text.splitlines()]
+        lines = [line for line in lines if line]
+        price_pattern = re.compile(
+            r"(?i)(?:R\\s*)\\d[\\d,]*(?:\\.\\d{2})?"
+        )
+        ignored = {
+            "from", "shop now", "view collection", "new arrivals",
+            "press to skip carousel", "add to cart", "quick view",
+        }
+        products: list[dict[str, str]] = []
+        seen: set[tuple[str, str]] = set()
+
+        for index, line in enumerate(lines):
+            match = price_pattern.search(line)
+            if not match:
+                continue
+            price = match.group(0).strip()
+            name = line[:match.start()].strip(" -|") if match.start() else ""
+            if not name and index:
+                name = lines[index - 1]
+                if name.lower() in ignored and index > 1:
+                    name = lines[index - 2]
+            if not name or name.lower() in ignored or price.lower() == name.lower():
+                continue
+            if len(name) > 180 or re.fullmatch(r"(?i)r?\\s*[\\d,.]+", name):
+                continue
+            key = (name.casefold(), price.casefold())
+            if key in seen:
+                continue
+            seen.add(key)
+            products.append({"name": name, "price": price})
+            if len(products) >= limit:
+                break
+
+        return products
+
     async def run_plan(self, task_id: str, url: str, steps: list[dict], objective: str) -> dict:
         """Execute only public-site navigation, same-origin link following and extraction."""
         self.policy.validate_url(url, allow_private_networks=False)
@@ -163,8 +202,16 @@ class BrowserRuntime:
                 body_text = await page.locator("body").evaluate(
                     "element => (element.innerText || '').slice(0, 20000)"
                 )
+            wants_products = bool(re.search(r"(?i)\\b(product|products|item|items|price|pricing)\\b", objective))
+            products = self._extract_products_from_text(body_text) if wants_products else []
+            answer = (
+                f"{products[0]['name']} — {products[0]['price']}"
+                if products else None
+            )
             payload = {
                 "objective": objective[:2000],
+                "products": products,
+                "answer": answer,
                 "final_url": page.url,
                 "title": title,
                 "headings": headings,
@@ -179,6 +226,8 @@ class BrowserRuntime:
                 "title": title,
                 "headings": headings,
                 "text": body_text,
+                "products": products,
+                "answer": answer,
                 "visited_urls": visited[:10],
                 "issues": issues,
                 "evidence_id": evidence_id,
