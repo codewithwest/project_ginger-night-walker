@@ -57,13 +57,12 @@ Implemented baseline:
 - React + TypeScript operator UI.
 
 Partial or not yet implemented:
-- current research execution is primarily a single-site, single-final-page workflow;
-- link selection is heuristic and same-origin only;
+- source discovery begins from a search-engine results page or explicit user URL, then follows links actually observed by the browser; coverage depends on those search results and links;
 - product name/price parsing is a specialised extraction adapter;
-- findings do not yet have complete formal evidence-reference validation;
+- findings are linked to captured source/evidence records, but automated claim validation remains future work;
 - synthesis uses captured page titles, headings and visible-text excerpts; deeper claim extraction, authority assessment and conflict reconciliation remain future work;
 - scratchpad/evidence records persist to the evidence volume, but task state is still in memory and cannot automatically resume after service restart;
-- task state is in memory and is lost on service restart;
+- task state is in memory and is lost on service restart, so saved scratchpads do not yet provide automatic task resumption;
 - automatic Ginger memory writes are intentionally not implemented;
 - arbitrary interactions, form submission, purchases, downloads and transactions are not supported;
 - the service is not hardened or authenticated for hostile multi-user workloads.
