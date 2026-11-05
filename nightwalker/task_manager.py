@@ -197,7 +197,7 @@ class TaskManager:
                         item["claim"][:300] for item in findings[-12:]
                         if source_id in item.get("source_ids", [])
                     ]
-                    note = self._note(task_id, {
+                    self._note(task_id, {
                         "round": round_count, "assignment": next_assignment,
                         "status": result.get("status", "completed"),
                         "actions": [final_url], "findings": round_findings,
