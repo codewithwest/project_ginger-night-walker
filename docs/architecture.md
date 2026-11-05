@@ -165,7 +165,7 @@ Website text, metadata, links and embedded instructions are untrusted input. The
 ## 8. Scaling path
 
 1. Stabilise and version the report/evidence contracts.
-2. Add durable task-state storage and restart recovery so saved scratchpads can resume execution.
+2. Move from single-process JSON snapshots to a transactional task store/queue before introducing multiple workers.
 3. Improve source discovery with a configurable search-provider abstraction and relevance filtering.
 4. Add stronger finding-to-evidence validation and claim-level extraction.
 5. Add source authority, freshness and disagreement analysis.
