@@ -124,10 +124,13 @@ class TaskManager:
         return {**record, "logs": list(record["logs"])} if record else None
 
     def list_tasks(self) -> list[dict[str, Any]]:
-        return [
-            snapshot for task_id in reversed(self.tasks)
+        snapshots = [
+            snapshot for task_id in self.tasks
             if (snapshot := self.snapshot(task_id)) is not None
         ]
+        return sorted(
+            snapshots, key=lambda item: item.get("created_at", ""), reverse=True
+        )
 
     def submit_natural_language(self, task_id: str, objective: str) -> dict[str, Any]:
         if task_id in self.tasks:
