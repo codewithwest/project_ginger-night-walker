@@ -502,7 +502,8 @@ export default function App() {
                 )}
 
                 {selected.status === "completed" && selected.result && (
-                  selected.result.products?.length ? (
+                  selected.result.products?.length ||
+                  /\\b(product|products|item|items|price|pricing)\\b/i.test(selected.objective) ? (
                     <ProductResult result={selected.result} />
                   ) : selected.result.answer ? (
                     <section className="answer-panel">
