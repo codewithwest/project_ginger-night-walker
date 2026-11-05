@@ -146,6 +146,15 @@ class TaskManager:
         except asyncio.CancelledError:
             record["status"] = "stopped"
             self._log(task_id, "Task stopped by operator", "warning")
+            record["progress_events"].append({
+                "at": self._now(), "event_type": "cancelled", "status": "stopped",
+                "message": "Task cancelled by operator",
+            })
+            self._note(task_id, {
+                "round": record.get("round", 0), "assignment": "Cancellation",
+                "status": "stopped", "remaining_work": ["Task cancelled before completion"],
+                "seed_for_next_round": [],
+            })
             raise
         except (OllamaUnavailable, RuntimeError, ValueError, OSError, TypeError, KeyError) as exc:
             record["status"] = "failed"
