@@ -181,6 +181,8 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [objective, setObjective] = useState("");
   const [answer, setAnswer] = useState("");
+  const [followUp, setFollowUp] = useState("");
+  const [sendingFollowUp, setSendingFollowUp] = useState(false);
   const [busy, setBusy] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
@@ -259,6 +261,19 @@ export default function App() {
     } finally {
       setSending(false);
     }
+  }
+
+  async function sendFollowUp(event: FormEvent) {
+    event.preventDefault();
+    if (!selected || !followUp.trim() || sendingFollowUp) return;
+    setSendingFollowUp(true);
+    try {
+      await api("/tasks/" + encodeURIComponent(selected.task_id) + "/follow-up", { method: "POST", body: JSON.stringify({ message: followUp.trim() }) });
+      setFollowUp("");
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Follow-up failed");
+    } finally { setSendingFollowUp(false); }
   }
 
   async function stop() {
@@ -469,7 +484,7 @@ export default function App() {
                   </form>
                 )}
 
-                {selected.result && ["completed", "blocked"].includes(selected.status) && (
+                {selected.result && ["completed", "blocked", "stopped"].includes(selected.status) && (
                   <ResearchReport result={selected.result} />
                 )}
 
