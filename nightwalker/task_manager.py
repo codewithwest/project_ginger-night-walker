@@ -107,7 +107,7 @@ class TaskManager:
             record["status"] = "stopped"
             self._log(task_id, "Task stopped by operator", "warning")
             raise
-        except (OllamaUnavailable, RuntimeError, ValueError, OSError, TypeError, KeyError) as exc:
+        except (OllamaUnavailable, RuntimeError, ValueError, OSError, TypeError, KeyError, PermissionError) as exc:
             record["status"] = "failed"
             record["error"] = str(exc)[:1000]
             self._log(task_id, f"Task failed: {exc}", "error")
