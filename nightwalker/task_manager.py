@@ -780,7 +780,7 @@ class TaskManager:
                 await task
             except asyncio.CancelledError:
                 pass
-        else:
+        if record.get("status") != "stopped":
             record["status"] = "stopped"
             record["current_step"] = None
             self._log(task_id, "Task cancelled before execution or while awaiting clarification", "warning")
