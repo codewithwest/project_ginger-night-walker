@@ -25,7 +25,7 @@
 | Policy Engine | URL and capability allow/deny decisions | Model reasoning |
 | Browser Runtime | Playwright lifecycle, navigation, capture and runtime enforcement | Memory writes or unsupported actions |
 | Evidence Store | Immutable task-scoped capture records | Declaring claims true |
-| Research synthesis (planned) | Cross-source comparison, claim synthesis and uncertainty | Changing browser permissions |
+| Research synthesis | Bounded synthesis over source-linked observations, uncertainty and gaps | Changing browser permissions |
 | Ginger memory subsystem | Retention, trust, expiry and reuse decisions | Treating every capture as durable memory |
 
 ## 3. System context
@@ -151,10 +151,10 @@ Website text, metadata, links and embedded instructions are untrusted input. The
 ## 8. Scaling path
 
 1. Stabilise and version the report/evidence contracts.
-2. Add source collection as a bounded, repeatable unit of work.
-3. Add finding-to-evidence references and provenance validation.
-4. Add deterministic extractors and optional model-assisted extraction behind schemas.
-5. Add cross-source synthesis with disagreement and freshness handling.
-6. Add durable task/evidence storage and retention controls.
+2. Add durable task-state storage and restart recovery so saved scratchpads can resume execution.
+3. Improve source discovery with a configurable search-provider abstraction and relevance filtering.
+4. Add stronger finding-to-evidence validation and claim-level extraction.
+5. Add source authority, freshness and disagreement analysis.
+6. Add retention controls and monitoring schedules only after scheduler, authorization and lifecycle controls exist.
 7. Add monitoring schedules only after scheduler, authorization and lifecycle controls exist.
 8. Expand browser interaction only through explicit capability grants and independently tested policy enforcement.
