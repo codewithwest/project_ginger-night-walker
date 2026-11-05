@@ -68,7 +68,7 @@ type Task = {
 };
 
 const isTerminal = (status: string) =>
-  ["planned", "blocked", "completed", "failed", "stopped", "needs_clarification"].includes(
+  ["planned", "blocked", "completed", "failed", "stopped"].includes(
     status,
   );
 
@@ -478,7 +478,7 @@ export default function App() {
                     <div className="working-panel__icon"><LoaderCircle size={20} /></div>
                     <div>
                       <strong>Working on it</strong>
-                      <p>Execution phase {selected.round || 0} · budget up to {selected.max_rounds || 30} rounds. Progress is saved as work resolves.</p>
+                      <p>Round {selected.round || 0} · configured ceiling {selected.max_rounds || 30}. Progress is saved as work resolves.</p>
                       {selected.logs?.slice(-3).map((log, index) => (
                         <p key={(log.at || "") + index}>{log.message}</p>
                       ))}
