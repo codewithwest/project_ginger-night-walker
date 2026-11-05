@@ -5,7 +5,7 @@
 - Ginger OS / Docker host runs FastAPI, Playwright Chromium and the React UI.
 - Remote Ollama serves model inference; no Ollama container is part of this Compose stack.
 - The default Compose binding is `127.0.0.1:8000`.
-- Task state is in process memory; evidence JSON and append-only scratchpad notes are persisted under `EVIDENCE_DIR` (Docker default: `/app/evidence`).
+- Task records and resumable checkpoints are persisted as atomic JSON snapshots under `EVIDENCE_DIR/tasks` (Docker default: `/app/evidence/tasks`). Evidence JSON and append-only scratchpad notes share the same persistent volume.
 
 ## 2. Prerequisites
 
@@ -35,7 +35,7 @@ docker compose up --build -d
 docker compose logs --tail=100 night-walker
 ```
 
-The task list is in memory and will be cleared by a container restart. Evidence files persist only if the configured evidence directory is backed by a persistent volume.
+Task records, scratchpad notes, evidence and round checkpoints persist on the Compose named volume `nightwalker_evidence`. On startup, queued/running tasks are restored and resumed from their last checkpoint. Keep the volume when recreating containers; `docker compose down -v` deletes it.
 
 ## 4. Local development
 
@@ -75,7 +75,7 @@ Vite proxies API requests to the local FastAPI service on port 8000.
 | `OLLAMA_MODEL_EXTRACT` | Extraction capability model | Falls back to default |
 | `OLLAMA_MODEL_RECOVER` | Recovery capability model | Falls back to default |
 | `NAVIGATION_TIMEOUT_MS` | Browser navigation timeout | Keep bounded |
-| `EVIDENCE_DIR` | Evidence output directory | Mount persistent storage if retention is required |
+| `EVIDENCE_DIR` | Evidence, scratchpad and default task-state root | Docker default `/app/evidence`; must be on persistent storage |\n| `TASK_STATE_DIR` | Optional override for atomic task JSON snapshots | Defaults to `EVIDENCE_DIR/tasks` |
 
 Check `.env.example` for the current supported values and defaults.
 
@@ -86,7 +86,7 @@ Check `.env.example` for the current supported values and defaults.
 | GET | `/health` | Service liveness |
 | GET | `/health/ollama` | Remote inference connectivity |
 | POST | `/tasks` | Submit natural-language objective (202) |
-| GET | `/tasks` | List in-memory tasks |
+| GET | `/tasks` | List restored and in-memory tasks |
 | GET | `/tasks/{task_id}` | Fetch task state |
 | POST | `/tasks/{task_id}/clarify` | Supply clarification |
 | POST | `/tasks/{task_id}/follow-up` | Add an instruction to an active research task for subsequent rounds |
@@ -140,20 +140,20 @@ curl -i http://localhost:8000/health/ollama
 Common diagnoses:
 - UI assets missing: rebuild the Docker image; confirm `nightwalker/static/ui` contains Vite output.
 - Ollama unavailable: check endpoint routing, proxy authentication and model availability from inside the container.
-- Task disappeared: expected after restart with current in-memory TaskManager.
+- Task not resuming: inspect `/app/evidence/tasks`, confirm the named volume is mounted, and check startup logs for task restore errors.
 - Evidence missing: check `EVIDENCE_DIR`, mount and container write permissions.
 - Browser blocked: inspect task limitations and policy logs; do not weaken URL policy to make a target load.
 
 ## 10. Known limitations
 
-- Task state is not durable; scratchpad and evidence files persist but are not yet sufficient to resume a task after restart.
+- Task snapshots and research checkpoints are durable and restart-resumable for the single-process service. This is atomic JSON storage, not a transactional multi-worker queue; do not run multiple Night Walker workers against the same task directory. A crash during a page inspection can retry that one source, bounded by the loop guard. Terminal and clarification-waiting tasks are restored but not auto-resumed.
 - Research runs up to 30 bounded page-inspection rounds, starting from Bing search results or a user-supplied URL; discovered links are the candidate source pool. The Research Loop Guard canonicalises URL comparisons, deduplicates candidates, permits at most two attempts per URL, records bounded recent outcomes in task state/scratchpad, skips repeated or already visited sources, and falls back to another discovered candidate when a selected source is exhausted.
 - Source selection is model-assisted but constrained to URLs actually observed by the browser. Discovery quality depends on search results and page links. Repeat detection is deterministic and task-local; it is not a general-purpose model-action verifier.
 - The Goal State Manager tracks an immutable objective and up to six success criteria. The small model can propose completion only with an exact quote and evidence ID; Python verifies both against the current captured evidence. This is evidence linkage, not proof that the source itself is truthful.
 - An optional Strands Decider can select only among browser-discovered source URLs. If unavailable or misconfigured, the Ollama planner remains the fallback. The integrated Strands adapter has no browser tools.
 - Findings carry source/evidence IDs and visible-text excerpts; synthesis is bounded to those observations and is not yet a full fact-checking or source-authority engine.
 - Active tasks accept follow-up instructions; follow-ups after completion require a new task.
-- Cancellation preserves completed-round partial reports. Full task state remains in memory, so a service restart does not automatically resume the research loop.
+- Cancellation preserves completed-round partial reports. Operator-stopped tasks remain stopped across restart; only tasks saved as queued/running are auto-resumed.
 - Product price extraction is a narrow structured-data adapter.
 - Browser interactions are read-only and do not support arbitrary click/type/form workflows.
 - The application is not authenticated or hardened for multi-user hostile workloads.
