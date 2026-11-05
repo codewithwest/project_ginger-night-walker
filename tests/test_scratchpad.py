@@ -15,4 +15,6 @@ def test_scratchpad_appends_task_scoped_notes(tmp_path):
     assert second["round"] == 2
     assert [item["round"] for item in store.read("task-a")] == [1, 2]
     assert store.read("task-b") == []
-    assert json.loads((tmp_path / "scratchpads" / "task-a.json").read_text())[0]["status"] == "completed"
+    saved_files = list((tmp_path / "scratchpads").glob("*.json"))
+    assert len(saved_files) == 1
+    assert json.loads(saved_files[0].read_text())[0]["status"] == "completed"
