@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from datetime import UTC, datetime
@@ -16,7 +17,8 @@ class TaskScratchpad:
 
     def append(self, task_id: str, entry: dict[str, Any]) -> dict[str, Any]:
         self.directory.mkdir(parents=True, exist_ok=True)
-        path = self.directory / f"{task_id}.json"
+        safe_id = hashlib.sha256(task_id.encode("utf-8")).hexdigest()
+        path = self.directory / f"{safe_id}.json"
         existing = self.read(task_id)
         item = {
             "recorded_at": datetime.now(UTC).isoformat(),
