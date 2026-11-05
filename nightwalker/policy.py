@@ -41,6 +41,12 @@ class PolicyEngine:
             raise PolicyDenied("Only absolute HTTP(S) URLs are permitted")
         if parsed.username or parsed.password:
             raise PolicyDenied("URLs containing embedded credentials are not permitted")
+        try:
+            port = parsed.port
+        except ValueError as exc:
+            raise PolicyDenied("Invalid URL port") from exc
+        if port not in {None, 80, 443}:
+            raise PolicyDenied("Only standard HTTP and HTTPS ports are permitted")
         host = parsed.hostname.lower().rstrip(".")
         if not allow_private_networks and (
             host in self.BLOCKED_HOSTS or host.endswith((".localhost", ".local", ".internal"))
