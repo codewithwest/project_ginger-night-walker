@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from uuid import uuid4
 
+from playwright.async_api import Error as PlaywrightError
+
 from nightwalker.browser_runtime import BrowserRuntime
 from nightwalker.contracts import (
     AgentResult,
@@ -25,11 +27,23 @@ class Orchestrator:
         try:
             data = await self.browser.extract_basic(str(request.url))
             return BrowserExtractResponse(
-                task_id=task_id, status="completed", url=data["url"],
-                title=data["title"], headings=data["headings"]
+                task_id=task_id,
+                status="completed",
+                url=data["url"],
+                title=data["title"],
+                headings=data["headings"],
             )
-        except Exception as exc:
+        except PermissionError as exc:
             return BrowserExtractResponse(
-                task_id=task_id, status="blocked" if isinstance(exc, PermissionError) else "failed",
-                url=str(request.url), issues=[str(exc)[:500]]
+                task_id=task_id,
+                status="blocked",
+                url=str(request.url),
+                issues=[str(exc)[:500]],
+            )
+        except (RuntimeError, PlaywrightError, OSError) as exc:
+            return BrowserExtractResponse(
+                task_id=task_id,
+                status="failed",
+                url=str(request.url),
+                issues=[str(exc)[:500]],
             )
