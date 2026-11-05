@@ -228,6 +228,12 @@ class TaskManager:
                         "status": "running", "round": round_count,
                         "message": f"Inspected {source.get('title') or final_url}",
                     })
+                    if round_findings:
+                        record["progress_events"].append({
+                            "at": self._now(), "event_type": "finding",
+                            "status": "running", "round": round_count,
+                            "message": round_findings[0][:300],
+                        })
                     if result.get("issues"):
                         limitations.extend(str(issue) for issue in result["issues"])
 
