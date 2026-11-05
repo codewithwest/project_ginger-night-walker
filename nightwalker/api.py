@@ -3,7 +3,8 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse\nfrom fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from nightwalker.browser_runtime import BrowserRuntime
@@ -15,7 +16,8 @@ from nightwalker.task_manager import TaskManager
 browser = BrowserRuntime()
 orchestrator = Orchestrator(browser)
 task_manager = TaskManager(orchestrator)
-UI_DIR = Path(__file__).parent / "static" / "ui"\nUI_FILE = UI_DIR / "index.html"
+UI_DIR = Path(__file__).parent / "static" / "ui"
+UI_FILE = UI_DIR / "index.html"
 
 
 class NaturalLanguageTaskRequest(BaseModel):
