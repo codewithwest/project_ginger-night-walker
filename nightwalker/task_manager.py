@@ -39,7 +39,7 @@ class TaskManager:
         self.tasks[task_id] = {
             "task_id": task_id, "capability": "auto", "objective": objective,
             "status": "queued", "created_at": now, "updated_at": now,
-            "result": None, "error": None, "plan": None, "step_results": [], "logs": [],
+            "result": None, "error": None, "plan": None, "current_step": None,\n            "step_results": [], "logs": [],
         }
         self._log(task_id, "Natural-language task accepted; starting Decider")
         self.running[task_id] = asyncio.create_task(self._execute_decided(task_id, objective))
@@ -69,7 +69,7 @@ class TaskManager:
                     requirements={"plan_summary": plan.summary},
                 )
                 result = await self.orchestrator.run_agent_task(agent_task)
-                record["step_results"].append(result.model_dump(mode="json"))
+                record["step_results"].append(result.model_dump(mode="json"))\n                record["current_step"] = None
                 self._log(task_id, f"Step {index} returned {result.status}")
                 if result.status == "blocked":
                     record["status"] = "blocked"
