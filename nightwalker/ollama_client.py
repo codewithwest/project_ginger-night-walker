@@ -12,7 +12,6 @@ from nightwalker.contracts import AgentResult, AgentTask
 from nightwalker.decision_contracts import DecisionPlan
 from nightwalker.model_registry import ModelRegistry
 
-
 SYSTEM_PROMPTS = {
     "navigate": (
         "You are the Ginger Night Walker navigation agent. Interpret the task and return "
