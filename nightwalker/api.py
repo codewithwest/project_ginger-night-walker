@@ -16,8 +16,9 @@ from nightwalker.task_manager import TaskManager
 browser = BrowserRuntime()
 orchestrator = Orchestrator(browser)
 task_manager = TaskManager(orchestrator)
-UI_DIR = Path(__file__).parent / "static" / "ui"
-UI_FILE = UI_DIR / "index.html"
+STATIC_DIR = Path(__file__).parent / "static"
+UI_DIR = STATIC_DIR / "ui"
+UI_FILE = UI_DIR / "index.html" if (UI_DIR / "index.html").is_file() else STATIC_DIR / "index.html"
 
 
 class NaturalLanguageTaskRequest(BaseModel):
