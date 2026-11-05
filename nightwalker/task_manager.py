@@ -73,7 +73,11 @@ class TaskManager:
                 self._log(task_id, f"Step {index} returned {result.status}")
                 if result.status == "blocked":
                     record["status"] = "blocked"
-                    self._log(task_id, f"Workflow stopped because step {index} was blocked", "warning")
+                    self._log(
+                        task_id,
+                        f"Workflow stopped because step {index} was blocked",
+                        "warning",
+                    )
                     return
             record["status"] = "planned"
             record["result"] = {"summary": plan.summary, "steps": record["step_results"]}
