@@ -27,12 +27,17 @@ class Orchestrator:
         if not plan.target_url:
             raise ValueError("The Decider plan has no target URL")
         steps = [step.model_dump(mode="json") for step in plan.steps]
-        return await self.browser.run_plan(
-            task_id=task_id,
-            url=str(plan.target_url),
-            steps=steps,
-            objective=objective,
-        )
+        try:
+            return await self.browser.run_plan(
+                task_id=task_id,
+                url=str(plan.target_url),
+                steps=steps,
+                objective=objective,
+            )
+        except PermissionError as exc:
+            return {"status": "blocked", "issues": [str(exc)[:500]]}
+        except (RuntimeError, PlaywrightError, OSError, ValueError) as exc:
+            return {"status": "failed", "issues": [str(exc)[:500]]}
 
     async def run_browser_extract(self, request: BrowserExtractRequest) -> BrowserExtractResponse:
         task_id = str(uuid4())
