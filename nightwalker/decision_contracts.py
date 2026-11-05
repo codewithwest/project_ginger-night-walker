@@ -38,10 +38,15 @@ class DecisionPlan(BaseModel):
                 raise ValueError(
                     "A ready plan must include a verified-by-user or inferred target URL"
                 )
-        if value.status == DecisionStatus.NEEDS_CLARIFICATION:
+        if (
+            value.status == DecisionStatus.NEEDS_CLARIFICATION
+            and (
+                not value.clarification_question
+                or not value.clarification_question.strip()
+            )
+        ):
             # Some local models emit the clarification status but omit its question.
             # Keep the task recoverable and let the operator supply the missing detail.
-            if not value.clarification_question or not value.clarification_question.strip():
                 value.clarification_question = (
                     "Which website or detail should I use to continue? "
                     "Please provide the exact website URL if the site is ambiguous."
