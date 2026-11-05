@@ -16,6 +16,9 @@ class EvidenceStore:
 
     def save(self, task_id: str, payload: dict[str, Any]) -> str:
         evidence_id = f"ev-{uuid4().hex}"
+        evidence = payload.get("evidence")
+        if isinstance(evidence, list) and evidence and isinstance(evidence[0], dict):
+            evidence[0]["evidence_id"] = evidence_id
         record = {
             "evidence_id": evidence_id,
             "task_id": task_id,
