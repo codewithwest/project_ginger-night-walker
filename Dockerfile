@@ -13,11 +13,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:$PATH"
 
 WORKDIR /app
-COPY pyproject.toml uv.lock README.md ./
+COPY pyproject.toml README.md ./
+# Optional during initial bootstrap; commit uv.lock for reproducible builds.
+COPY uv.lock* ./
 COPY nightwalker ./nightwalker
 
-# --locked ensures Docker installs the exact committed dependency resolution.
-RUN uv sync --locked --no-dev --no-editable
+# uv uses uv.lock automatically when present; this also bootstraps fresh clones.
+RUN uv sync --no-dev --no-editable
 
 RUN useradd --create-home --shell /bin/bash appuser
 RUN mkdir -p /app/evidence && chown -R appuser:appuser /app
