@@ -5,12 +5,13 @@ from datetime import UTC, datetime
 from typing import Any
 
 from nightwalker.contracts import AgentTask
-from nightwalker.decision_contracts import DecisionStatus
+from nightwalker.decision_contracts import DecisionPlan, DecisionStatus
 from nightwalker.ollama_client import OllamaUnavailable
 from nightwalker.orchestrator import Orchestrator
 from nightwalker.scratchpad import TaskScratchpad
 from nightwalker.goal_state import GoalStateManager
 from nightwalker.research_guard import ResearchLoopGuard
+from nightwalker.task_state_store import TaskStateStore
 
 
 class TaskManager:
@@ -19,6 +20,7 @@ class TaskManager:
         self.tasks: dict[str, dict[str, Any]] = {}
         self.running: dict[str, asyncio.Task[None]] = {}
         self.scratchpad = TaskScratchpad()
+        self.state_store = TaskStateStore()
         self.max_rounds = 30
 
     @staticmethod
@@ -31,11 +33,68 @@ class TaskManager:
         record["logs"].append(event)
         record["progress_events"].append({**event, "event_type": "progress", "status": record["status"]})
         record["updated_at"] = self._now()
+        self._persist(task_id)
 
     def _note(self, task_id: str, entry: dict[str, Any]) -> None:
         note = self.scratchpad.append(task_id, entry)
         self.tasks[task_id]["scratchpad"].append(note)
         self.tasks[task_id]["updated_at"] = self._now()
+        self._persist(task_id)
+
+    def _persist(self, task_id: str) -> None:
+        record = self.tasks.get(task_id)
+        if record is not None:
+            self.state_store.save(record)
+
+    def _save_checkpoint(
+        self, task_id: str, initial_plan: DecisionPlan, *, sources: list[dict[str, Any]],
+        findings: list[dict[str, Any]], evidence: list[dict[str, Any]],
+        visited_urls: list[str], candidates: list[dict[str, str]],
+        structured_data: dict[str, list[Any]], limitations: list[str],
+        loop_guard: ResearchLoopGuard, round_count: int, next_url: str,
+        next_assignment: str, research_complete: bool = False,
+    ) -> None:
+        self.tasks[task_id]["checkpoint"] = {
+            "version": 1, "initial_plan": initial_plan.model_dump(mode="json"),
+            "sources": sources, "findings": findings, "evidence": evidence,
+            "visited_urls": visited_urls, "candidates": candidates,
+            "structured_data": structured_data, "limitations": limitations,
+            "loop_guard": loop_guard.snapshot(), "round_count": round_count,
+            "next_url": next_url, "next_assignment": next_assignment,
+            "research_complete": research_complete,
+        }
+        self._persist(task_id)
+
+    async def restore_and_resume(self) -> int:
+        """Restore saved tasks and resume work interrupted by process/container restart."""
+        restored = 0
+        for record in self.state_store.load_all():
+            task_id = record["task_id"]
+            if task_id in self.tasks:
+                continue
+            record.setdefault("logs", [])
+            record.setdefault("progress_events", [])
+            record.setdefault("scratchpad", self.scratchpad.read(task_id))
+            record.setdefault("follow_up_instructions", [])
+            record.setdefault("step_results", [])
+            record.setdefault("checkpoint", None)
+            self.tasks[task_id] = record
+            if record.get("status") in {"queued", "running"}:
+                record["status"] = "queued"
+                record["current_step"] = None
+                self._log(task_id, "Service restarted; restoring task checkpoint and resuming", "warning")
+                record["progress_events"].append({
+                    "at": self._now(), "event_type": "task_resumed",
+                    "status": "queued",
+                    "message": "Recovered durable task state after service restart.",
+                })
+                self.running[task_id] = asyncio.create_task(
+                    self._execute_decided(task_id, str(record.get("objective") or ""), resume=True)
+                )
+                restored += 1
+            else:
+                self._persist(task_id)
+        return restored
 
     def snapshot(self, task_id: str) -> dict[str, Any] | None:
         record = self.tasks.get(task_id)
@@ -70,102 +129,100 @@ class TaskManager:
             "scratchpad": self.scratchpad.read(task_id),
             "follow_up_instructions": [],
             "goal_state": None,
+            "checkpoint": None,
         }
+        self._persist(task_id)
         self._log(task_id, "Natural-language task accepted; starting Decider")
         self.running[task_id] = asyncio.create_task(
             self._execute_decided(task_id, objective)
         )
         return self.snapshot(task_id) or {}
 
-    async def _execute_decided(self, task_id: str, objective: str) -> None:
+    async def _execute_decided(
+        self, task_id: str, objective: str, resume: bool = False
+    ) -> None:
         record = self.tasks[task_id]
         record["status"] = "running"
-        sources: list[dict[str, Any]] = []
-        findings: list[dict[str, Any]] = []
-        evidence: list[dict[str, Any]] = []
-        visited_urls: list[str] = []
-        candidates: list[dict[str, str]] = []
-        loop_guard = ResearchLoopGuard(max_attempts_per_url=2)
-        structured_data: dict[str, list[Any]] = {}
-        limitations: list[str] = []
-        try:
-            self._log(task_id, "Decider analysing objective and identifying the starting point")
-            initial_plan = await self.orchestrator.ollama.decide_task(objective)
-            record["plan"] = initial_plan.model_dump(mode="json")
-            proposed_steps = [step.objective for step in initial_plan.steps]
-            try:
-                criteria = await self.orchestrator.ollama.initialise_goal_criteria(objective, proposed_steps)
-            except (OllamaUnavailable, AttributeError) as exc:
-                criteria = proposed_steps or [initial_plan.summary or objective]
-                self._log(task_id, f"Goal criteria model unavailable; using planner steps: {exc}", "warning")
-            record["goal_state"] = GoalStateManager.initialise(objective, criteria)
-            self._log(task_id, f"Goal State Manager established {len(criteria)} success criteria")
-            record["site_name"] = initial_plan.site_name
-            record["target_url"] = str(initial_plan.target_url) if initial_plan.target_url else None
-            if initial_plan.status != DecisionStatus.READY:
-                record["status"] = initial_plan.status.value
-                question = initial_plan.clarification_question or initial_plan.summary
-                self._log(task_id, question, "warning")
-                record["progress_events"].append({
-                    "at": self._now(), "event_type": "clarification",
-                    "status": record["status"], "message": question,
-                })
-                self._note(task_id, {
-                    "round": 0, "assignment": "Resolve research objective",
-                    "status": "needs_clarification", "findings": [],
-                    "remaining_work": [question], "seed_for_next_round": [objective],
-                })
-                return
-
-            self._note(task_id, {
-                "round": 0, "assignment": "Resolve research objective and starting URL",
-                "status": "completed", "target_url": record["target_url"],
-                "findings": [initial_plan.summary],
-                "seed_for_next_round": ["Inspect starting page and discover relevant sources"],
-            })
-            next_url = str(initial_plan.target_url)
-            next_assignment = "Inspect the starting page and discover relevant sources"
-            round_count = 0
-
-            while next_url and round_count < self.max_rounds:
-                round_count += 1
-                record["round"] = round_count
-                record["current_step"] = {
-                    "index": round_count, "total": self.max_rounds,
-                    "capability": "research", "objective": next_assignment,
-                    "url": next_url,
-                }
-                self._log(
-                    task_id,
-                    f"Round {round_count}/{self.max_rounds}: {next_assignment}",
-                )
-                attempt = loop_guard.begin(next_url, next_assignment)
-                already_visited = loop_guard.is_visited(next_url, visited_urls)
-                if attempt["should_skip"] or already_visited:
-                    reason = (
-                        f"Already inspected canonical source; skipped duplicate: {next_url}"
-                        if already_visited else
-                        f"Repeated source/action detected; skipped after "
-                        f"{attempt['attempt'] - 1} attempts: {next_url}"
-                    )
-                    limitations.append(reason)
-                    self._log(task_id, reason, "warning")
-                    self._note(task_id, {
-                        "round": round_count, "assignment": next_assignment,
-                        "status": "skipped_repeated_action",
-                        "sources": [{"url": next_url}],
-                        "remaining_work": [reason],
-                        "loop_guard": loop_guard.snapshot(),
-                        "seed_for_next_round": ["Choose a different undiscovered source"],
-                    })
-                    available = loop_guard.filter_candidates(candidates, visited_urls)
-                    if not available:
-                        next_url = ""
-                        break
+        checkpoint = record.get("checkpoint") if resume else None
+        if checkpoint:
+            initial_plan = DecisionPlan.model_validate(checkpoint["initial_plan"])
+            sources = list(checkpoint.get("sources", []))
+            findings = list(checkpoint.get("findings", []))
+            evidence = list(checkpoint.get("evidence", []))
+            visited_urls = list(checkpoint.get("visited_urls", []))
+            candidates = list(checkpoint.get("candidates", []))
+            structured_data = dict(checkpoint.get("structured_data", {}))
+            limitations = list(checkpoint.get("limitations", []))
+            loop_guard = ResearchLoopGuard.from_snapshot(checkpoint.get("loop_guard"))
+            round_count = int(checkpoint.get("round_count", 0))
+            next_url = str(checkpoint.get("next_url") or "")
+            next_assignment = str(checkpoint.get("next_assignment") or "Resume research")
+            research_complete = bool(checkpoint.get("research_complete", False))
+            if not next_url and not research_complete:
+                available = loop_guard.filter_candidates(candidates, visited_urls)
+                if available:
                     next_url = available[0]["url"]
-                    next_assignment = "Recovery: inspect a different source after repeat detection"
-                    continue
-
+                    next_assignment = "Resume: inspect the next available discovered source"
+                else:
+                    research_complete = True
+            self._log(task_id, f"Restored research checkpoint at round {round_count}; {len(sources)} sources already captured")
+        else:
+            sources: list[dict[str, Any]] = []
+            findings: list[dict[str, Any]] = []
+            evidence: list[dict[str, Any]] = []
+            visited_urls: list[str] = []
+            candidates: list[dict[str, str]] = []
+            loop_guard = ResearchLoopGuard(max_attempts_per_url=2)
+            structured_data: dict[str, list[Any]] = {}
+            limitations: list[str] = []
+            next_url = ""
+            next_assignment = ""
+            round_count = 0
+            research_complete = False
+        try:
+            if not checkpoint:
+                self._log(task_id, "Decider analysing objective and identifying the starting point")
+                initial_plan = await self.orchestrator.ollama.decide_task(objective)
+                record["plan"] = initial_plan.model_dump(mode="json")
+                proposed_steps = [step.objective for step in initial_plan.steps]
+                try:
+                    criteria = await self.orchestrator.ollama.initialise_goal_criteria(objective, proposed_steps)
+                except (OllamaUnavailable, AttributeError) as exc:
+                    criteria = proposed_steps or [initial_plan.summary or objective]
+                    self._log(task_id, f"Goal criteria model unavailable; using planner steps: {exc}", "warning")
+                record["goal_state"] = GoalStateManager.initialise(objective, criteria)
+                self._log(task_id, f"Goal State Manager established {len(criteria)} success criteria")
+                record["site_name"] = initial_plan.site_name
+                record["target_url"] = str(initial_plan.target_url) if initial_plan.target_url else None
+                if initial_plan.status != DecisionStatus.READY:
+                    record["status"] = initial_plan.status.value
+                    question = initial_plan.clarification_question or initial_plan.summary
+                    self._log(task_id, question, "warning")
+                    record["progress_events"].append({
+                        "at": self._now(), "event_type": "clarification",
+                        "status": record["status"], "message": question,
+                    })
+                    self._note(task_id, {
+                        "round": 0, "assignment": "Resolve research objective",
+                        "status": "needs_clarification", "findings": [],
+                        "remaining_work": [question], "seed_for_next_round": [objective],
+                    })
+                    return
+                self._note(task_id, {
+                    "round": 0, "assignment": "Resolve research objective and starting URL",
+                    "status": "completed", "target_url": record["target_url"],
+                    "findings": [initial_plan.summary],
+                    "seed_for_next_round": ["Inspect starting page and discover relevant sources"],
+                })
+                next_url = str(initial_plan.target_url)
+                next_assignment = "Inspect the starting page and discover relevant sources"
+                self._save_checkpoint(
+                    task_id, initial_plan, sources=sources, findings=findings,
+                    evidence=evidence, visited_urls=visited_urls, candidates=candidates,
+                    structured_data=structured_data, limitations=limitations,
+                    loop_guard=loop_guard, round_count=round_count,
+                    next_url=next_url, next_assignment=next_assignment,
+                )
                 one_page_plan = initial_plan.model_copy(update={
                     "target_url": next_url,
                     "steps": [
