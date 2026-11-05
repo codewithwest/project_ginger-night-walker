@@ -140,7 +140,7 @@ class TaskManager:
                     f"Round {round_count}/{self.max_rounds}: {next_assignment}",
                 )
                 attempt = loop_guard.begin(next_url, next_assignment)
-                if attempt["should_skip"]:
+                if attempt["should_skip"] or loop_guard.is_visited(next_url, visited_urls):
                     reason = (
                         f"Repeated source/action detected; skipped after "
                         f"{attempt['attempt'] - 1} attempts: {next_url}"
