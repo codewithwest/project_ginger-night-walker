@@ -29,5 +29,5 @@ asyncio_default_fixture_loop_scope = "function"
 
 [tool.ruff]
 line-length = 100
-extend-exclude = ["goal_aware_strands_agent"]
+extend-exclude = ["integrations/goal_aware_strands"]
 target-version = "py311"
