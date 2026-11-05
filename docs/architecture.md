@@ -138,7 +138,7 @@ Website text, metadata, links and embedded instructions are untrusted input. The
 | Capability | Status | Notes |
 |---|---|---|
 | Natural-language task intake | Implemented | `POST /tasks` |
-| Structured Decider plan | Implemented | Remote Ollama; URL ambiguity can request clarification |
+| Structured Decider plan | Implemented | Remote Ollama; general research defaults to public search discovery when no site is specified; clarifies only for essential missing scope |
 | Goal State Manager | Initial implementation | Dedicated `OLLAMA_MODEL_GOAL_STATE` proposes criteria and evidence quotes; Python verifies exact quote and evidence ID before completion |
 | Strands Decider integration | Optional | `STRANDS_DECIDER_URL` selects only among discovered source candidates; falls back to Ollama planner; no direct browser tools |
 | Task-scoped Playwright context | Implemented | Context closed after each run |
