@@ -43,16 +43,17 @@ uv run playwright install chromium
 
 ## Operator control centre
 
-The Night Walker web UI is served by the API at `http://localhost:8000/` when the Compose service is running. It provides a single natural-language task field, Decider-generated site and capability plan, ordered agent-step results, task state monitor, live log polling, and a stop control. A clarification state is returned when the site or task cannot be identified confidently. Task records and logs are held in process memory and are cleared when the service restarts.
-
-Start the service and open the UI:
+The operator UI is a **Vite + React + TypeScript + Tailwind CSS** application in `frontend/`. Docker builds the frontend in a Node build stage and copies the compiled assets into the Python image; FastAPI serves the built application at `http://localhost:8000/`. During local frontend development, run the API on port 8000 and use:
 
 ```bash
-docker compose up --build -d
-xdg-open http://localhost:8000/
+cd frontend
+npm install
+npm run dev
 ```
 
-The Compose port is bound to `127.0.0.1` by default. Keep it private; authentication and multi-user authorization are not implemented.
+Vite proxies `/health` and `/tasks` to the FastAPI service. The clarification composer is controlled React state, so task polling updates do not replace the textarea or steal focus. The UI provides mission submission, task selection, live status/log polling, clarification, stop control, and plan/evidence inspection.
+
+The Docker Compose port is bound to `127.0.0.1` by default. Keep it private; authentication and multi-user authorization are not implemented.
 
 ## Remote Ollama setup
 
