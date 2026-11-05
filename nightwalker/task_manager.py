@@ -257,14 +257,46 @@ class TaskManager:
                 if not candidates or round_count >= self.max_rounds:
                     next_url = ""
                     break
-                round_plan = await self.orchestrator.ollama.plan_research_round(
-                    objective=self._effective_objective(task_id, objective),
-                    round_number=round_count,
-                    max_rounds=self.max_rounds,
-                    scratchpad=self.scratchpad.read(task_id)[-8:],
-                    candidates=candidates,
-                    visited_urls=visited_urls,
-                )
+                try:
+                    round_plan = await self.orchestrator.ollama.plan_research_round(
+                        objective=self._effective_objective(task_id, objective),
+                        round_number=round_count,
+                        max_rounds=self.max_rounds,
+                        scratchpad=self.scratchpad.read(task_id)[-8:],
+                        candidates=candidates,
+                        visited_urls=visited_urls,
+                    )
+                except (OllamaUnavailable, ValueError, TypeError) as exc:
+                    # A model planning failure must not discard successfully captured
+                    # evidence. Deterministically continue with a browser-discovered URL.
+                    available = [
+                        item for item in candidates
+                        if item.get("url") and item["url"] not in visited_urls
+                    ]
+                    if not available:
+                        limitations.append(
+                            "Research planner failed and no discovered source remained."
+                        )
+                        next_url = ""
+                        break
+                    round_plan = None
+                    next_url = available[0]["url"]
+                    next_assignment = (
+                        "Fallback source inspection after planner output failure"
+                    )
+                    warning = (
+                        "Research planner output was invalid; continuing with the next "
+                        "browser-discovered source. " + str(exc)[:240]
+                    )
+                    limitations.append(warning)
+                    self._log(task_id, warning, "warning")
+                    record["progress_events"].append({
+                        "at": self._now(), "event_type": "planner_fallback",
+                        "status": "running", "round": round_count,
+                        "message": warning,
+                    })
+                if round_plan is None:
+                    continue
                 if round_plan.done:
                     self._log(task_id, "Research planner determined that the available evidence is sufficient")
                     next_url = ""
