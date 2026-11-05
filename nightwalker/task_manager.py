@@ -125,7 +125,11 @@ class TaskManager:
                     "message": "Recovered durable task state after service restart.",
                 })
                 self.running[task_id] = asyncio.create_task(
-                    self._execute_decided(task_id, str(record.get("objective") or ""), resume=True)
+                    self._execute_decided(
+                        task_id,
+                        str(record.get("execution_objective") or record.get("objective") or ""),
+                        resume=True,
+                    )
                 )
                 restored += 1
             else:
@@ -153,6 +157,7 @@ class TaskManager:
             "task_id": task_id,
             "capability": "auto",
             "objective": objective,
+            "execution_objective": objective,
             "status": "queued",
             "created_at": now,
             "updated_at": now,
@@ -182,6 +187,8 @@ class TaskManager:
     ) -> None:
         record = self.tasks[task_id]
         record["status"] = "running"
+        if not resume or not record.get("execution_objective"):
+            record["execution_objective"] = objective
         checkpoint = record.get("checkpoint") if resume else None
         if checkpoint:
             initial_plan = DecisionPlan.model_validate(checkpoint["initial_plan"])
@@ -712,6 +719,7 @@ class TaskManager:
             f"{original_objective}\n\nOperator clarification: {answer.strip()}"
         )
         record["clarification"] = answer.strip()
+        record["execution_objective"] = clarified_objective
         self._note(task_id, {
             "round": record.get("round", 0), "assignment": "Incorporate operator clarification",
             "status": "resolved", "operator_input": answer.strip(),
