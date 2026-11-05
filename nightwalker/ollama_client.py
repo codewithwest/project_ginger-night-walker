@@ -295,6 +295,78 @@ class OllamaClient:
                 return GoalProgressProposal.model_validate_json(raw)
         except (httpx.HTTPError, ValueError, ValidationError, KeyError) as exc:
             raise OllamaUnavailable(f"Goal progress evaluation failed: {exc}") from exc
+    async def _strands_research_round(
+        self, objective: str, round_number: int, allowed: list[dict[str, str]],
+        scratchpad: list[dict[str, Any]], minimum_rounds: int,
+    ) -> ResearchRoundPlan | None:
+        """Optional Strands semantic source selector; never receives browser tools."""
+        base = os.getenv("STRANDS_DECIDER_URL", "").rstrip("/")
+        if not base:
+            return None
+        endpoint = base + "/" + os.getenv("STRANDS_DECIDER_PATH", "/v1/systemone").lstrip("/")
+        choices = {
+            f"source_{index}": (
+                f"Inspect this browser-discovered source: {item.get('label', '')} "
+                f"({item['url']})"
+            )
+            for index, item in enumerate(allowed)
+        }
+        choices["finish"] = "Finish only if the original research objective has adequate evidence"
+        choices["blocked"] = "Stop because no safe or useful source can be inspected"
+        state = {
+            "original_goal": objective[:2000],
+            "round": round_number,
+            "max_rounds": self.max_rounds if hasattr(self, "max_rounds") else 30,
+            "completed_work": scratchpad[-6:],
+            "available_source_count": len(allowed),
+        }
+        payload = {
+            "state": json.dumps(state, ensure_ascii=False),
+            "questions": {"next_action": {
+                "type": "choice",
+                "instructions": (
+                    "Choose exactly one next source from the supplied browser-discovered "
+                    "options. Never invent a URL. Choose finish only when the goal is covered."
+                ),
+                "criteria": choices,
+            }},
+        }
+        try:
+            async with httpx.AsyncClient(timeout=min(self.timeout, 45)) as client:
+                response = await client.post(endpoint, json=payload, headers=self._headers())
+                response.raise_for_status()
+                answer = response.json().get("answers", {}).get("next_action", {})
+                choice = answer.get("choice")
+                probabilities = answer.get("probabilities") or {}
+                if not choice and probabilities:
+                    choice = max(probabilities, key=probabilities.get)
+                if choice == "finish":
+                    if round_number < minimum_rounds and allowed:
+                        choice = "source_0"
+                    else:
+                        return ResearchRoundPlan(
+                            done=True,
+                            assignment="Complete research and synthesise captured evidence",
+                            reason="Strands Decider judged the available evidence sufficient.",
+                        )
+                if choice == "blocked":
+                    return ResearchRoundPlan(
+                        done=True, assignment="Research blocked",
+                        reason="Strands Decider reported no safe or useful next action.",
+                    )
+                if choice not in choices or not choice.startswith("source_"):
+                    return None
+                index = int(choice.split("_", 1)[1])
+                selected = allowed[index]
+                return ResearchRoundPlan(
+                    done=False, next_url=selected["url"],
+                    assignment="Inspect source selected by Strands Decider: " + selected.get("label", "discovered page"),
+                    reason="Selected from browser-discovered candidates by the configured Strands Decider.",
+                )
+        except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError):
+            # Optional Strands outage/contract mismatch falls back to the local Ollama planner.
+            return None
+
     async def plan_research_round(
         self,
         objective: str,
@@ -325,6 +397,13 @@ class OllamaClient:
             "top 5", "best", "audit", "review", "market", "industry", "seo",
         ))
         minimum_rounds = 3 if multi_source_objective else 1
+        strands_plan = await self._strands_research_round(
+            objective, round_number, allowed, scratchpad, minimum_rounds
+        )
+        if strands_plan is not None:
+            return ResearchRoundPlan.validate_plan(
+                strands_plan, {item["url"] for item in allowed}
+            )
         schema = ResearchRoundPlan.model_json_schema()
         compact_notes = [
             {
