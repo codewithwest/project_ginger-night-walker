@@ -45,6 +45,10 @@ app = FastAPI(
 )
 
 
+if (UI_DIR / "assets").is_dir():
+    app.mount("/assets", StaticFiles(directory=UI_DIR / "assets"), name="ui-assets")
+
+
 @app.get("/", include_in_schema=False)
 async def control_centre():
     return FileResponse(UI_FILE)
