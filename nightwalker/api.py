@@ -37,6 +37,7 @@ class TaskFollowUpRequest(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await browser.start()
+    await task_manager.restore_and_resume()
     yield
     await browser.close()
 
