@@ -9,6 +9,7 @@ from nightwalker.decision_contracts import DecisionStatus
 from nightwalker.ollama_client import OllamaUnavailable
 from nightwalker.orchestrator import Orchestrator
 from nightwalker.scratchpad import TaskScratchpad
+from nightwalker.goal_state import GoalStateManager
 
 
 class TaskManager:
@@ -67,6 +68,7 @@ class TaskManager:
             "max_rounds": self.max_rounds,
             "scratchpad": self.scratchpad.read(task_id),
             "follow_up_instructions": [],
+            "goal_state": None,
         }
         self._log(task_id, "Natural-language task accepted; starting Decider")
         self.running[task_id] = asyncio.create_task(
@@ -88,6 +90,14 @@ class TaskManager:
             self._log(task_id, "Decider analysing objective and identifying the starting point")
             initial_plan = await self.orchestrator.ollama.decide_task(objective)
             record["plan"] = initial_plan.model_dump(mode="json")
+            proposed_steps = [step.objective for step in initial_plan.steps]
+            try:
+                criteria = await self.orchestrator.ollama.initialise_goal_criteria(objective, proposed_steps)
+            except OllamaUnavailable as exc:
+                criteria = proposed_steps or [initial_plan.summary or objective]
+                self._log(task_id, f"Goal criteria model unavailable; using planner steps: {exc}", "warning")
+            record["goal_state"] = GoalStateManager.initialise(objective, criteria)
+            self._log(task_id, f"Goal State Manager established {len(criteria)} success criteria")
             record["site_name"] = initial_plan.site_name
             record["target_url"] = str(initial_plan.target_url) if initial_plan.target_url else None
             if initial_plan.status != DecisionStatus.READY:
@@ -179,6 +189,13 @@ class TaskManager:
                         captured["captured_text"] = str(captured.get("captured_text", ""))[:1500]
                         round_evidence.append(captured)
                     evidence.extend(round_evidence)
+                    if record.get("goal_state") and round_evidence:
+                        try:
+                            proposal = await self.orchestrator.ollama.evaluate_goal_progress(record["goal_state"], round_evidence)
+                            GoalStateManager.apply_proposal(record["goal_state"], proposal, round_evidence)
+                            self._log(task_id, f"Goal progress: {len(record['goal_state']['completed'])}/{len(record['goal_state']['criteria'])} criteria have verified evidence.")
+                        except OllamaUnavailable as exc:
+                            self._log(task_id, f"Goal progress evaluation unavailable: {exc}", "warning")
                     for item in result.get("findings", []):
                         finding = dict(item)
                         finding["finding_id"] = f"f-{len(findings) + 1:03d}"
@@ -252,6 +269,7 @@ class TaskManager:
                     "limitations": list(dict.fromkeys(limitations)),
                     "suggested_memory": [], "rounds_completed": round_count,
                     "max_rounds": self.max_rounds, "visited_urls": list(visited_urls),
+                    "goal_state": record.get("goal_state"),
                 }
 
                 if not candidates or round_count >= self.max_rounds:
@@ -327,7 +345,10 @@ class TaskManager:
                         "Automated synthesis was unavailable; review the evidence-backed findings."
                     )
                     limitations.append(str(exc)[:500])
-                final_status = "completed" if sources and not limitations else "blocked"
+                remaining_criteria = (record.get("goal_state") or {}).get("remaining", [])
+                if remaining_criteria:
+                    limitations.append("Success criteria still lacking directly quoted evidence: " + "; ".join(remaining_criteria))
+                final_status = "completed" if sources and not limitations and not remaining_criteria else "blocked"
             else:
                 answer = "No usable sources could be inspected. Review the limitations and execution log."
                 final_status = "blocked"
@@ -338,6 +359,7 @@ class TaskManager:
                 "limitations": list(dict.fromkeys(limitations)),
                 "suggested_memory": [], "rounds_completed": round_count,
                 "max_rounds": self.max_rounds, "visited_urls": visited_urls,
+                "goal_state": record.get("goal_state"),
             }
             record["status"] = final_status
             record["current_step"] = None
