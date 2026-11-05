@@ -14,6 +14,33 @@ A local-first, Dockerized Playwright agent runtime built around **least-privileg
 
 Agents do not inherit conversations or other agents' histories. Page content is untrusted data, never policy or system instructions. The model can propose plans; it cannot directly execute browser actions or grant permissions.
 
+## Package management with uv
+
+**uv is the only package manager used for Python dependency installation.** Do not use pip.
+
+Install uv using the official Astral installer or your OS package manager, then run:
+
+```bash
+uv lock
+uv sync --group dev
+```
+
+Commit the generated `uv.lock` file so local development and Docker builds use the same resolved dependency versions.
+
+Run checks and the API with uv:
+
+```bash
+uv run pytest
+uv run ruff check .
+uv run uvicorn nightwalker.api:app --reload
+```
+
+For local browser setup, use the Playwright browser image (recommended) or install the browser with:
+
+```bash
+uv run playwright install chromium
+```
+
 ## Remote Ollama setup
 
 Ollama runs on a separate server. **Do not add an Ollama container to this Compose project and do not install models on Ginger OS.**
@@ -42,6 +69,8 @@ Ollama runs on a separate server. **Do not add an Ollama container to this Compo
    curl http://localhost:8000/health
    curl http://localhost:8000/health/ollama
    ```
+
+The Docker build copies the pinned uv executable from the Astral uv image and runs `uv sync`; it does not invoke pip. Commit `uv.lock` after generating it with `uv lock` so the container build is reproducible and locked.
 
 The Ollama client uses the Ollama `/api/chat` endpoint with a JSON Schema response format. The model must be available on the remote host before use.
 
@@ -93,13 +122,3 @@ The current inference endpoint returns a validated **proposal** with status `pla
 The current `/tasks/agent` endpoint is a development integration, **not a public multi-user API**. Keep the service bound to localhost or a trusted private network until authentication, per-caller authorization, quotas, and audit logging are implemented. A remote Ollama URL is trusted operator configuration; use a controlled HTTPS endpoint, not a user-provided URL.
 
 The browser container is for local development and testing. Playwright's standard Docker image is not intended for visiting untrusted websites. This is an initial development baseline, not a hardened hostile-tenant browser service. Before exposing it to untrusted users, add per-task OS/container isolation, network egress controls, secret management, authenticated API access, quotas, and a stronger browser sandbox.
-
-## Local development
-
-```bash
-python -m venv .venv
-. .venv/bin/activate
-pip install -e '.[dev]'
-playwright install chromium
-uvicorn nightwalker.api:app --reload
-```
