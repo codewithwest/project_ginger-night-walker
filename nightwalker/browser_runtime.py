@@ -213,6 +213,10 @@ class BrowserRuntime:
                 )
             wants_products = bool(re.search(r"(?i)\b(product|products|item|items|price|pricing)\b", objective))
             products = self._extract_products_from_text(body_text) if wants_products else []
+            if wants_products and not products:
+                issues.append(
+                    "The page was read, but no product name and price could be confidently extracted."
+                )
             answer = (
                 f"{products[0]['name']} — {products[0]['price']}"
                 if products else None
