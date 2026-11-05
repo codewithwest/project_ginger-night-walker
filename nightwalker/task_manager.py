@@ -288,7 +288,6 @@ class TaskManager:
                         "Research planner output was invalid; continuing with the next "
                         "browser-discovered source. " + str(exc)[:240]
                     )
-                    limitations.append(warning)
                     self._log(task_id, warning, "warning")
                     record["progress_events"].append({
                         "at": self._now(), "event_type": "planner_fallback",
