@@ -10,8 +10,8 @@ from pydantic import ValidationError
 from nightwalker.context_compiler import ContextCompiler
 from nightwalker.contracts import AgentResult, AgentTask
 from nightwalker.decision_contracts import DecisionPlan
-from nightwalker.model_registry import ModelRegistry
 from nightwalker.goal_state import GoalCriteriaPlan, GoalProgressProposal
+from nightwalker.model_registry import ModelRegistry
 from nightwalker.research_contracts import ResearchRoundPlan, ResearchSynthesis
 
 SYSTEM_PROMPTS = {
