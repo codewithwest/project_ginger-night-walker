@@ -23,6 +23,10 @@ class NaturalLanguageTaskRequest(BaseModel):
     task_id: str = Field(default_factory=lambda: "nw-" + str(uuid4()))
 
 
+class TaskClarificationRequest(BaseModel):
+    answer: str = Field(min_length=1, max_length=2000)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await browser.start()
@@ -75,6 +79,17 @@ async def submit_task(task: NaturalLanguageTaskRequest):
         return task_manager.submit_natural_language(task.task_id, task.objective.strip())
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/tasks/{task_id}/clarify")
+async def clarify_task(task_id: str, request: TaskClarificationRequest):
+    try:
+        task = task_manager.clarify(task_id, request.answer.strip())
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
 
 
 @app.delete("/tasks/{task_id}")
