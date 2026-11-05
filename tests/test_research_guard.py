@@ -55,3 +55,17 @@ def test_loop_guard_records_bounded_outcomes():
     snapshot = guard.snapshot()
     assert len(snapshot["recent_outcomes"]) == 12
     assert snapshot["max_attempts_per_url"] == 2
+
+
+def test_loop_guard_restores_attempt_counts_and_recent_diagnostics():
+    original = ResearchLoopGuard(max_attempts_per_url=2)
+    original.begin("https://example.com/retry", "Inspect")
+    original.record_outcome("https://example.com/retry", "Inspect", "failed", "timeout")
+
+    restored = ResearchLoopGuard.from_snapshot(original.snapshot())
+
+    assert restored.attempts["https://example.com/retry"] == 1
+    assert restored.filter_candidates(
+        [{"url": "https://example.com/retry"}], []
+    ) == [{"url": "https://example.com/retry", "label": ""}]
+    assert restored.snapshot()["recent_outcomes"][0]["reason"] == "timeout"
