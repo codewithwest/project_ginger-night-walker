@@ -83,6 +83,8 @@ async def submit_task(task: NaturalLanguageTaskRequest):
 
 @app.post("/tasks/{task_id}/clarify")
 async def clarify_task(task_id: str, request: TaskClarificationRequest):
+    if not request.answer.strip():
+        raise HTTPException(status_code=422, detail="A clarification answer is required")
     try:
         task = task_manager.clarify(task_id, request.answer.strip())
     except ValueError as exc:
