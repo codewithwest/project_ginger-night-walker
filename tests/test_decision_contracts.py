@@ -52,10 +52,14 @@ def test_ready_plan_without_url_is_rejected():
         DecisionPlan.validate_plan(plan)
 
 
-def test_clarification_plan_without_question_is_rejected():
+def test_clarification_plan_without_question_gets_safe_fallback():
     plan = DecisionPlan(status="needs_clarification", summary="Need more detail")
-    with pytest.raises(ValueError, match="include a question"):
-        DecisionPlan.validate_plan(plan)
+
+    validated = DecisionPlan.validate_plan(plan)
+
+    assert validated.status == DecisionStatus.NEEDS_CLARIFICATION
+    assert validated.clarification_question
+    assert "exact website URL" in validated.clarification_question
 
 
 def test_unknown_capability_is_rejected():
