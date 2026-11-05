@@ -333,7 +333,11 @@ class OllamaClient:
         }
         try:
             async with httpx.AsyncClient(timeout=min(self.timeout, 45)) as client:
-                response = await client.post(endpoint, json=payload, headers=self._headers())
+                strands_headers = {"Content-Type": "application/json"}
+                strands_key = os.getenv("STRANDS_DECIDER_API_KEY")
+                if strands_key:
+                    strands_headers["Authorization"] = "Bearer " + strands_key
+                response = await client.post(endpoint, json=payload, headers=strands_headers)
                 response.raise_for_status()
                 answer = response.json().get("answers", {}).get("next_action", {})
                 choice = answer.get("choice")
