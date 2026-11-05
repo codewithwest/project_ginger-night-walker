@@ -5,7 +5,7 @@
 - Ginger OS / Docker host runs FastAPI, Playwright Chromium and the React UI.
 - Remote Ollama serves model inference; no Ollama container is part of this Compose stack.
 - The default Compose binding is `127.0.0.1:8000`.
-- Task state is in process memory; evidence JSON is persisted under `EVIDENCE_DIR` (Docker default: `/app/evidence`).
+- Task state is in process memory; evidence JSON and append-only scratchpad notes are persisted under `EVIDENCE_DIR` (Docker default: `/app/evidence`).
 
 ## 2. Prerequisites
 
@@ -85,7 +85,7 @@ Check `.env.example` for the current supported values and defaults.
 | GET | `/tasks` | List in-memory tasks |
 | GET | `/tasks/{task_id}` | Fetch task state |
 | POST | `/tasks/{task_id}/clarify` | Supply clarification |
-| DELETE | `/tasks/{task_id}` | Stop task |
+| DELETE | `/tasks/{task_id}` | Cancel active, queued or clarification-waiting task |
 | POST | `/tasks/agent` | Legacy capability-specific proposal endpoint |
 | POST | `/tasks/browser-extract` | Compatibility browser extraction endpoint |
 
