@@ -1,5 +1,7 @@
 # Goal-Aware Strands + Qwen 0.6B + Coding Model MCP Agent
 
+> **Integration status:** This directory preserves the experimental standalone harness for reference and offline experiments. Night Walker now integrates the evidence-gated goal-state pattern in `nightwalker/goal_state.py` and an optional Strands source-selection adapter in `nightwalker/ollama_client.py`. The standalone runner's direct Playwright MCP executor and coding-model argument generator are deliberately not used by the core runtime; all production browser execution remains behind Night Walker's BrowserRuntime and PolicyEngine.
+
 An **experimental**, goal-conditioned local browser harness. Three specialized models:
 
 1. **Qwen3 0.6B** proposes success criteria at initialization and interprets actual results after each tool call. Python persistently owns the immutable user goal, evidence, and state.
