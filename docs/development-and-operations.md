@@ -142,11 +142,12 @@ Common diagnoses:
 
 ## 10. Known limitations
 
-- Task state is not durable.
-- Research is currently single-session/single-final-page, not a multi-source research crawler.
-- Site discovery relies on the Decider and task wording, not a dedicated search provider.
-- Link selection is heuristic and same-origin only.
-- Current report findings mostly describe page metadata/headings; cross-source claim synthesis and evidence-linked findings are future work.
+- Task state is not durable; scratchpad and evidence files persist but are not yet sufficient to resume a task after restart.
+- Research runs up to 30 bounded page-inspection rounds, starting from Bing search results or a user-supplied URL; discovered links are the candidate source pool.
+- Source selection is model-assisted but constrained to URLs actually observed by the browser. Discovery quality depends on search results and page links.
+- Findings carry source/evidence IDs and visible-text excerpts; synthesis is bounded to those observations and is not yet a full fact-checking or source-authority engine.
+- Active tasks accept follow-up instructions; follow-ups after completion require a new task.
+- Cancellation preserves completed-round partial reports. Full task state remains in memory, so a service restart does not automatically resume the research loop.
 - Product price extraction is a narrow structured-data adapter.
 - Browser interactions are read-only and do not support arbitrary click/type/form workflows.
 - The application is not authenticated or hardened for multi-user hostile workloads.
