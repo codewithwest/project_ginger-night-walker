@@ -513,6 +513,23 @@ export default function App() {
                         <code>{selected.result.evidence_id}</code>
                       </div>
                     )}
+                    {selected.round !== undefined && (
+                      <div className="detail-meta">
+                        <span>Execution phase / budget</span>
+                        <span>{selected.round} / {selected.max_rounds || 30}</span>
+                      </div>
+                    )}
+                    {selected.scratchpad?.length ? (
+                      <div className="log-list">
+                        {selected.scratchpad.map((note, index) => (
+                          <div className="log-entry" key={"scratch-" + index}>
+                            <time>R{note.round ?? "—"}</time>
+                            <span className="log-entry__level">scratchpad</span>
+                            <p>{note.assignment} · {note.status}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                     {selected.logs?.length ? (
                       <div className="log-list">
                         {selected.logs.map((log, index) => (
