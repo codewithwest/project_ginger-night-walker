@@ -22,6 +22,9 @@ class FakeLocator:
     async def all_text_contents(self):
         return ["Heading"]
 
+    async def evaluate(self, expression):
+        return self.text[:20000]
+
 
 class FakePage:
     url = "https://example.com/"
