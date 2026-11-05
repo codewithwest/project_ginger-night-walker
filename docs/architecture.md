@@ -19,7 +19,7 @@
 | Component | Owns | Must not own |
 |---|---|---|
 | Ginger OS / caller | User intent, identity, memory policy and downstream use | Browser implementation details |
-| Task API / Task Manager | Task lifecycle, status, clarification, progress events, cancellation and scratchpad coordination | Permission escalation |
+| Task API / Task Manager | Task lifecycle, status, clarification, progress events, cancellation, scratchpad coordination and checkpoint recovery | Permission escalation |\n| Task State Store | Atomic task snapshots and resumable research checkpoints on the persistent evidence volume | Browser policy or model decisions |
 | Context Compiler | Minimal capability-scoped input packets | Shared conversation-history inheritance |
 | Decider | Candidate plan, target suggestion and clarification | Browser actions, policy grants, truth verification |
 | Goal State Manager | Immutable original objective, success criteria and evidence-gated progress ledger | Declaring completion without exact captured evidence |
@@ -70,7 +70,7 @@ stateDiagram-v2
     stopped --> [*]
 ```
 
-Current implementation stores tasks in process memory. Restarting the service loses task state; durable task storage and resumability are future work.
+Task records and resumable research checkpoints are persisted as atomic JSON snapshots under `EVIDENCE_DIR/tasks` (or `TASK_STATE_DIR`). On startup, queued/running tasks are restored and resumed from their last checkpoint. A crash during a page inspection may cause that single source to be attempted again; the loop guard bounds retries. Clarification-waiting and terminal tasks are restored without being restarted.
 
 ## 5. Browser execution sequence
 
@@ -83,10 +83,10 @@ sequenceDiagram
     participant LLM as Remote Ollama
     participant P as Policy Engine
     participant B as Browser Runtime
-    participant E as Evidence Store
+    participant E as Evidence Store\n    participant TS as Task State Store
     Caller->>API: POST /tasks objective
     API->>TM: create task
-    TM->>D: decide objective / initial search URL
+    TM->>TS: persist task and latest checkpoint\n    TM->>D: decide objective / initial search URL
     TM->>LLM: extract immutable success criteria (Qwen3 0.6B)
     LLM-->>TM: criteria proposal; Python stores original goal
     D->>LLM: bounded structured request
@@ -145,7 +145,7 @@ Website text, metadata, links and embedded instructions are untrusted input. The
 | Immutable evidence JSON | Implemented | Task-scoped file record |
 | Task scratchpad | Implemented | Append-only task-scoped round notes; compact recent notes seed the next planner call |
 | Progress events | Implemented | Round-completion, follow-up, clarification, cancellation and final milestone events are exposed to the UI |
-| Operator cancellation | Implemented | DELETE `/tasks/{task_id}` cancels active work and marks queued/clarification-waiting tasks stopped |
+| Operator cancellation | Implemented | DELETE `/tasks/{task_id}` cancels active work and marks queued/clarification-waiting tasks stopped |\n| Durable task snapshots | Implemented | Atomic per-task JSON snapshots under the persistent evidence volume |\n| Restart recovery | Initial implementation | Startup restores queued/running tasks; resumes from the last saved round checkpoint; an interrupted in-flight page may be retried once |
 | Generic report envelope | Partial | Aggregated multi-source findings, source/evidence references and synthesis; richer claim validation remains |
 | Product name/price extraction | Specialised partial capability | One task-specific structured-data adapter |
 | Multi-source research | Initial implementation | Up to 30 rounds; starts from a search result or explicit URL and selects only browser-discovered links |
@@ -153,7 +153,7 @@ Website text, metadata, links and embedded instructions are untrusted input. The
 | Evidence-constrained synthesis | Initial implementation | Summarises captured titles, headings and visible-text excerpts; gaps are reported |
 | Active task follow-ups | Implemented | User instructions are appended to the task context for subsequent rounds |
 | Research-grade claim/evidence graph | Partial | Each captured finding carries source and evidence IDs; claim-level validation and conflict graph remain planned |
-| Durable task queue and database | Planned | In-memory tasks today |
+| Durable multi-worker queue/database | Planned | Current store is single-process atomic JSON, not a transactional multi-worker queue or database |
 | Automatic memory retention | Not implemented by design | Ginger owns this decision |
 | Arbitrary interaction, form submission, transactions | Not supported | Read-only baseline |
 
