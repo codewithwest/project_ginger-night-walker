@@ -245,3 +245,51 @@ async def test_decider_requests_clarification_when_ready_plan_has_no_destination
     assert plan.status.value == "needs_clarification"
     assert plan.clarification_question
     assert not plan.steps
+
+
+@pytest.mark.asyncio
+async def test_decider_does_not_ask_for_site_when_markdown_link_contains_explicit_url(
+    monkeypatch,
+):
+    monkeypatch.setenv("OLLAMA_BASE_URL", "https://ollama.example.test")
+
+    class FakeAsyncClient:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, headers, json):
+            plan = {
+                "status": "needs_clarification",
+                "summary": "Perform a comprehensive SEO audit",
+                "site_name": None,
+                "target_url": None,
+                "clarification_question": (
+                    "Which website or detail should I use to continue? "
+                    "Please provide the exact website URL if the site is ambiguous."
+                ),
+                "steps": [],
+            }
+            return httpx.Response(
+                200,
+                json={"message": {"content": __import__("json").dumps(plan)}},
+                request=httpx.Request("POST", url),
+            )
+
+    monkeypatch.setattr("nightwalker.ollama_client.httpx.AsyncClient", FakeAsyncClient)
+    objective = (
+        "Perform a comprehensive SEO audit of "
+        "[https://weylandts.co.za](https://weylandts.co.za). "
+        "Check technical SEO, metadata and content quality."
+    )
+    plan = await OllamaClient().decide_task(objective)
+
+    assert plan.status.value == "ready"
+    assert str(plan.target_url) == "https://weylandts.co.za/"
+    assert plan.site_name == "weylandts.co.za"
+    assert [step.capability.value for step in plan.steps] == ["navigate", "extract"]
