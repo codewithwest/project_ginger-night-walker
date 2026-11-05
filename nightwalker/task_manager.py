@@ -159,6 +159,8 @@ class TaskManager:
                 else:
                     final_url = result.get("final_url") or next_url
                     visited_urls.append(final_url)
+                    if next_url not in visited_urls:
+                        visited_urls.append(next_url)
                     source_id = f"s-{len(sources) + 1:03d}"
                     source_records = result.get("sources", [])
                     source = dict(source_records[0]) if source_records else {
@@ -172,6 +174,9 @@ class TaskManager:
                         captured = dict(item)
                         captured["source_id"] = source_id
                         captured["evidence_id"] = result.get("evidence_id") or captured.get("evidence_id")
+                        # Full immutable captures stay in EvidenceStore; task polling returns
+                        # only a compact excerpt to keep payload and context bounded.
+                        captured["captured_text"] = str(captured.get("captured_text", ""))[:1500]
                         round_evidence.append(captured)
                     evidence.extend(round_evidence)
                     for item in result.get("findings", []):
