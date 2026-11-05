@@ -272,7 +272,7 @@ class TaskManager:
                     )
                     answer = synthesis.answer
                     if synthesis.coverage_summary:
-                        answer += "\\n\\n" + synthesis.coverage_summary
+                        answer += "\n\n" + synthesis.coverage_summary
                     limitations.extend(synthesis.gaps)
                 except OllamaUnavailable as exc:
                     answer = (
@@ -407,7 +407,7 @@ class TaskManager:
 
         original_objective = record["objective"]
         clarified_objective = (
-            f"{original_objective}\\n\\nOperator clarification: {answer.strip()}"
+            f"{original_objective}\n\nOperator clarification: {answer.strip()}"
         )
         record["clarification"] = answer.strip()
         self._note(task_id, {
