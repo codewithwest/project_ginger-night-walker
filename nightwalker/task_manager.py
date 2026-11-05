@@ -277,6 +277,11 @@ class TaskManager:
             if round_count >= self.max_rounds and candidates:
                 limitations.append(f"Maximum research budget of {self.max_rounds} rounds reached.")
             if sources:
+                self._log(task_id, "Research rounds resolved; synthesising the evidence-backed report")
+                record["progress_events"].append({
+                    "at": self._now(), "event_type": "synthesis_started",
+                    "status": "running", "message": "Research collection is complete; preparing the final synthesis.",
+                })
                 try:
                     synthesis = await self.orchestrator.ollama.synthesise_research(
                         self._effective_objective(task_id, objective), findings, sources, round_count, self.max_rounds
