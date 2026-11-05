@@ -61,13 +61,20 @@ class BrowserRuntime:
     @staticmethod
     def _link_score(text: str, objective: str) -> float:
         ignored = {"the", "and", "for", "from", "with", "find", "open", "click", "visit", "page"}
+        def normalize(word: str) -> str:
+            word = {"catalogue": "catalog", "catalogues": "catalog"}.get(word, word)
+            return word[:-1] if len(word) > 4 and word.endswith("s") else word
+
         words = {
-            word for word in re.findall(r"[a-z0-9]{3,}", objective.lower())
+            normalize(word)
+            for word in re.findall(r"[a-z0-9]{3,}", objective.lower())
             if word not in ignored
         }
         if not words:
             return 0.0
-        label = set(re.findall(r"[a-z0-9]{3,}", text.lower()))
+        label = {
+            normalize(word) for word in re.findall(r"[a-z0-9]{3,}", text.lower())
+        }
         return len(words & label) / len(words)
 
     async def _follow_relevant_link(self, page: Page, objective: str) -> str | None:
@@ -149,10 +156,13 @@ class BrowserRuntime:
             ]
             main = page.locator("main")
             if await main.count():
-                body_text = await main.first.inner_text(timeout=5000)
+                body_text = await main.first.evaluate(
+                    "element => (element.innerText || '').slice(0, 20000)"
+                )
             else:
-                body_text = await page.locator("body").inner_text(timeout=5000)
-            body_text = body_text[:20000]
+                body_text = await page.locator("body").evaluate(
+                    "element => (element.innerText || '').slice(0, 20000)"
+                )
             payload = {
                 "objective": objective[:2000],
                 "final_url": page.url,
@@ -164,7 +174,7 @@ class BrowserRuntime:
             }
             evidence_id = self.evidence.save(task_id, payload)
             return {
-                "status": "completed" if body_text.strip() else "blocked",
+                "status": "completed" if body_text.strip() and not issues else "blocked",
                 "final_url": page.url,
                 "title": title,
                 "headings": headings,
