@@ -366,11 +366,11 @@ class OllamaClient:
         )
         compact_findings = [
             {
-                "claim": item.get("claim", "")[:400],
+                "claim": item.get("claim", "")[:250],
                 "source_ids": item.get("source_ids", []),
                 "evidence_ids": item.get("evidence_ids", []),
             }
-            for item in findings[:100]
+            for item in findings[:60]
         ]
         packet = {
             "objective": objective[:2000],
@@ -379,7 +379,7 @@ class OllamaClient:
             "captured_observations": compact_findings,
             "sources": [
                 {"source_id": item.get("source_id"), "url": item.get("url"), "title": item.get("title")}
-                for item in sources[:30]
+                for item in sources[:20]
             ],
         }
         body = {
