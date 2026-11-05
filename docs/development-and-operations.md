@@ -84,7 +84,8 @@ Check `.env.example` for the current supported values and defaults.
 | POST | `/tasks` | Submit natural-language objective (202) |
 | GET | `/tasks` | List in-memory tasks |
 | GET | `/tasks/{task_id}` | Fetch task state |
-| POST | `/tasks/{task_id}/clarify` | Supply clarification |\n| POST | `/tasks/{task_id}/follow-up` | Add an instruction to an active research task for subsequent rounds |
+| POST | `/tasks/{task_id}/clarify` | Supply clarification |
+| POST | `/tasks/{task_id}/follow-up` | Add an instruction to an active research task for subsequent rounds |
 | DELETE | `/tasks/{task_id}` | Cancel active, queued or clarification-waiting task; preserve partial report |
 | POST | `/tasks/agent` | Legacy capability-specific proposal endpoint |
 | POST | `/tasks/browser-extract` | Compatibility browser extraction endpoint |
