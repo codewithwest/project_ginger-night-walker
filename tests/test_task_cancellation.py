@@ -6,6 +6,7 @@ import pytest
 
 from nightwalker.task_manager import TaskManager
 from nightwalker.scratchpad import TaskScratchpad
+from nightwalker.task_state_store import TaskStateStore
 
 
 class SlowOllama:
@@ -21,7 +22,8 @@ class FakeOrchestrator:
 @pytest.mark.asyncio
 async def test_running_task_can_be_cancelled_and_recorded(tmp_path):
     manager = TaskManager(FakeOrchestrator())
-    manager.scratchpad = TaskScratchpad(str(tmp_path))
+    manager.scratchpad = TaskScratchpad(str(tmp_path / "scratchpads"))
+    manager.state_store = TaskStateStore(str(tmp_path / "tasks"))
     manager.submit_natural_language("cancel-me", "Research something")
 
     stopped = await manager.stop("cancel-me")
