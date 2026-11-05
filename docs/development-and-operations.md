@@ -147,8 +147,8 @@ Common diagnoses:
 ## 10. Known limitations
 
 - Task state is not durable; scratchpad and evidence files persist but are not yet sufficient to resume a task after restart.
-- Research runs up to 30 bounded page-inspection rounds, starting from Bing search results or a user-supplied URL; discovered links are the candidate source pool.
-- Source selection is model-assisted but constrained to URLs actually observed by the browser. Discovery quality depends on search results and page links.
+- Research runs up to 30 bounded page-inspection rounds, starting from Bing search results or a user-supplied URL; discovered links are the candidate source pool. The Research Loop Guard canonicalises URL comparisons, deduplicates candidates, permits at most two attempts per URL, records bounded recent outcomes in task state/scratchpad, skips repeated or already visited sources, and falls back to another discovered candidate when a selected source is exhausted.
+- Source selection is model-assisted but constrained to URLs actually observed by the browser. Discovery quality depends on search results and page links. Repeat detection is deterministic and task-local; it is not a general-purpose model-action verifier.
 - The Goal State Manager tracks an immutable objective and up to six success criteria. The small model can propose completion only with an exact quote and evidence ID; Python verifies both against the current captured evidence. This is evidence linkage, not proof that the source itself is truthful.
 - An optional Strands Decider can select only among browser-discovered source URLs. If unavailable or misconfigured, the Ollama planner remains the fallback. The integrated Strands adapter has no browser tools.
 - Findings carry source/evidence IDs and visible-text excerpts; synthesis is bounded to those observations and is not yet a full fact-checking or source-authority engine.
