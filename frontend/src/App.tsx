@@ -29,6 +29,7 @@ type Product = {
 };
 
 type BrowserResult = {
+  schema_version?: string;
   status?: string;
   final_url?: string;
   title?: string;
@@ -162,12 +163,13 @@ function ResearchReport({ result }: { result: BrowserResult }) {
   const findings = result.findings || [];
   const sources = result.sources || (result.final_url ? [{ url: result.final_url, title: result.title }] : []);
   const products = result.products || [];
+  const structuredData = result.structured_data || {};
   const limitations = result.limitations || result.issues || [];
   return (
     <section className="answer-panel research-report">
       <div className="answer-panel__topline">
         <span className="eyebrow"><Check size={13} /> RESEARCH REPORT</span>
-        <span className="result-count">{findings.length} observations · {sources.length} sources</span>
+        <span className="result-count">{findings.length} findings · {sources.length} sources{result.schema_version ? " · schema " + result.schema_version : ""}</span>
       </div>
       <div className="research-report__answer">
         <span className="answer-highlight__label">ANSWER</span>
@@ -179,13 +181,22 @@ function ResearchReport({ result }: { result: BrowserResult }) {
           <span>{finding.claim}</span><small>{finding.type?.replaceAll("_", " ") || "observation"} · {finding.confidence || "observed"}</small>
         </li>)}</ul>
       </div>}
-      {products.length > 0 && <div className="research-section">
-        <h3>Structured data · Products</h3>
-        <div className="product-list">{products.map((product, index) => <div className="product-row" key={index}>
-          <span className="product-row__number">{String(index + 1).padStart(2, "0")}</span>
-          <span className="product-row__name">{product.name}</span><strong className="product-row__price">{product.price}</strong>
-        </div>)}</div>
-      </div>}
+      {Object.entries(structuredData).map(([kind, value]) => (
+        <div className="research-section" key={kind}>
+          <h3>Structured data · {kind.replaceAll("_", " ")}</h3>
+          {kind === "products" && Array.isArray(value) ? (
+            <div className="product-list">{(value as Product[]).map((product, index) => (
+              <div className="product-row" key={product.name + "-" + index}>
+                <span className="product-row__number">{String(index + 1).padStart(2, "0")}</span>
+                <span className="product-row__name">{product.name}</span>
+                <strong className="product-row__price">{product.price}</strong>
+              </div>
+            ))}</div>
+          ) : (
+            <pre className="structured-data">{JSON.stringify(value, null, 2)}</pre>
+          )}
+        </div>
+      ))}
       {sources.length > 0 && <div className="research-section">
         <h3>Sources</h3>
         {sources.map((source, index) => <a className="source-link" href={source.url} target="_blank" rel="noreferrer" key={source.url + index}>
