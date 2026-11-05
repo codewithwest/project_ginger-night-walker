@@ -83,17 +83,24 @@ sequenceDiagram
     participant E as Evidence Store
     Caller->>API: POST /tasks objective
     API->>TM: create task
-    TM->>D: decide objective
+    TM->>D: decide objective / initial search URL
     D->>LLM: bounded structured request
     LLM-->>D: candidate DecisionPlan
     D-->>TM: validated plan or clarification
-    TM->>P: validate target and requests
-    P-->>B: permitted public URL
-    B->>B: isolated Playwright context
-    B->>E: persist bounded observations
-    E-->>B: evidence identifier
-    B-->>TM: report envelope
-    TM-->>API: task state and report
+    loop Up to 30 research rounds
+        TM->>P: validate discovered public URL
+        P-->>B: permitted public URL
+        B->>B: isolated Playwright context; capture text and links
+        B->>E: persist evidence
+        E-->>TM: evidence identifier and observations
+        TM->>TM: append scratchpad and publish progress
+        TM->>LLM: compact objective + scratchpad + discovered URLs
+        LLM-->>TM: next discovered URL or done
+    end
+    TM->>LLM: evidence-constrained final synthesis
+    LLM-->>TM: concise answer and evidence gaps
+    TM-->>API: partial/final report and progress events
+    API-->>Caller: poll task state; accept follow-ups or cancellation
     API-->>Caller: poll task result
 ```
 
@@ -128,12 +135,12 @@ Website text, metadata, links and embedded instructions are untrusted input. The
 | Same-origin anchor navigation | Partial | Heuristic relevance matching; not general-purpose interaction |
 | Visible text and heading capture | Implemented | Bounded capture, currently one final page |
 | Immutable evidence JSON | Implemented | Task-scoped file record |
-| Task scratchpad | Initial implementation | Append-only task notes for plan resolution, browser result and cancellation; not yet a full iterative round scheduler |
-| Progress events | Initial implementation | Task snapshots expose progress events and UI surfaces recent log updates |
+| Task scratchpad | Implemented | Append-only task-scoped round notes; compact recent notes seed the next planner call |
+| Progress events | Implemented | Round-completion, follow-up, clarification, cancellation and final milestone events are exposed to the UI |
 | Operator cancellation | Implemented | DELETE `/tasks/{task_id}` cancels active work and marks queued/clarification-waiting tasks stopped |
 | Generic report envelope | Partial | Present in browser runtime; cross-source synthesis not implemented |
 | Product name/price extraction | Specialised partial capability | One task-specific structured-data adapter |
-| Multi-source research and reconciliation | Planned | Needs source collection and synthesis workflow |
+| Multi-source research | Initial implementation | Up to 30 rounds; starts from a search result or explicit URL and selects only browser-discovered links |\n| Evidence-constrained synthesis | Initial implementation | Summarises captured titles, headings and visible-text excerpts; gaps are reported |\n| Active task follow-ups | Implemented | User instructions are appended to the task context for subsequent rounds |
 | Research-grade claim/evidence graph | Planned | Current findings do not yet carry formal evidence references |
 | Durable task queue and database | Planned | In-memory tasks today |
 | Automatic memory retention | Not implemented by design | Ginger owns this decision |
