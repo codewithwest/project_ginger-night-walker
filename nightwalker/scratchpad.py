@@ -34,7 +34,8 @@ class TaskScratchpad:
         return item
 
     def read(self, task_id: str) -> list[dict[str, Any]]:
-        path = self.directory / f"{task_id}.json"
+        safe_id = hashlib.sha256(task_id.encode("utf-8")).hexdigest()
+        path = self.directory / f"{safe_id}.json"
         if not path.is_file():
             return []
         try:
