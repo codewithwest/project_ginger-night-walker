@@ -70,7 +70,7 @@ Ollama runs on a separate server. **Do not add an Ollama container to this Compo
    curl http://localhost:8000/health/ollama
    ```
 
-The Docker build copies the pinned uv executable from the Astral uv image and runs `uv sync`; it does not invoke pip. Commit `uv.lock` after generating it with `uv lock` so the container build is reproducible and locked.
+The Docker build copies the pinned uv executable from the Astral uv image and runs `uv sync`; it does not invoke pip. The Docker build includes `uv.lock` automatically when it exists. Until the first lockfile is committed, a fresh checkout can still build by resolving from `pyproject.toml`; commit `uv.lock` after generating it with `uv lock` to make builds reproducible.
 
 The Ollama client uses the Ollama `/api/chat` endpoint with a JSON Schema response format. The model must be available on the remote host before use.
 
