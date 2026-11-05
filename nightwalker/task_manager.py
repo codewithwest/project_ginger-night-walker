@@ -145,6 +145,32 @@ class TaskManager:
             self.tasks[task_id]["updated_at"] = self._now()
             self.running.pop(task_id, None)
 
+    def clarify(self, task_id: str, answer: str) -> dict[str, Any] | None:
+        """Resume a task after the operator answers a Decider clarification."""
+        record = self.tasks.get(task_id)
+        if record is None:
+            return None
+        if record.get("status") != DecisionStatus.NEEDS_CLARIFICATION.value:
+            raise ValueError("This task is not waiting for clarification")
+        if not answer.strip():
+            raise ValueError("A clarification answer is required")
+        if task_id in self.running and not self.running[task_id].done():
+            raise ValueError("This task is already running")
+
+        original_objective = record["objective"]
+        clarified_objective = (
+            f"{original_objective}\\n\\nOperator clarification: {answer.strip()}"
+        )
+        record["clarification"] = answer.strip()
+        record["status"] = "queued"
+        record["plan"] = None
+        record["error"] = None
+        self._log(task_id, "Operator supplied clarification; restarting Decider")
+        self.running[task_id] = asyncio.create_task(
+            self._execute_decided(task_id, clarified_objective)
+        )
+        return self.snapshot(task_id)
+
     async def stop(self, task_id: str) -> dict[str, Any] | None:
         if task_id not in self.tasks:
             return None
