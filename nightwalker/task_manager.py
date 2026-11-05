@@ -223,6 +223,47 @@ class TaskManager:
                     loop_guard=loop_guard, round_count=round_count,
                     next_url=next_url, next_assignment=next_assignment,
                 )
+            while next_url and round_count < self.max_rounds:
+                round_count += 1
+                record["round"] = round_count
+                record["current_step"] = {
+                    "index": round_count, "total": self.max_rounds,
+                    "capability": "research", "objective": next_assignment,
+                    "url": next_url,
+                }
+                self._log(task_id, f"Round {round_count}/{self.max_rounds}: {next_assignment}")
+                attempt = loop_guard.begin(next_url, next_assignment)
+                already_visited = loop_guard.is_visited(next_url, visited_urls)
+                self._save_checkpoint(
+                    task_id, initial_plan, sources=sources, findings=findings,
+                    evidence=evidence, visited_urls=visited_urls, candidates=candidates,
+                    structured_data=structured_data, limitations=limitations,
+                    loop_guard=loop_guard, round_count=round_count,
+                    next_url=next_url, next_assignment=next_assignment,
+                )
+                if attempt["should_skip"] or already_visited:
+                    reason = (
+                        f"Already inspected canonical source; skipped duplicate: {next_url}"
+                        if already_visited else
+                        f"Repeated source/action detected; skipped after {attempt['attempt'] - 1} attempts: {next_url}"
+                    )
+                    limitations.append(reason)
+                    self._log(task_id, reason, "warning")
+                    self._note(task_id, {
+                        "round": round_count, "assignment": next_assignment,
+                        "status": "skipped_repeated_action", "sources": [{"url": next_url}],
+                        "remaining_work": [reason], "loop_guard": loop_guard.snapshot(),
+                        "seed_for_next_round": ["Choose a different undiscovered source"],
+                    })
+                    available = loop_guard.filter_candidates(candidates, visited_urls)
+                    if not available:
+                        next_url = ""
+                        research_complete = True
+                        break
+                    next_url = available[0]["url"]
+                    next_assignment = "Recovery: inspect a different source after repeat detection"
+                    continue
+
                 one_page_plan = initial_plan.model_copy(update={
                     "target_url": next_url,
                     "steps": [
@@ -354,8 +395,23 @@ class TaskManager:
                     "loop_guard": loop_guard.snapshot(),
                 }
 
+                self._save_checkpoint(
+                    task_id, initial_plan, sources=sources, findings=findings,
+                    evidence=evidence, visited_urls=visited_urls, candidates=candidates,
+                    structured_data=structured_data, limitations=limitations,
+                    loop_guard=loop_guard, round_count=round_count,
+                    next_url="", next_assignment=next_assignment,
+                )
                 if not candidates or round_count >= self.max_rounds:
                     next_url = ""
+                    research_complete = True
+                    self._save_checkpoint(
+                        task_id, initial_plan, sources=sources, findings=findings,
+                        evidence=evidence, visited_urls=visited_urls, candidates=candidates,
+                        structured_data=structured_data, limitations=limitations,
+                        loop_guard=loop_guard, round_count=round_count,
+                        next_url="", next_assignment=next_assignment, research_complete=True,
+                    )
                     break
                 try:
                     round_plan = await self.orchestrator.ollama.plan_research_round(
@@ -375,6 +431,14 @@ class TaskManager:
                             "Research planner failed and no discovered source remained."
                         )
                         next_url = ""
+                        research_complete = True
+                        self._save_checkpoint(
+                            task_id, initial_plan, sources=sources, findings=findings,
+                            evidence=evidence, visited_urls=visited_urls, candidates=candidates,
+                            structured_data=structured_data, limitations=limitations,
+                            loop_guard=loop_guard, round_count=round_count,
+                            next_url="", next_assignment=next_assignment, research_complete=True,
+                        )
                         break
                     round_plan = None
                     next_url = available[0]["url"]
@@ -391,14 +455,36 @@ class TaskManager:
                         "status": "running", "round": round_count,
                         "message": warning,
                     })
+                    self._save_checkpoint(
+                        task_id, initial_plan, sources=sources, findings=findings,
+                        evidence=evidence, visited_urls=visited_urls, candidates=candidates,
+                        structured_data=structured_data, limitations=limitations,
+                        loop_guard=loop_guard, round_count=round_count,
+                        next_url=next_url, next_assignment=next_assignment,
+                    )
                 if round_plan is None:
                     continue
                 if round_plan.done:
                     self._log(task_id, "Research planner determined that the available evidence is sufficient")
                     next_url = ""
+                    research_complete = True
+                    self._save_checkpoint(
+                        task_id, initial_plan, sources=sources, findings=findings,
+                        evidence=evidence, visited_urls=visited_urls, candidates=candidates,
+                        structured_data=structured_data, limitations=limitations,
+                        loop_guard=loop_guard, round_count=round_count,
+                        next_url="", next_assignment=next_assignment, research_complete=True,
+                    )
                     break
                 next_url = str(round_plan.next_url)
                 next_assignment = round_plan.assignment
+                self._save_checkpoint(
+                    task_id, initial_plan, sources=sources, findings=findings,
+                    evidence=evidence, visited_urls=visited_urls, candidates=candidates,
+                    structured_data=structured_data, limitations=limitations,
+                    loop_guard=loop_guard, round_count=round_count,
+                    next_url=next_url, next_assignment=next_assignment,
+                )
                 self._log(task_id, f"Next source selected: {next_url}")
 
             record["round"] = round_count
