@@ -57,6 +57,36 @@ class OllamaClient:
             raise OllamaUnavailable("OLLAMA_BASE_URL must use HTTP or HTTPS")
         return self.base_url
 
+    @staticmethod
+    def _chat_content(envelope: Any, *, model: str, operation: str) -> str:
+        """Extract chat content and explain empty/incomplete Ollama responses."""
+        if not isinstance(envelope, dict):
+            raise OllamaUnavailable(
+                f"Ollama {operation} response for {model!r} was not a JSON object"
+            )
+        if envelope.get("error"):
+            raise OllamaUnavailable(
+                f"Ollama {operation} error for {model!r}: {str(envelope['error'])[:500]}"
+            )
+        message = envelope.get("message")
+        if not isinstance(message, dict):
+            message = {}
+        content = message.get("content")
+        if isinstance(content, str) and content.strip():
+            return content
+        thinking = message.get("thinking")
+        thinking_length = len(thinking) if isinstance(thinking, str) else 0
+        raise OllamaUnavailable(
+            f"Ollama {operation} returned empty message.content for model {model!r}; "
+            f"done={envelope.get('done')!r}, "
+            f"done_reason={envelope.get('done_reason')!r}, "
+            f"message_fields={sorted(message.keys())}, "
+            f"thinking_chars={thinking_length}, "
+            f"prompt_eval_count={envelope.get('prompt_eval_count')!r}, "
+            f"eval_count={envelope.get('eval_count')!r}. "
+            "Check the Ollama server log, model generation, and structured-output support."
+        )
+
     async def health(self) -> dict[str, Any]:
         base_url = self._require_base_url()
         try:
@@ -70,7 +100,6 @@ class OllamaClient:
                 return {"status": "connected", "models": names}
         except (httpx.HTTPError, ValueError) as exc:
             raise OllamaUnavailable(f"Remote Ollama health check failed: {exc}") from exc
-
 
     async def decide_task(self, objective: str) -> DecisionPlan:
         """Turn one natural-language request into a bounded, capability-scoped plan."""
@@ -111,9 +140,11 @@ class OllamaClient:
                 )
                 response.raise_for_status()
                 envelope = response.json()
-                content = envelope.get("message", {}).get("content", "")
+                content = self._chat_content(envelope, model=model, operation="Decider")
                 plan = DecisionPlan.model_validate_json(content)
                 return DecisionPlan.validate_plan(plan)
+        except OllamaUnavailable:
+            raise
         except (httpx.HTTPError, ValueError, ValidationError, KeyError) as exc:
             raise OllamaUnavailable(
                 f"Decider inference failed or returned an invalid plan: {exc}"
@@ -160,8 +191,10 @@ class OllamaClient:
                 )
                 response.raise_for_status()
                 envelope = response.json()
-                content = envelope.get("message", {}).get("content", "")
+                content = self._chat_content(envelope, model=model, operation="Agent")
                 result = AgentResult.model_validate_json(content)
+        except OllamaUnavailable:
+            raise
         except (httpx.HTTPError, ValueError, ValidationError, KeyError) as exc:
             raise OllamaUnavailable(
                 f"Remote Ollama inference failed or returned invalid output: {exc}"
