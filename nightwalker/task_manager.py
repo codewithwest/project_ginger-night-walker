@@ -140,8 +140,11 @@ class TaskManager:
                     f"Round {round_count}/{self.max_rounds}: {next_assignment}",
                 )
                 attempt = loop_guard.begin(next_url, next_assignment)
-                if attempt["should_skip"] or loop_guard.is_visited(next_url, visited_urls):
+                already_visited = loop_guard.is_visited(next_url, visited_urls)
+                if attempt["should_skip"] or already_visited:
                     reason = (
+                        f"Already inspected canonical source; skipped duplicate: {next_url}"
+                        if already_visited else
                         f"Repeated source/action detected; skipped after "
                         f"{attempt['attempt'] - 1} attempts: {next_url}"
                     )
@@ -194,7 +197,7 @@ class TaskManager:
                     final_url = result.get("final_url") or next_url
                     loop_guard.record_outcome(next_url, next_assignment, "completed")
                     visited_urls.append(final_url)
-                    if next_url not in visited_urls:
+                    if not loop_guard.is_visited(next_url, visited_urls):
                         visited_urls.append(next_url)
                     source_id = f"s-{len(sources) + 1:03d}"
                     source_records = result.get("sources", [])
@@ -250,6 +253,7 @@ class TaskManager:
                         "actions": [final_url], "findings": round_findings,
                         "sources": [source], "evidence_ids": [result["evidence_id"]] if result.get("evidence_id") else [],
                         "discovered_source_count": len(candidates),
+                        "loop_guard": loop_guard.snapshot(),
                         "seed_for_next_round": [
                             "Objective: " + objective[:500],
                             "Visited: " + final_url,
