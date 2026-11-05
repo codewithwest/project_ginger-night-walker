@@ -93,7 +93,7 @@ class TaskManager:
             proposed_steps = [step.objective for step in initial_plan.steps]
             try:
                 criteria = await self.orchestrator.ollama.initialise_goal_criteria(objective, proposed_steps)
-            except OllamaUnavailable as exc:
+            except (OllamaUnavailable, AttributeError) as exc:
                 criteria = proposed_steps or [initial_plan.summary or objective]
                 self._log(task_id, f"Goal criteria model unavailable; using planner steps: {exc}", "warning")
             record["goal_state"] = GoalStateManager.initialise(objective, criteria)
@@ -194,7 +194,7 @@ class TaskManager:
                             proposal = await self.orchestrator.ollama.evaluate_goal_progress(record["goal_state"], round_evidence)
                             GoalStateManager.apply_proposal(record["goal_state"], proposal, round_evidence)
                             self._log(task_id, f"Goal progress: {len(record['goal_state']['completed'])}/{len(record['goal_state']['criteria'])} criteria have verified evidence.")
-                        except OllamaUnavailable as exc:
+                        except (OllamaUnavailable, AttributeError) as exc:
                             self._log(task_id, f"Goal progress evaluation unavailable: {exc}", "warning")
                     for item in result.get("findings", []):
                         finding = dict(item)
