@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from nightwalker.contracts import AgentTask
@@ -18,7 +18,7 @@ class TaskManager:
 
     @staticmethod
     def _now() -> str:
-        return datetime.now(timezone.utc).isoformat()
+        return datetime.now(UTC).isoformat()
 
     def _log(self, task_id: str, message: str, level: str = "info") -> None:
         record = self.tasks[task_id]
