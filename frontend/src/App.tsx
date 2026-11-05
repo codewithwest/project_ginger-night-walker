@@ -494,8 +494,8 @@ export default function App() {
                     <div>
                       <strong>Working on it</strong>
                       <p>Round {selected.round || 0} · configured ceiling {selected.max_rounds || 30}. Progress is saved as work resolves.</p>
-                      {selected.logs?.slice(-3).map((log, index) => (
-                        <p key={(log.at || "") + index}>{log.message}</p>
+                      {(selected.progress_events || []).slice(-4).map((event, index) => (
+                        <p key={(event.at || "") + index}>{event.message}</p>
                       ))}
                     </div>
                     <form onSubmit={sendFollowUp} className="clarification">
