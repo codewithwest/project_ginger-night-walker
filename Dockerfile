@@ -13,12 +13,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:$PATH"
 
 WORKDIR /app
-COPY pyproject.toml README.md ./
-# Optional during initial bootstrap; commit uv.lock for reproducible builds.
-COPY uv.lock* ./
-COPY nightwalker ./nightwalker
+# Copy the repository as a unit so uv.lock is included when it exists,
+# while a fresh checkout can still bootstrap before the first lock is committed.
+COPY . .
 
-# uv uses uv.lock automatically when present; this also bootstraps fresh clones.
+# uv honors uv.lock when present; otherwise it resolves from pyproject.toml.
 RUN uv sync --no-dev --no-editable
 
 RUN useradd --create-home --shell /bin/bash appuser
