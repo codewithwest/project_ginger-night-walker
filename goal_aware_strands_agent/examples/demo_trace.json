@@ -1,0 +1,173 @@
+{
+  "status": "completed",
+  "goal": "Visit python.org and open the Downloads page",
+  "final_state": {
+    "original_goal": "Visit python.org and open the Downloads page",
+    "criteria": [
+      "Open the Python downloads page"
+    ],
+    "completed": [
+      "Open the Python downloads page"
+    ],
+    "remaining": [],
+    "observation": "Downloads page opened",
+    "evidence": [
+      "Open the Python downloads page: URL: https://www.python.org/downloads/\nDownloads page opened. Example version: Python 3.x (mock data, NOT a current version)."
+    ],
+    "last_error": "",
+    "proposed_complete": true
+  },
+  "steps": [
+    {
+      "step": 1,
+      "time": "2026-11-04T06:29:39.612734+00:00",
+      "state_before": {
+        "original_goal": "Visit python.org and open the Downloads page",
+        "criteria": [
+          "Open the Python downloads page"
+        ],
+        "completed": [],
+        "remaining": [
+          "Open the Python downloads page"
+        ],
+        "observation": "",
+        "evidence": [],
+        "last_error": "",
+        "proposed_complete": false
+      },
+      "decision": {
+        "action": "navigate",
+        "confidence": 1.0,
+        "source": "scripted_test_double"
+      },
+      "tool": "browser_navigate",
+      "arguments": {
+        "url": "https://www.python.org"
+      },
+      "result": {
+        "is_error": false,
+        "content": "URL: https://www.python.org\n- link Downloads [ref=e13]\n- link Documentation [ref=e12]"
+      },
+      "state_update": {
+        "raw": "{\"observation\":\"Browser is not yet on the downloads page\",\"progress\":true,\"completed\":[],\"remaining\":[\"Open the Python downloads page\"],\"goal_complete\":false}",
+        "parsed": {
+          "observation": "Browser is not yet on the downloads page",
+          "progress": true,
+          "completed": [],
+          "remaining": [
+            "Open the Python downloads page"
+          ],
+          "goal_complete": false
+        },
+        "progress": true,
+        "proposed_complete": false,
+        "remaining": [
+          "Open the Python downloads page"
+        ]
+      },
+      "state_after": {
+        "original_goal": "Visit python.org and open the Downloads page",
+        "criteria": [
+          "Open the Python downloads page"
+        ],
+        "completed": [],
+        "remaining": [
+          "Open the Python downloads page"
+        ],
+        "observation": "Browser is not yet on the downloads page",
+        "evidence": [],
+        "last_error": "",
+        "proposed_complete": false
+      }
+    },
+    {
+      "step": 2,
+      "time": "2026-11-04T06:29:39.612829+00:00",
+      "state_before": {
+        "original_goal": "Visit python.org and open the Downloads page",
+        "criteria": [
+          "Open the Python downloads page"
+        ],
+        "completed": [],
+        "remaining": [
+          "Open the Python downloads page"
+        ],
+        "observation": "Browser is not yet on the downloads page",
+        "evidence": [],
+        "last_error": "",
+        "proposed_complete": false
+      },
+      "decision": {
+        "action": "click",
+        "confidence": 1.0,
+        "source": "scripted_test_double"
+      },
+      "tool": "browser_click",
+      "arguments": {
+        "ref": "e13",
+        "element": "Downloads"
+      },
+      "result": {
+        "is_error": false,
+        "content": "URL: https://www.python.org/downloads/\nDownloads page opened. Example version: Python 3.x (mock data, NOT a current version)."
+      },
+      "state_update": {
+        "raw": "{\"observation\":\"Downloads page opened\",\"progress\":true,\"completed\":[\"Open the Python downloads page\"],\"remaining\":[],\"goal_complete\":true}",
+        "parsed": {
+          "observation": "Downloads page opened",
+          "progress": true,
+          "completed": [
+            "Open the Python downloads page"
+          ],
+          "remaining": [],
+          "goal_complete": true
+        },
+        "progress": true,
+        "proposed_complete": true,
+        "remaining": []
+      },
+      "state_after": {
+        "original_goal": "Visit python.org and open the Downloads page",
+        "criteria": [
+          "Open the Python downloads page"
+        ],
+        "completed": [
+          "Open the Python downloads page"
+        ],
+        "remaining": [],
+        "observation": "Downloads page opened",
+        "evidence": [
+          "Open the Python downloads page: URL: https://www.python.org/downloads/\nDownloads page opened. Example version: Python 3.x (mock data, NOT a current version)."
+        ],
+        "last_error": "",
+        "proposed_complete": true
+      }
+    },
+    {
+      "step": 3,
+      "time": "2026-11-04T06:29:39.612885+00:00",
+      "state_before": {
+        "original_goal": "Visit python.org and open the Downloads page",
+        "criteria": [
+          "Open the Python downloads page"
+        ],
+        "completed": [
+          "Open the Python downloads page"
+        ],
+        "remaining": [],
+        "observation": "Downloads page opened",
+        "evidence": [
+          "Open the Python downloads page: URL: https://www.python.org/downloads/\nDownloads page opened. Example version: Python 3.x (mock data, NOT a current version)."
+        ],
+        "last_error": "",
+        "proposed_complete": true
+      },
+      "decision": {
+        "action": "finish",
+        "confidence": 1.0,
+        "source": "scripted_test_double"
+      }
+    }
+  ],
+  "note": "Model-proposed criteria/evidence are heuristic; verify externally before high-stakes reliance."
+}
