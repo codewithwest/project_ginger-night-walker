@@ -110,59 +110,9 @@ function Status({ value }: { value: string }) {
   );
 }
 
-function extractProducts(text: string): Product[] {
-  const lines = text
-    .split("\n")
-    .map((line) => line.replace(/\s+/g, " ").trim())
-    .filter(Boolean);
-  const ignored = new Set([
-    "from",
-    "shop now",
-    "view collection",
-    "new arrivals",
-    "press to skip carousel",
-    "add to cart",
-    "quick view",
-  ]);
-  const products: Product[] = [];
-
-  lines.forEach((line, index) => {
-    const match = line.match(/R\s*\d[\d,]*(?:\.\d{2})?/i);
-    if (!match) return;
-
-    let name = line.slice(0, match.index).trim().replace(/[| -]+$/, "");
-    if (!name) {
-      let previous = index - 1;
-      while (
-        previous >= 0 &&
-        (ignored.has(lines[previous].toLowerCase()) ||
-          lines[previous].toLowerCase().includes("price depends on the options"))
-      ) {
-        previous -= 1;
-      }
-      name = previous >= 0 ? lines[previous] : "";
-    }
-
-    if (
-      !name ||
-      ignored.has(name.toLowerCase()) ||
-      name.toLowerCase().includes("price depends on the options")
-    ) {
-      return;
-    }
-
-    if (!products.some((product) => product.name === name && product.price === match[0])) {
-      products.push({ name, price: match[0] });
-    }
-  });
-
-  return products;
-}
-
 function ResearchReport({ result }: { result: BrowserResult }) {
   const findings = result.findings || [];
   const sources = result.sources || (result.final_url ? [{ url: result.final_url, title: result.title }] : []);
-  const products = result.products || [];
   const structuredData = result.structured_data || {};
   const limitations = result.limitations || result.issues || [];
   return (
@@ -218,62 +168,6 @@ function ResearchReport({ result }: { result: BrowserResult }) {
         <h3>Potential knowledge to retain</h3><ul>{result.suggested_memory.map((item, index) => <li key={index}>{item}</li>)}</ul>
         <small>Suggestions only — Ginger's memory policy decides what is retained.</small>
       </div>}
-    </section>
-  );
-}
-
-function ProductResult({ result }: { result: BrowserResult }) {
-  const products = result.products?.length
-    ? result.products
-    : extractProducts(result.text || "");
-  const firstProduct = products[0];
-  const firstAnswer = result.answer || (
-    firstProduct ? `${firstProduct.name} — ${firstProduct.price}` : null
-  );
-
-  return (
-    <section className="answer-panel">
-      <div className="answer-panel__topline">
-        <span className="eyebrow"><Check size={13} /> RESULT FOUND</span>
-        <span className="result-count">
-          {products.length} {products.length === 1 ? "product" : "products"} found
-        </span>
-      </div>
-
-      {firstAnswer && (
-        <div className="answer-highlight">
-          <span className="answer-highlight__label">FIRST PRODUCT</span>
-          <h2>{firstProduct?.name || firstAnswer.split(" — ")[0]}</h2>
-          <strong>{firstProduct?.price || firstAnswer.split(" — ").slice(1).join(" — ")}</strong>
-        </div>
-      )}
-
-      {products.length > 0 && (
-        <div className="product-list">
-          {products.map((product, index) => (
-            <div className="product-row" key={`${product.name}-${index}`}>
-              <span className="product-row__number">
-                {String(index + 1).padStart(2, "0")}
-              </span>
-              <span className="product-row__name">{product.name}</span>
-              <strong className="product-row__price">{product.price}</strong>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {result.final_url && (
-        <a
-          className="source-link"
-          href={result.final_url}
-          target="_blank"
-          rel="noreferrer"
-        >
-          <ExternalLink size={14} />
-          Source page
-          <span>{new URL(result.final_url).hostname}</span>
-        </a>
-      )}
     </section>
   );
 }
