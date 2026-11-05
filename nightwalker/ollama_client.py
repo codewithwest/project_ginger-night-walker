@@ -123,6 +123,7 @@ class OllamaClient:
         body = {
             "model": model,
             "stream": False,
+            "think": False,
             "format": schema,
             "messages": [
                 {"role": "system", "content": system_prompt},
@@ -174,6 +175,7 @@ class OllamaClient:
         body = {
             "model": model,
             "stream": False,
+            "think": False,
             "format": schema,
             "messages": [
                 {"role": "system", "content": system_prompt},
