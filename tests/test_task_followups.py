@@ -29,7 +29,7 @@ def test_active_task_accepts_follow_up_and_seeds_scratchpad(tmp_path):
 
     assert snapshot is not None
     assert snapshot["follow_up_instructions"] == ["Prioritise primary sources"]
-    assert snapshot["progress_events"][-1]["event_type"] == "progress"
+    assert snapshot["progress_events"][-1]["event_type"] == "user_follow_up"
     assert manager._effective_objective("task-1", "Research topic").endswith(
         "- Prioritise primary sources"
     )
