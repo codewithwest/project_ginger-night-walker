@@ -43,8 +43,18 @@ class TaskManager:
 
     def _persist(self, task_id: str) -> None:
         record = self.tasks.get(task_id)
-        if record is not None:
+        if record is None:
+            return
+        try:
             self.state_store.save(record)
+        except (OSError, TypeError, ValueError) as exc:
+            if not record.get("persistence_error"):
+                message = f"Durable task-state write failed: {exc}"
+                record["persistence_error"] = message[:500]
+                record.setdefault("progress_events", []).append({
+                    "at": self._now(), "event_type": "persistence_warning",
+                    "status": record.get("status", "unknown"), "message": message[:500],
+                })
 
     def _save_checkpoint(
         self, task_id: str, initial_plan: DecisionPlan, *, sources: list[dict[str, Any]],
@@ -81,7 +91,18 @@ class TaskManager:
             record.setdefault("step_results", [])
             record.setdefault("checkpoint", None)
             self.tasks[task_id] = record
+            checkpoint = record.get("checkpoint")
             if record.get("status") in {"queued", "running"}:
+                if checkpoint:
+                    try:
+                        DecisionPlan.model_validate(checkpoint["initial_plan"])
+                        ResearchLoopGuard.from_snapshot(checkpoint.get("loop_guard"))
+                        int(checkpoint.get("round_count", 0))
+                    except (KeyError, TypeError, ValueError) as exc:
+                        record["status"] = "failed"
+                        record["error"] = f"Saved research checkpoint is invalid: {exc}"[:500]
+                        self._log(task_id, record["error"], "error")
+                        continue
                 record["status"] = "queued"
                 record["current_step"] = None
                 self._log(task_id, "Service restarted; restoring task checkpoint and resuming", "warning")
