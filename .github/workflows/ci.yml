@@ -34,3 +34,9 @@ jobs:
 
       - name: Test
         run: uv run --locked pytest
+
+      - name: Build React frontend
+        working-directory: frontend
+        run: |
+          npm install
+          npm run build
