@@ -41,6 +41,19 @@ For local browser setup, use the Playwright browser image (recommended) or insta
 uv run playwright install chromium
 ```
 
+## Operator control centre
+
+The Night Walker web UI is served by the API at `http://localhost:8000/` when the Compose service is running. It provides a task composer, capability selector, task state monitor, live log polling, validated agent output, and a stop control. Task records and logs are held in process memory and are cleared when the service restarts.
+
+Start the service and open the UI:
+
+```bash
+docker compose up --build -d
+xdg-open http://localhost:8000/
+```
+
+The Compose port is bound to `127.0.0.1` by default. Keep it private; authentication and multi-user authorization are not implemented.
+
 ## Remote Ollama setup
 
 Ollama runs on a separate server. **Do not add an Ollama container to this Compose project and do not install models on Ginger OS.**
