@@ -110,11 +110,11 @@ Submit one plain-language objective to `POST /tasks`:
 }
 ```
 
-The Decider uses the configured `OLLAMA_MODEL_DECIDER` (or the default model) to identify a likely site, choose an ordered sequence of the four capabilities, and return a structured plan. If the site is unclear, the task enters `needs_clarification` with a question. The task monitor exposes the plan, per-step agent outputs, logs, and Stop control. The legacy `/tasks/agent` endpoint remains available for direct capability-specific proposals.
+The Decider uses the configured `OLLAMA_MODEL_DECIDER` (or the default model) to identify a likely site, choose an ordered sequence of the four capabilities, and return a structured plan. If the site is unclear, the task enters `needs_clarification` with a question. The task monitor exposes the plan, browser output, evidence ID, logs, and Stop control. The legacy `/tasks/agent` endpoint remains available for direct capability-specific proposals.
 
 **Site discovery limitation:** site identification currently relies on the Decider model's knowledge and the task wording; it is not backed by live search. It may ask for clarification rather than guess. A model-suggested URL is a candidate, not verified evidence.
 
-**Execution limitation:** each selected agent currently produces a validated proposal. This workflow does not yet click, type, submit forms, or perform autonomous multi-step browsing. Stop cancels the active inference/task.
+**Execution scope:** a ready Decider plan is executed by a task-isolated Playwright context. The runtime can navigate to the inferred public site, follow relevant same-origin links selected from the plan, recover with a bounded reload, and extract visible text, headings and title. Evidence is written as a JSON record under `EVIDENCE_DIR` (default `./evidence`) and returned by ID. It is deliberately read-only: it does not fill forms, submit forms, click purchase/submit buttons, download files, or perform transactions. Interaction is currently limited to same-origin anchor navigation. Tasks with an uncertain destination should enter `needs_clarification`.
 
 ## Agent inference API
 
