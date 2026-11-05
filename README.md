@@ -45,6 +45,7 @@ The model proposes a bounded plan. Trusted code validates it and owns browser ex
 Implemented baseline:
 - natural-language task submission, clarification and active-task follow-up instructions;
 - iterative multi-source research across up to 30 bounded browser rounds;
+- repeat-action detection, canonical URL deduplication, bounded per-source retries and fallback to alternative discovered sources;
 - task-scoped scratchpad notes that seed subsequent rounds without replaying full chat history;
 - progressive round-completion updates, partial reports and operator cancellation;
 - remote Ollama structured planning plus a dedicated small-model Goal State Manager;
