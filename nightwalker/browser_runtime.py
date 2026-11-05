@@ -221,10 +221,54 @@ class BrowserRuntime:
                 f"{products[0]['name']} — {products[0]['price']}"
                 if products else None
             )
+            retrieved_at = __import__("datetime").datetime.now(
+                __import__("datetime").UTC
+            ).isoformat()
+            findings = []
+            if title:
+                findings.append({
+                    "claim": f"Page title: {title}",
+                    "type": "page_metadata",
+                    "confidence": "observed",
+                })
+            findings.extend(
+                {
+                    "claim": heading,
+                    "type": "page_heading",
+                    "confidence": "observed",
+                }
+                for heading in headings
+            )
+            sources = [{
+                "url": page.url,
+                "title": title,
+                "retrieved_at": retrieved_at,
+            }]
+            structured_data = {"products": products} if products else {}
+            limitations = list(issues)
+            if not body_text.strip():
+                limitations.append("No visible page text was available to analyse.")
+            report = {
+                "answer": answer or (
+                    f"Captured the page “{title}” and its visible content."
+                    if title else "Captured page content; no concise answer was inferred."
+                ),
+                "findings": findings,
+                "sources": sources,
+                "evidence": [{
+                    "evidence_id": None,
+                    "source_url": page.url,
+                    "captured_text": body_text,
+                    "visited_urls": visited[:10],
+                }],
+                "structured_data": structured_data,
+                "limitations": limitations,
+                "suggested_memory": [],
+            }
             payload = {
                 "objective": objective[:2000],
+                **report,
                 "products": products,
-                "answer": answer,
                 "final_url": page.url,
                 "title": title,
                 "headings": headings,
@@ -233,14 +277,15 @@ class BrowserRuntime:
                 "issues": issues,
             }
             evidence_id = self.evidence.save(task_id, payload)
+            report["evidence"][0]["evidence_id"] = evidence_id
             return {
                 "status": "completed" if body_text.strip() and not issues else "blocked",
+                **report,
                 "final_url": page.url,
                 "title": title,
                 "headings": headings,
                 "text": body_text,
                 "products": products,
-                "answer": answer,
                 "visited_urls": visited[:10],
                 "issues": issues,
                 "evidence_id": evidence_id,
