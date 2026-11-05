@@ -6,11 +6,11 @@ from typing import Any
 
 from nightwalker.contracts import AgentTask
 from nightwalker.decision_contracts import DecisionPlan, DecisionStatus
+from nightwalker.goal_state import GoalStateManager
 from nightwalker.ollama_client import OllamaUnavailable
 from nightwalker.orchestrator import Orchestrator
-from nightwalker.scratchpad import TaskScratchpad
-from nightwalker.goal_state import GoalStateManager
 from nightwalker.research_guard import ResearchLoopGuard
+from nightwalker.scratchpad import TaskScratchpad
 from nightwalker.task_state_store import TaskStateStore
 
 
