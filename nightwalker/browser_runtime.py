@@ -109,10 +109,10 @@ class BrowserRuntime:
     @staticmethod
     def _extract_products_from_text(text: str, limit: int = 12) -> list[dict[str, str]]:
         """Extract ordered product names and prices from visible page text."""
-        lines = [re.sub(r"\\s+", " ", line).strip(" •|\\t") for line in text.splitlines()]
+        lines = [re.sub(r"\s+", " ", line).strip(" •|\t") for line in text.splitlines()]
         lines = [line for line in lines if line]
         price_pattern = re.compile(
-            r"(?i)(?:R\\s*)\\d[\\d,]*(?:\\.\\d{2})?"
+            r"(?i)(?:R\s*)\d[\d,]*(?:\.\d{2})?"
         )
         ignored = {
             "from", "shop now", "view collection", "new arrivals",
@@ -133,7 +133,7 @@ class BrowserRuntime:
                     name = lines[index - 2]
             if not name or name.lower() in ignored or price.lower() == name.lower():
                 continue
-            if len(name) > 180 or re.fullmatch(r"(?i)r?\\s*[\\d,.]+", name):
+            if len(name) > 180 or re.fullmatch(r"(?i)r?\s*[\d,.]+", name):
                 continue
             key = (name.casefold(), price.casefold())
             if key in seen:
@@ -202,7 +202,7 @@ class BrowserRuntime:
                 body_text = await page.locator("body").evaluate(
                     "element => (element.innerText || '').slice(0, 20000)"
                 )
-            wants_products = bool(re.search(r"(?i)\\b(product|products|item|items|price|pricing)\\b", objective))
+            wants_products = bool(re.search(r"(?i)\b(product|products|item|items|price|pricing)\b", objective))
             products = self._extract_products_from_text(body_text) if wants_products else []
             answer = (
                 f"{products[0]['name']} — {products[0]['price']}"
