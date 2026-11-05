@@ -10,7 +10,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
-    UV_PYTHON_INSTALL_DIR=/opt/uv/python \
+    UV_PYTHON_DOWNLOADS=never \
     PATH="/app/.venv/bin:$PATH"
 
 WORKDIR /app
@@ -18,13 +18,16 @@ WORKDIR /app
 # while a fresh checkout can still bootstrap before the first lock is committed.
 COPY . .
 
-# uv honors uv.lock when present; otherwise it resolves from pyproject.toml.
-RUN uv sync --no-dev --no-editable
+# Use the Python interpreter supplied by the Playwright base image. This keeps
+# the venv interpreter independent of uv's root-owned managed Python installs.
+RUN uv sync --python "$(command -v python3)" --no-dev --no-editable && \
+    test -x /app/.venv/bin/python && \
+    /app/.venv/bin/python --version && \
+    /app/.venv/bin/python -c "import uvicorn, fastapi, playwright"
 
-RUN useradd --create-home --shell /bin/bash appuser
-RUN mkdir -p /app/evidence /opt/uv/python && \
-    chown -R appuser:appuser /app /opt/uv/python && \
-    chmod -R 755 /opt/uv/python
+RUN useradd --create-home --shell /bin/bash appuser && \
+    mkdir -p /app/evidence && \
+    chown -R appuser:appuser /app
 ENV HOME=/home/appuser
 USER appuser
 
