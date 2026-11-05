@@ -484,7 +484,7 @@ export default function App() {
                   </form>
                 )}
 
-                {selected.result && ["completed", "blocked", "stopped"].includes(selected.status) && (
+                {selected.result && ["completed", "blocked", "stopped", "failed"].includes(selected.status) && (
                   <ResearchReport result={selected.result} />
                 )}
 
