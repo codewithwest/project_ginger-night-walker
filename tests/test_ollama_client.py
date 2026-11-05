@@ -331,3 +331,42 @@ async def test_decider_does_not_ask_for_site_when_markdown_link_contains_explici
     assert str(plan.target_url) == "https://weylandts.co.za/"
     assert plan.site_name == "weylandts.co.za"
     assert [step.capability.value for step in plan.steps] == ["navigate", "extract"]
+
+
+@pytest.mark.asyncio
+async def test_decider_replaces_website_only_clarification_with_search_discovery(monkeypatch):
+    monkeypatch.setenv("OLLAMA_BASE_URL", "https://ollama.example.test")
+
+    class FakeAsyncClient:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, headers, json):
+            plan = {
+                "status": "needs_clarification",
+                "summary": "Research the requested subject",
+                "site_name": None,
+                "target_url": None,
+                "clarification_question": (
+                    "Which website or detail should I use to continue? "
+                    "Please provide the exact website URL if the site is ambiguous."
+                ),
+                "steps": [],
+            }
+            return httpx.Response(
+                200,
+                json={"message": {"content": __import__("json").dumps(plan)}},
+                request=httpx.Request("POST", url),
+            )
+
+    monkeypatch.setattr("nightwalker.ollama_client.httpx.AsyncClient", FakeAsyncClient)
+    plan = await OllamaClient().decide_task("Compare the leading project management tools")
+
+    assert plan.status.value == "ready"
+    assert str(plan.target_url).startswith("https://www.bing.com/search?q=")
