@@ -43,7 +43,10 @@ The model proposes a bounded plan. Trusted code validates it and owns browser ex
 ## Current capabilities and limits
 
 Implemented baseline:
-- natural-language task submission, clarification and active-task follow-up instructions;\n- iterative multi-source research across up to 30 bounded browser rounds;\n- task-scoped scratchpad notes that seed subsequent rounds without replaying full chat history;\n- progressive round-completion updates, partial reports and operator cancellation;
+- natural-language task submission, clarification and active-task follow-up instructions;
+- iterative multi-source research across up to 30 bounded browser rounds;
+- task-scoped scratchpad notes that seed subsequent rounds without replaying full chat history;
+- progressive round-completion updates, partial reports and operator cancellation;
 - remote Ollama structured planning;
 - task-isolated Playwright browser contexts;
 - application-level public URL validation and request interception;
@@ -58,7 +61,8 @@ Partial or not yet implemented:
 - link selection is heuristic and same-origin only;
 - product name/price parsing is a specialised extraction adapter;
 - findings do not yet have complete formal evidence-reference validation;
-- synthesis uses captured page titles, headings and visible-text excerpts; deeper claim extraction, authority assessment and conflict reconciliation remain future work;\n- scratchpad/evidence records persist to the evidence volume, but task state is still in memory and cannot automatically resume after service restart;
+- synthesis uses captured page titles, headings and visible-text excerpts; deeper claim extraction, authority assessment and conflict reconciliation remain future work;
+- scratchpad/evidence records persist to the evidence volume, but task state is still in memory and cannot automatically resume after service restart;
 - task state is in memory and is lost on service restart;
 - automatic Ginger memory writes are intentionally not implemented;
 - arbitrary interactions, form submission, purchases, downloads and transactions are not supported;
