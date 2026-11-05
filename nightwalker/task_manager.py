@@ -80,11 +80,24 @@ class TaskManager:
             self._log(task_id, "Decider analysing objective and identifying the likely site")
             plan = await self.orchestrator.ollama.decide_task(objective)
             record["plan"] = plan.model_dump(mode="json")
+            record["round"] = 1
+            self._note(task_id, {
+                "round": 1,
+                "assignment": "Resolve objective into a bounded execution plan",
+                "status": plan.status.value,
+                "findings": [plan.summary],
+                "seed_for_next_round": [step.objective for step in plan.steps],
+                "target_url": str(plan.target_url) if plan.target_url else None,
+            })
             record["site_name"] = plan.site_name
             record["target_url"] = str(plan.target_url) if plan.target_url else None
             if plan.status != DecisionStatus.READY:
                 record["status"] = plan.status.value
                 self._log(task_id, plan.clarification_question or plan.summary, "warning")
+                record["progress_events"].append({
+                    "at": self._now(), "event_type": "clarification",
+                    "status": record["status"], "message": plan.clarification_question or plan.summary,
+                })
                 return
 
             self._log(
@@ -103,7 +116,20 @@ class TaskManager:
                     f"Step {index}/{len(plan.steps)}: {step.capability.value} — {step.objective}",
                 )
 
+            self._log(task_id, "Execution plan resolved; beginning browser research")
             result = await self.orchestrator.run_browser_workflow(task_id, objective, plan)
+            record["round"] = 2
+            self._note(task_id, {
+                "round": 2,
+                "assignment": "Execute browser workflow and capture evidence",
+                "status": result.get("status", "failed"),
+                "actions": result.get("visited_urls", []),
+                "findings": result.get("findings", []),
+                "evidence_ids": [result["evidence_id"]] if result.get("evidence_id") else [],
+                "sources": result.get("sources", []),
+                "remaining_work": result.get("limitations", result.get("issues", [])),
+                "seed_for_next_round": [],
+            })
             record["step_results"] = [result]
             record["current_step"] = None
             record["result"] = result
@@ -176,6 +202,11 @@ class TaskManager:
             f"{original_objective}\\n\\nOperator clarification: {answer.strip()}"
         )
         record["clarification"] = answer.strip()
+        self._note(task_id, {
+            "round": record.get("round", 0), "assignment": "Incorporate operator clarification",
+            "status": "resolved", "operator_input": answer.strip(),
+            "seed_for_next_round": [original_objective, answer.strip()],
+        })
         record["status"] = "queued"
         record["plan"] = None
         record["error"] = None
@@ -188,6 +219,9 @@ class TaskManager:
     async def stop(self, task_id: str) -> dict[str, Any] | None:
         if task_id not in self.tasks:
             return None
+        record = self.tasks[task_id]
+        if record.get("status") in {"completed", "failed", "blocked", "stopped", "planned"}:
+            return self.snapshot(task_id)
         task = self.running.get(task_id)
         if task and not task.done():
             task.cancel()
@@ -195,4 +229,17 @@ class TaskManager:
                 await task
             except asyncio.CancelledError:
                 pass
+        else:
+            record["status"] = "stopped"
+            record["current_step"] = None
+            self._log(task_id, "Task cancelled before execution or while awaiting clarification", "warning")
+            record["progress_events"].append({
+                "at": self._now(), "event_type": "cancelled", "status": "stopped",
+                "message": "Task cancelled by operator",
+            })
+            self._note(task_id, {
+                "round": record.get("round", 0), "assignment": "Cancellation",
+                "status": "stopped", "remaining_work": ["Task cancelled before completion"],
+                "seed_for_next_round": [],
+            })
         return self.snapshot(task_id)
