@@ -189,8 +189,16 @@ function ResearchReport({ result }: { result: BrowserResult }) {
       {sources.length > 0 && <div className="research-section">
         <h3>Sources</h3>
         {sources.map((source, index) => <a className="source-link" href={source.url} target="_blank" rel="noreferrer" key={source.url + index}>
-          <ExternalLink size={14} />{source.title || new URL(source.url).hostname}<span>{new URL(source.url).hostname}</span>
+          <ExternalLink size={14} />{source.title || new URL(source.url).hostname}<span>{source.retrieved_at ? new Date(source.retrieved_at).toLocaleString() : new URL(source.url).hostname}</span>
         </a>)}
+      </div>}
+      {result.evidence && result.evidence.length > 0 && <div className="research-section">
+        <h3>Captured evidence</h3>
+        {result.evidence.map((item, index) => <details className="raw-data" key={item.evidence_id || index}>
+          <summary>{item.evidence_id || "Browser capture"} · {item.source_url || "Source"}</summary>
+          {item.visited_urls && <p>{item.visited_urls.join(" → ")}</p>}
+          <pre>{item.captured_text || "No text capture available."}</pre>
+        </details>)}
       </div>}
       {limitations.length > 0 && <div className="research-section research-section--limitations">
         <h3>Limitations</h3><ul>{limitations.map((item, index) => <li key={index}>{item}</li>)}</ul>
