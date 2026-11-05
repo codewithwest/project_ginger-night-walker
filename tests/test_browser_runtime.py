@@ -81,3 +81,31 @@ async def test_run_plan_uses_task_context_and_persists_evidence(tmp_path, monkey
     assert result["evidence_id"].startswith("ev-")
     assert context.closed
     assert (tmp_path / f"{result['evidence_id']}.json").exists()
+
+
+
+def test_extract_products_from_visible_text_returns_names_and_prices_in_order():
+    text = """
+    Shop Now
+    New Arrivals
+    Press to skip carousel
+    Moyo Dining Table | Rectangular
+    R 31,995.00
+    Baza Console | Iconic Black
+    R 45,995.00
+    Moyo Coffee & Side Table
+    The price depends on the options chosen on the product page
+    From
+    R 6,995.00
+    """
+
+    products = BrowserRuntime._extract_products_from_text(text)
+
+    assert products[:2] == [
+        {"name": "Moyo Dining Table | Rectangular", "price": "R 31,995.00"},
+        {"name": "Baza Console | Iconic Black", "price": "R 45,995.00"},
+    ]
+    assert products[2] == {
+        "name": "Moyo Coffee & Side Table",
+        "price": "R 6,995.00",
+    }
