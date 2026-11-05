@@ -30,20 +30,33 @@ class TaskManager:
         return {**record, "logs": list(record["logs"])} if record else None
 
     def list_tasks(self) -> list[dict[str, Any]]:
-        return [self.snapshot(task_id) for task_id in reversed(self.tasks)]
+        return [
+            snapshot for task_id in reversed(self.tasks)
+            if (snapshot := self.snapshot(task_id)) is not None
+        ]
 
     def submit_natural_language(self, task_id: str, objective: str) -> dict[str, Any]:
         if task_id in self.tasks:
             raise ValueError("task_id already exists")
         now = self._now()
         self.tasks[task_id] = {
-            "task_id": task_id, "capability": "auto", "objective": objective,
-            "status": "queued", "created_at": now, "updated_at": now,
-            "result": None, "error": None, "plan": None, "current_step": None,
-            "step_results": [], "logs": [],
+            "task_id": task_id,
+            "capability": "auto",
+            "objective": objective,
+            "status": "queued",
+            "created_at": now,
+            "updated_at": now,
+            "result": None,
+            "error": None,
+            "plan": None,
+            "current_step": None,
+            "step_results": [],
+            "logs": [],
         }
         self._log(task_id, "Natural-language task accepted; starting Decider")
-        self.running[task_id] = asyncio.create_task(self._execute_decided(task_id, objective))
+        self.running[task_id] = asyncio.create_task(
+            self._execute_decided(task_id, objective)
+        )
         return self.snapshot(task_id) or {}
 
     async def _execute_decided(self, task_id: str, objective: str) -> None:
@@ -59,7 +72,11 @@ class TaskManager:
                 record["status"] = plan.status.value
                 self._log(task_id, plan.clarification_question or plan.summary, "warning")
                 return
-            self._log(task_id, f"Decider selected {len(plan.steps)} ordered agent steps")
+
+            self._log(
+                task_id,
+                f"Decider selected {len(plan.steps)} steps; starting isolated Playwright session",
+            )
             for index, step in enumerate(plan.steps, start=1):
                 record["current_step"] = {
                     "index": index,
@@ -69,31 +86,23 @@ class TaskManager:
                 }
                 self._log(
                     task_id,
-                    f"Step {index}/{len(plan.steps)}: {step.capability.value} agent",
+                    f"Step {index}/{len(plan.steps)}: {step.capability.value} — {step.objective}",
                 )
-                agent_task = AgentTask(
-                    task_id=f"{task_id}-step-{index}",
-                    capability=step.capability,
-                    objective=step.objective,
-                    target_url=plan.target_url,
-                    input_data={"site_name": plan.site_name, "step_index": index},
-                    requirements={"plan_summary": plan.summary},
+
+            result = await self.orchestrator.run_browser_workflow(task_id, objective, plan)
+            record["step_results"] = [result]
+            record["current_step"] = None
+            record["result"] = result
+            record["status"] = result.get("status", "failed")
+            if result.get("evidence_id"):
+                self._log(
+                    task_id,
+                    f"Browser run saved evidence {result['evidence_id']}",
                 )
-                result = await self.orchestrator.run_agent_task(agent_task)
-                record["step_results"].append(result.model_dump(mode="json"))
-                record["current_step"] = None
-                self._log(task_id, f"Step {index} returned {result.status}")
-                if result.status == "blocked":
-                    record["status"] = "blocked"
-                    self._log(
-                        task_id,
-                        f"Workflow stopped because step {index} was blocked",
-                        "warning",
-                    )
-                    return
-            record["status"] = "planned"
-            record["result"] = {"summary": plan.summary, "steps": record["step_results"]}
-            self._log(task_id, "Agent planning complete; no browser actions were executed")
+            if result.get("issues"):
+                for issue in result["issues"]:
+                    self._log(task_id, issue, "warning")
+            self._log(task_id, f"Playwright workflow finished with status {record['status']}")
         except asyncio.CancelledError:
             record["status"] = "stopped"
             self._log(task_id, "Task stopped by operator", "warning")
@@ -107,6 +116,7 @@ class TaskManager:
             record["error"] = "Unexpected internal error"
             self._log(task_id, f"Unexpected internal error: {type(exc).__name__}", "error")
         finally:
+            record["current_step"] = None
             record["updated_at"] = self._now()
             self.running.pop(task_id, None)
 
@@ -115,8 +125,6 @@ class TaskManager:
         self.tasks[task_id]["status"] = "running"
         self._log(task_id, f"Starting {task.capability.value} agent")
         try:
-            self._log(task_id, "Compiling capability-scoped task context")
-            self._log(task_id, "Sending bounded inference request to remote Ollama")
             result = await self.orchestrator.run_agent_task(task)
             self.tasks[task_id]["result"] = result.model_dump(mode="json")
             self.tasks[task_id]["status"] = result.status
