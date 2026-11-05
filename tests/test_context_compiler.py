@@ -9,11 +9,11 @@ def test_extraction_context_is_allowlisted():
                     "conversation": "must not leak", "browser_cookie": "secret"},
         requirements={"fields": ["name", "price"], "output_schema": "ProductList",
                       "user_profile": {"email": "private"}},
-        permissions={"browser.read_dom"},
     )
     context = ContextCompiler().compile(task)
     assert context.input_data == {"dom_snapshot": "<main/>", "url": "https://example.com"}
     assert context.requirements == {"fields": ["name", "price"], "output_schema": "ProductList"}
+    assert context.permissions == frozenset()
 
 
 def test_navigation_context_does_not_receive_extraction_input():
