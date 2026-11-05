@@ -140,7 +140,9 @@ Website text, metadata, links and embedded instructions are untrusted input. The
 | Operator cancellation | Implemented | DELETE `/tasks/{task_id}` cancels active work and marks queued/clarification-waiting tasks stopped |
 | Generic report envelope | Partial | Aggregated multi-source findings, source/evidence references and synthesis; richer claim validation remains |
 | Product name/price extraction | Specialised partial capability | One task-specific structured-data adapter |
-| Multi-source research | Initial implementation | Up to 30 rounds; starts from a search result or explicit URL and selects only browser-discovered links |\n| Evidence-constrained synthesis | Initial implementation | Summarises captured titles, headings and visible-text excerpts; gaps are reported |\n| Active task follow-ups | Implemented | User instructions are appended to the task context for subsequent rounds |
+| Multi-source research | Initial implementation | Up to 30 rounds; starts from a search result or explicit URL and selects only browser-discovered links |
+| Evidence-constrained synthesis | Initial implementation | Summarises captured titles, headings and visible-text excerpts; gaps are reported |
+| Active task follow-ups | Implemented | User instructions are appended to the task context for subsequent rounds |
 | Research-grade claim/evidence graph | Partial | Each captured finding carries source and evidence IDs; claim-level validation and conflict graph remain planned |
 | Durable task queue and database | Planned | In-memory tasks today |
 | Automatic memory retention | Not implemented by design | Ginger owns this decision |
