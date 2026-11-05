@@ -529,6 +529,13 @@ class TaskManager:
             }
             record["status"] = final_status
             record["current_step"] = None
+            self._save_checkpoint(
+                task_id, initial_plan, sources=sources, findings=findings,
+                evidence=evidence, visited_urls=visited_urls, candidates=candidates,
+                structured_data=structured_data, limitations=limitations,
+                loop_guard=loop_guard, round_count=round_count,
+                next_url="", next_assignment="Final synthesis", research_complete=True,
+            )
             self._note(task_id, {
                 "round": round_count, "assignment": "Final evidence-constrained synthesis",
                 "status": final_status, "findings": [answer[:1200]],
@@ -568,6 +575,7 @@ class TaskManager:
         finally:
             record["current_step"] = None
             record["updated_at"] = self._now()
+            self._persist(task_id)
             self.running.pop(task_id, None)
 
     def add_follow_up(self, task_id: str, message: str) -> dict[str, Any] | None:
