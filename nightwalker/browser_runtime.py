@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import os
-from playwright.async_api import async_playwright, Browser, Page
-from nightwalker.policy import PolicyEngine, DEFAULT_MANIFESTS
+
+from playwright.async_api import Browser, Page, async_playwright
+
+from nightwalker.policy import DEFAULT_MANIFESTS, PolicyEngine
 
 
 class BrowserRuntime:
@@ -29,14 +31,17 @@ class BrowserRuntime:
         manifest = DEFAULT_MANIFESTS["navigation"]
         self.policy.authorize(manifest, "browser.navigate")
         self.policy.validate_url(
-            url, allow_private_networks=os.getenv("ALLOW_PRIVATE_NETWORKS", "false").lower() == "true"
+            url,
+            allow_private_networks=os.getenv("ALLOW_PRIVATE_NETWORKS", "false").lower()
+            == "true",
         )
         if not self._page:
             raise RuntimeError("Browser runtime is not started")
         async with self._lock:
             response = await self._page.goto(
-                url, wait_until="domcontentloaded",
-                timeout=int(os.getenv("NAVIGATION_TIMEOUT_MS", "20000"))
+                url,
+                wait_until="domcontentloaded",
+                timeout=int(os.getenv("NAVIGATION_TIMEOUT_MS", "20000")),
             )
             title = await self._page.title()
             headings = await self._page.locator("h1").all_text_contents()
