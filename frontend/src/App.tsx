@@ -1,10 +1,14 @@
 import {
-  AlertCircle,
+  ArrowDownRight,
   ArrowUpRight,
-  Bot,
-  Database,
+  Check,
+  CircleAlert,
+  Clock3,
+  ExternalLink,
+  FileSearch,
   LoaderCircle,
   Play,
+  Plus,
   RefreshCw,
   Send,
   ShieldCheck,
@@ -20,6 +24,22 @@ type Log = {
   message?: string;
 };
 
+type Product = {
+  name: string;
+  price: string;
+};
+
+type BrowserResult = {
+  status?: string;
+  final_url?: string;
+  title?: string;
+  text?: string;
+  answer?: string | null;
+  products?: Product[];
+  evidence_id?: string;
+  issues?: string[];
+};
+
 type Task = {
   task_id: string;
   objective: string;
@@ -28,22 +48,27 @@ type Task = {
   created_at?: string;
   updated_at?: string;
   site_name?: string;
-  current_step?: string;
+  current_step?: string | null;
   target_url?: string;
   plan?: { clarification_question?: string; [key: string]: unknown };
   step_results?: unknown;
-  result?: unknown;
+  result?: BrowserResult | null;
   error?: string;
   logs?: Log[];
 };
 
-const terminal = (status: string) =>
+const isTerminal = (status: string) =>
   ["planned", "blocked", "completed", "failed", "stopped", "needs_clarification"].includes(
     status,
   );
 
-const stamp = (value?: string) =>
-  value ? new Date(value).toLocaleTimeString() : "—";
+const formatTime = (value?: string) =>
+  value
+    ? new Date(value).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "—";
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -62,19 +87,70 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
-function Pill({ status }: { status: string }) {
-  const tone = ["planned", "completed"].includes(status)
-    ? "good"
-    : ["failed", "blocked"].includes(status)
-      ? "bad"
-      : ["needs_clarification", "stopped"].includes(status)
-        ? "warn"
-        : "";
+function Status({ value }: { value: string }) {
+  const kind = ["completed", "planned"].includes(value)
+    ? "success"
+    : ["failed", "blocked"].includes(value)
+      ? "danger"
+      : ["needs_clarification", "stopped"].includes(value)
+        ? "warning"
+        : "active";
 
   return (
-    <span className={`pill ${tone}`}>
-      {status.replaceAll("_", " ")}
+    <span className={`status status--${kind}`}>
+      <span className="status__dot" />
+      {value.replaceAll("_", " ")}
     </span>
+  );
+}
+
+function ProductResult({ result }: { result: BrowserResult }) {
+  const products = result.products || [];
+
+  return (
+    <section className="answer-panel">
+      <div className="answer-panel__topline">
+        <span className="eyebrow"><Check size={13} /> RESULT FOUND</span>
+        <span className="result-count">
+          {products.length} {products.length === 1 ? "product" : "products"} found
+        </span>
+      </div>
+
+      {result.answer && (
+        <div className="answer-highlight">
+          <span className="answer-highlight__label">FIRST PRODUCT</span>
+          <h2>{result.answer.split(" — ")[0]}</h2>
+          <strong>{result.answer.split(" — ").slice(1).join(" — ")}</strong>
+        </div>
+      )}
+
+      {products.length > 0 && (
+        <div className="product-list">
+          {products.map((product, index) => (
+            <div className="product-row" key={`${product.name}-${index}`}>
+              <span className="product-row__number">
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              <span className="product-row__name">{product.name}</span>
+              <strong className="product-row__price">{product.price}</strong>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {result.final_url && (
+        <a
+          className="source-link"
+          href={result.final_url}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <ExternalLink size={14} />
+          Source page
+          <span>{new URL(result.final_url).hostname}</span>
+        </a>
+      )}
+    </section>
   );
 }
 
@@ -136,9 +212,7 @@ export default function App() {
       setSelectedId(task.task_id);
       await refresh();
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Task submission failed",
-      );
+      setError(cause instanceof Error ? cause.message : "Task submission failed");
     } finally {
       setBusy(false);
     }
@@ -159,9 +233,7 @@ export default function App() {
       setAnswer("");
       await refresh();
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Clarification failed",
-      );
+      setError(cause instanceof Error ? cause.message : "Clarification failed");
     } finally {
       setSending(false);
     }
@@ -183,7 +255,7 @@ export default function App() {
   const running = tasks.filter((task) =>
     ["queued", "running"].includes(task.status),
   ).length;
-  const done = tasks.filter((task) =>
+  const completed = tasks.filter((task) =>
     ["planned", "completed"].includes(task.status),
   ).length;
   const attention = tasks.filter((task) =>
@@ -191,254 +263,287 @@ export default function App() {
   ).length;
 
   return (
-    <>
+    <div className="app-shell">
       <header className="topbar">
-        <div>
-          <div className="brand">
-            GINGER <b>NIGHT WALKER</b>
-          </div>
-          <div className="sub">OPERATOR CONTROL CENTRE</div>
-        </div>
-        <div className="conn">
-          {online ? "● API CONNECTED" : "● API DISCONNECTED"} · LOCAL INSTANCE
+        <a className="wordmark" href="/" aria-label="Ginger Night Walker home">
+          <span className="wordmark__mark">g.</span>
+          <span>
+            <strong>GINGER</strong>
+            <small>NIGHT WALKER</small>
+          </span>
+        </a>
+
+        <div className="topbar__right">
+          <span className={`connection ${online ? "is-online" : ""}`}>
+            <span />
+            {online ? "SYSTEM ONLINE" : "CONNECTING"}
+          </span>
+          <span className="topbar__divider" />
+          <span className="topbar__local">LOCAL INSTANCE</span>
         </div>
       </header>
 
-      <main className="shell">
-        <section className="intro">
+      <main className="workspace">
+        <section className="welcome">
           <div>
-            <div className="eyebrow">
-              <ShieldCheck size={13} style={{ verticalAlign: "middle" }} />{" "}
-              LEAST-PRIVILEGE AGENT RUNTIME
-            </div>
-            <h1>
-              Mission control<span>.</span>
-            </h1>
+            <div className="eyebrow">PERSONAL AUTOMATION, WITH GUARDRAILS</div>
+            <h1>Make it happen.</h1>
             <p>
-              Give Night Walker an objective. It plans the work, requests
-              clarification when needed, and reports evidence.
+              Set an objective. Night Walker plans the steps, works within its
+              permissions, and brings back the result.
             </p>
           </div>
-          <Bot size={48} color="#a5e6a1" />
-        </section>
-
-        <section className="stats">
-          <div className="stat">
-            <small>TOTAL TASKS</small>
-            <strong>{tasks.length}</strong>
-          </div>
-          <div className="stat">
-            <small>RUNNING NOW</small>
-            <strong>{running}</strong>
-          </div>
-          <div className="stat">
-            <small>PLANNED / DONE</small>
-            <strong>{done}</strong>
-          </div>
-          <div className="stat">
-            <small>NEEDS ATTENTION</small>
-            <strong>{attention}</strong>
+          <div className="welcome__aside">
+            <ShieldCheck size={18} />
+            <span>PRIVATE BY DESIGN</span>
           </div>
         </section>
 
-        <div className="layout">
-          <aside className="panel">
-            <div className="heading">
-              <span className="idx">01 / INPUT</span>
-              <h2>New mission</h2>
-            </div>
+        <section className="overview" aria-label="Task overview">
+          <div className="overview__item">
+            <span>ALL MISSIONS</span>
+            <strong>{tasks.length.toString().padStart(2, "0")}</strong>
+          </div>
+          <div className="overview__item">
+            <span>IN PROGRESS</span>
+            <strong>{running.toString().padStart(2, "0")}</strong>
+          </div>
+          <div className="overview__item">
+            <span>COMPLETED</span>
+            <strong>{completed.toString().padStart(2, "0")}</strong>
+          </div>
+          <div className="overview__item">
+            <span>NEEDS ATTENTION</span>
+            <strong>{attention.toString().padStart(2, "0")}</strong>
+          </div>
+        </section>
 
-            <form className="pad" onSubmit={launch}>
-              <label htmlFor="objective">MISSION OBJECTIVE</label>
-              <textarea
-                id="objective"
-                value={objective}
-                onChange={(event) => setObjective(event.target.value)}
-                maxLength={2000}
-                required
-                placeholder="Find the first product and its price on weylandts.co.za…"
-              />
-              <div className="meta">
-                {objective.length}/2000 CHARACTERS
+        <div className="main-grid">
+          <aside className="left-column">
+            <section className="compose-card">
+              <div className="section-kicker"><Plus size={14} /> NEW MISSION</div>
+              <h2>What would you like done?</h2>
+              <p className="card-intro">
+                Describe the outcome. You don’t need to write the steps.
+              </p>
+              <form onSubmit={launch}>
+                <label className="sr-only" htmlFor="objective">
+                  Mission objective
+                </label>
+                <textarea
+                  id="objective"
+                  value={objective}
+                  onChange={(event) => setObjective(event.target.value)}
+                  maxLength={2000}
+                  required
+                  placeholder="e.g. Find the first product and its price on weylandts.co.za"
+                />
+                <div className="compose-card__footer">
+                  <span>{objective.length}/2000</span>
+                  <button
+                    className="launch-button"
+                    disabled={busy || !objective.trim()}
+                  >
+                    {busy ? <LoaderCircle size={16} /> : <Play size={15} />}
+                    {busy ? "Starting…" : "Run mission"}
+                    <ArrowUpRight size={15} />
+                  </button>
+                </div>
+              </form>
+            </section>
+
+            <section className="mission-list">
+              <div className="mission-list__header">
+                <div>
+                  <div className="section-kicker">WORKSPACE</div>
+                  <h2>Your missions</h2>
+                </div>
+                <button
+                  className="icon-button"
+                  onClick={() => void refresh()}
+                  aria-label="Refresh missions"
+                  title="Refresh"
+                >
+                  <RefreshCw size={15} />
+                </button>
               </div>
-              <button
-                className="primary"
-                disabled={busy || !objective.trim()}
-              >
-                {busy ? <LoaderCircle size={15} /> : <Play size={15} />}
-                {busy ? "DECIDER WORKING" : "LAUNCH MISSION"}
-                <ArrowUpRight size={14} />
-              </button>
-            </form>
 
-            <div className="note">
-              <ShieldCheck size={15} style={{ verticalAlign: "middle" }} />{" "}
-              <b>READ-ONLY BROWSER</b>
-              <br />
-              Isolated Playwright session. Navigation and visible-content
-              extraction only; no purchases or form submissions.
-            </div>
-          </aside>
-
-          <section className="panel">
-            <div className="heading monitor-head">
-              <div>
-                <span className="idx">02 / OPERATIONS</span>
-                <h2>Task monitor</h2>
-              </div>
-              <button className="stop" onClick={() => void refresh()}>
-                <RefreshCw size={13} /> REFRESH
-              </button>
-            </div>
-
-            <div className="monitor-body">
-              <nav className="tasks">
-                {tasks.length ? (
-                  tasks.map((task) => (
+              {tasks.length === 0 ? (
+                <div className="empty-list">
+                  <FileSearch size={22} />
+                  <p>Your missions will appear here.</p>
+                </div>
+              ) : (
+                <div className="mission-items">
+                  {tasks.map((task) => (
                     <button
                       key={task.task_id}
                       className={
-                        "task " +
-                        (selectedId === task.task_id ? "active" : "")
+                        "mission-item " +
+                        (selectedId === task.task_id ? "is-selected" : "")
                       }
                       onClick={() => setSelectedId(task.task_id)}
                     >
-                      <div className="meta">
-                        {(task.capability || "AUTO") +
-                          " · " +
-                          stamp(task.created_at)}
-                      </div>
-                      <Pill status={task.status} />
-                      <p>{task.objective}</p>
-                      <div className="muted">{task.task_id}</div>
+                      <span className="mission-item__top">
+                        <Status value={task.status} />
+                        <time>{formatTime(task.created_at)}</time>
+                      </span>
+                      <strong>{task.objective}</strong>
+                      <span className="mission-item__id">
+                        {task.task_id.slice(0, 18)}
+                      </span>
                     </button>
-                  ))
-                ) : (
-                  <div className="detail">No missions yet.</div>
-                )}
-              </nav>
+                  ))}
+                </div>
+              )}
+            </section>
+          </aside>
 
-              <article className="detail">
-                {selected ? (
-                  <>
-                    <button
-                      className="stop"
-                      disabled={terminal(selected.status)}
-                      onClick={() => void stop()}
-                    >
-                      <Square size={11} /> STOP
-                    </button>
-                    <span className="idx">MISSION DETAIL</span>
-                    <h3>{selected.objective}</h3>
-                    <div className="muted">
-                      {selected.task_id} · Updated {stamp(selected.updated_at)}
+          <section className="result-column">
+            {selected ? (
+              <>
+                <div className="result-header">
+                  <div>
+                    <div className="section-kicker">MISSION REPORT</div>
+                    <h2>{selected.objective}</h2>
+                    <div className="result-header__meta">
+                      <span>{selected.site_name || "Website task"}</span>
+                      <span>·</span>
+                      <span>{formatTime(selected.updated_at)}</span>
                     </div>
-                    <Pill status={selected.status} />
-
-                    {selected.status === "needs_clarification" && (
-                      <form className="clarify" onSubmit={clarify}>
-                        <strong>
-                          <AlertCircle
-                            size={15}
-                            style={{ verticalAlign: "middle" }}
-                          />{" "}
-                          OPERATOR INPUT REQUIRED
-                        </strong>
-                        <p>
-                          {selected.plan?.clarification_question ||
-                            "Please clarify the website or detail needed to continue."}
-                        </p>
-                        <label htmlFor="clarification-answer">
-                          YOUR RESPONSE
-                        </label>
-                        <textarea
-                          id="clarification-answer"
-                          value={answer}
-                          onChange={(event) => setAnswer(event.target.value)}
-                          maxLength={2000}
-                          required
-                          placeholder="Type your answer here. Polling will not interrupt your typing."
-                        />
-                        <div className="meta">{answer.length}/2000</div>
-                        <button
-                          className="send"
-                          disabled={sending || !answer.trim()}
-                        >
-                          {sending ? (
-                            <LoaderCircle size={14} />
-                          ) : (
-                            <Send size={14} />
-                          )}
-                          SEND &amp; RESUME
-                        </button>
-                      </form>
+                  </div>
+                  <div className="result-header__actions">
+                    <Status value={selected.status} />
+                    {!isTerminal(selected.status) && (
+                      <button className="stop-button" onClick={() => void stop()}>
+                        <Square size={12} /> Stop
+                      </button>
                     )}
+                  </div>
+                </div>
 
-                    <div className="meta" style={{ marginTop: 16 }}>
-                      <Terminal
-                        size={13}
-                        style={{ verticalAlign: "middle" }}
-                      />{" "}
-                      EXECUTION LOG · LIVE POLLING
+                {selected.status === "needs_clarification" && (
+                  <form className="clarification" onSubmit={clarify}>
+                    <div className="section-kicker">
+                      <CircleAlert size={14} /> A QUICK QUESTION
                     </div>
-                    <div className="logs">
-                      {(selected.logs || []).map((log, index) => (
-                        <div
-                          className="log"
-                          key={(log.at || "") + index}
-                        >
-                          <time>{stamp(log.at)}</time>
-                          <b>{log.level || "info"}</b> · {log.message}
-                        </div>
-                      ))}
-                    </div>
+                    <p>
+                      {selected.plan?.clarification_question ||
+                        "Please clarify the website or detail needed to continue."}
+                    </p>
+                    <label htmlFor="clarification-answer">Your response</label>
+                    <textarea
+                      id="clarification-answer"
+                      value={answer}
+                      onChange={(event) => setAnswer(event.target.value)}
+                      maxLength={2000}
+                      required
+                      placeholder="Type your answer…"
+                    />
+                    <button className="launch-button" disabled={sending || !answer.trim()}>
+                      {sending ? <LoaderCircle size={15} /> : <Send size={15} />}
+                      Send answer
+                    </button>
+                  </form>
+                )}
 
-                    <details className="evidence">
-                      <summary>
-                        <Database
-                          size={13}
-                          style={{ verticalAlign: "middle" }}
-                        />{" "}
-                        PLAN / BROWSER OUTPUT / EVIDENCE
-                      </summary>
-                      <pre>
-                        {JSON.stringify(
-                          {
-                            current_step: selected.current_step,
-                            site_name: selected.site_name,
-                            target_url: selected.target_url,
-                            plan: selected.plan,
-                            step_results: selected.step_results,
-                            result: selected.result,
-                            error: selected.error,
-                          },
-                          null,
-                          2,
-                        )}
-                      </pre>
+                {selected.status === "completed" && selected.result && (
+                  selected.result.products?.length ? (
+                    <ProductResult result={selected.result} />
+                  ) : selected.result.answer ? (
+                    <section className="answer-panel">
+                      <div className="eyebrow"><Check size={13} /> RESULT</div>
+                      <h2>{selected.result.answer}</h2>
+                      {selected.result.final_url && (
+                        <a className="source-link" href={selected.result.final_url} target="_blank" rel="noreferrer">
+                          <ExternalLink size={14} /> Open source page
+                        </a>
+                      )}
+                    </section>
+                  ) : (
+                    <section className="answer-panel answer-panel--plain">
+                      <div className="eyebrow"><Check size={13} /> TASK COMPLETED</div>
+                      <h2>Page content captured.</h2>
+                      <p>The browser finished successfully. Open the evidence details below to inspect the captured page.</p>
+                    </section>
+                  )
+                )}
+
+                {selected.status === "running" || selected.status === "queued" ? (
+                  <section className="working-panel">
+                    <div className="working-panel__icon"><LoaderCircle size={20} /></div>
+                    <div>
+                      <strong>Working on it</strong>
+                      <p>Night Walker is carrying out the mission. The report will appear here.</p>
+                    </div>
+                  </section>
+                ) : null}
+
+                {selected.error && (
+                  <div className="error-banner">
+                    <CircleAlert size={16} />
+                    <span>{selected.error}</span>
+                  </div>
+                )}
+
+                <details className="report-details">
+                  <summary>
+                    <span><Terminal size={15} /> Execution details &amp; evidence</span>
+                    <ArrowDownRight size={15} />
+                  </summary>
+                  <div className="report-details__body">
+                    <div className="detail-meta">
+                      <span>Target</span>
+                      {selected.target_url ? (
+                        <a href={selected.target_url} target="_blank" rel="noreferrer">
+                          {selected.target_url} <ExternalLink size={12} />
+                        </a>
+                      ) : <span>Not specified</span>}
+                    </div>
+                    {selected.result?.evidence_id && (
+                      <div className="detail-meta">
+                        <span>Evidence ID</span>
+                        <code>{selected.result.evidence_id}</code>
+                      </div>
+                    )}
+                    {selected.logs?.length ? (
+                      <div className="log-list">
+                        {selected.logs.map((log, index) => (
+                          <div className="log-entry" key={(log.at || "") + index}>
+                            <time>{formatTime(log.at)}</time>
+                            <span className={`log-entry__level log-entry__level--${log.level || "info"}`}>
+                              {log.level || "info"}
+                            </span>
+                            <p>{log.message}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    <details className="raw-data">
+                      <summary>View raw browser data</summary>
+                      <pre>{JSON.stringify(selected.result || selected.step_results || selected.plan, null, 2)}</pre>
                     </details>
-                  </>
-                ) : (
-                  <div className="detail">
-                    Select a mission to inspect its plan, logs and evidence.
                   </div>
-                )}
+                </details>
+              </>
+            ) : (
+              <div className="report-empty">
+                <div className="report-empty__icon"><FileSearch size={26} /></div>
+                <div className="section-kicker">YOUR RESULTS, IN ONE PLACE</div>
+                <h2>Ready when you are.</h2>
+                <p>Launch a mission and its answer, sources, and execution details will show up here.</p>
+              </div>
+            )}
 
-                {error && (
-                  <div className="error">
-                    <AlertCircle size={13} /> {error}
-                  </div>
-                )}
-              </article>
-            </div>
+            {error && <div className="error-banner"><CircleAlert size={15} />{error}</div>}
           </section>
         </div>
 
         <footer className="footer">
-          GINGER NIGHT WALKER · CONTROL SYSTEM
-          <span>LOCAL-FIRST / POLICY-GOVERNED / EVIDENCE-LED</span>
+          <span>GINGER NIGHT WALKER</span>
+          <span><ShieldCheck size={13} /> READ-ONLY BROWSER · POLICY-GOVERNED · LOCAL-FIRST</span>
         </footer>
       </main>
-    </>
+    </div>
   );
 }
