@@ -59,7 +59,7 @@ def test_clarification_plan_without_question_gets_safe_fallback():
 
     assert validated.status == DecisionStatus.NEEDS_CLARIFICATION
     assert validated.clarification_question
-    assert "exact website URL" in validated.clarification_question
+    assert "essential detail" in validated.clarification_question
 
 
 def test_unknown_capability_is_rejected():
