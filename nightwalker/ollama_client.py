@@ -300,6 +300,7 @@ class OllamaClient:
                 "status": note.get("status"),
                 "findings": (note.get("findings") or [])[:5],
                 "sources": (note.get("sources") or [])[:3],
+                "seed_for_next_round": (note.get("seed_for_next_round") or [])[:5],
             }
             for note in scratchpad[-8:]
         ]
