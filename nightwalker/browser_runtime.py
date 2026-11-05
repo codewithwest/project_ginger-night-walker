@@ -329,6 +329,7 @@ class BrowserRuntime:
                 "text": body_text,
                 "products": products,
                 "visited_urls": visited[:10],
+                "candidate_urls": candidates,
                 "issues": issues,
                 "evidence_id": evidence_id,
             }
