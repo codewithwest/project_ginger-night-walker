@@ -61,6 +61,10 @@ type Task = {
   result?: BrowserResult | null;
   error?: string;
   logs?: Log[];
+  progress_events?: { at?: string; event_type?: string; status?: string; message?: string }[];
+  round?: number;
+  max_rounds?: number;
+  scratchpad?: { round?: number; assignment?: string; status?: string; findings?: unknown[]; evidence_ids?: string[] }[];
 };
 
 const isTerminal = (status: string) =>
