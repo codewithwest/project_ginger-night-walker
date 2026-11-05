@@ -1,5 +1,3 @@
-import asyncio
-
 import pytest
 
 from nightwalker.scratchpad import TaskScratchpad
@@ -169,3 +167,43 @@ async def test_restart_retries_in_flight_source_without_incrementing_round(tmp_p
     assert orchestrator.calls == ["https://example.com/next"]
     assert task["round"] == 3
     assert task["status"] == "blocked"
+
+
+@pytest.mark.asyncio
+async def test_restart_retries_legacy_website_only_clarification(tmp_path):
+    manager = TaskManager(NoExecutionOrchestrator())
+    manager.state_store = TaskStateStore(str(tmp_path))
+    manager.scratchpad = TaskScratchpad(str(tmp_path / "scratch"))
+    manager.state_store.save({
+        "task_id": "old-site-prompt",
+        "objective": "Perform a comprehensive SEO audit of https://example.com",
+        "status": "needs_clarification",
+        "plan": {
+            "status": "needs_clarification",
+            "clarification_question": (
+                "Which website or detail should I use to continue? "
+                "Please provide the exact website URL if the site is ambiguous."
+            ),
+        },
+        "logs": [],
+        "progress_events": [],
+        "scratchpad": [],
+        "follow_up_instructions": [],
+        "step_results": [],
+        "checkpoint": None,
+    })
+    called = {}
+
+    async def fake_execute(task_id, objective, resume=False):
+        called.update(task_id=task_id, objective=objective, resume=resume)
+        manager.tasks[task_id]["status"] = "completed"
+        manager._persist(task_id)
+
+    manager._execute_decided = fake_execute
+
+    assert await manager.restore_and_resume() == 1
+    await manager.running["old-site-prompt"]
+
+    assert called["task_id"] == "old-site-prompt"
+    assert called["resume"] is True
+    assert manager.snapshot("old-site-prompt")["status"] == "completed"
