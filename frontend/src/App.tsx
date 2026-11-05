@@ -1,10 +1,7 @@
 import {
-  Activity,
   AlertCircle,
   ArrowUpRight,
   Bot,
-  CheckCircle2,
-  Clock3,
   Database,
   LoaderCircle,
   Play,
