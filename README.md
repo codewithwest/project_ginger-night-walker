@@ -1,155 +1,112 @@
 # Ginger Night Walker
 
-A local-first, Dockerized Playwright agent runtime built around **least-privilege intelligence**. Ginger OS hosts the orchestrator, context compiler, policy engine and browser runtime. Language-model inference is sent to a separately hosted **remote Ollama server**.
+Ginger Night Walker is Ginger OS's local-first, policy-governed capability for **general-purpose web browsing, research and evidence capture**. It supports discovery, investigation, comparisons, structured extraction and evidence-backed synthesis. Product lookup is one use case, not the product definition.
 
-## Architecture
+The core trust boundary is deliberate:
 
-- **Orchestrator** — owns the user objective and task lifecycle.
-- **Context compiler** — creates capability-specific, minimized task packets.
-- **Policy engine** — denies operations not explicitly granted by the task's agent manifest.
-- **Agent contracts** — validate inputs and outputs at every handoff.
-- **Remote Ollama client** — sends bounded prompts to the configured remote Ollama endpoint.
-- **Model registry** — selects server-configured models by capability; clients cannot choose arbitrary models.
-- **Browser runtime** — owns the Playwright browser and serializes browser mutations.
+- **Browsing** records what a browser actually visited and observed.
+- **Research** evaluates evidence, connects findings to sources and communicates uncertainty.
+- **Memory** decides what Ginger should retain, trust and reuse.
 
-Agents do not inherit conversations or other agents' histories. Page content is untrusted data, never policy or system instructions. The model can propose plans; it cannot directly execute browser actions or grant permissions.
+A page visit is not proof that a page's claims are true. A research report is not automatically permanent memory.
 
-## Package management with uv
+## Documentation
 
-**uv is the only package manager used for Python dependency installation.** Do not use pip.
+Start with the [documentation index](docs/README.md).
 
-Install uv using the official Astral installer or your OS package manager, then run:
+| Document | Contents |
+|---|---|
+| [Architecture](docs/architecture.md) | Responsibilities, component boundaries, lifecycle and Mermaid diagrams |
+| [Research report standard](docs/research-report-standard.md) | Canonical report contract, finding quality, evidence provenance and validation |
+| [Security and trust](docs/security-and-trust.md) | Threat model, security boundaries and deployment requirements |
+| [Development and operations](docs/development-and-operations.md) | Setup, configuration, API, CI, testing and troubleshooting |
+| [ADR 0001](docs/decisions/0001-separate-browsing-research-and-memory.md) | Separation of browsing, research and memory |
+
+## Architecture at a glance
+
+```mermaid
+flowchart LR
+    G[Ginger OS / User] --> API[Task API]
+    API --> O[Orchestrator + Task Manager]
+    O --> D[Decider / Remote Ollama]
+    D --> P[Policy Engine]
+    P --> B[Playwright Browser Runtime]
+    B --> W[Public websites]
+    B --> E[Evidence Store]
+    E --> R[Structured research report]
+    R --> UI[Control Centre]
+    R -. suggested knowledge only .-> M[Ginger memory policy]
+```
+
+The model proposes a bounded plan. Trusted code validates it and owns browser execution. Website content is untrusted input and cannot grant permissions or override policy.
+
+## Current capabilities and limits
+
+Implemented baseline:
+- natural-language task submission and clarification;
+- remote Ollama structured planning;
+- task-isolated Playwright browser contexts;
+- application-level public URL validation and request interception;
+- same-origin anchor navigation;
+- bounded page title, heading and visible-text capture;
+- task-scoped JSON evidence records;
+- a generic report envelope with answer, findings, sources, evidence, structured data, limitations and suggested memory;
+- React + TypeScript operator UI.
+
+Partial or not yet implemented:
+- current research execution is primarily a single-site, single-final-page workflow;
+- link selection is heuristic and same-origin only;
+- product name/price parsing is a specialised extraction adapter;
+- findings do not yet have complete formal evidence-reference validation;
+- multi-source research, source reconciliation and synthesis are planned;
+- task state is in memory and is lost on service restart;
+- automatic Ginger memory writes are intentionally not implemented;
+- arbitrary interactions, form submission, purchases, downloads and transactions are not supported;
+- the service is not hardened or authenticated for hostile multi-user workloads.
+
+See the architecture and security documents for the full implementation-status matrix and required hardening.
+
+## Quick start
+
+Python dependency management uses **uv**; do not use pip.
 
 ```bash
-uv lock
+cp .env.example .env
+# Configure the remote Ollama endpoint and model in .env.
+docker compose up --build -d
+docker compose ps
+curl -fsS http://localhost:8000/health
+curl -fsS http://localhost:8000/health/ollama
+```
+
+The UI is served at [http://localhost:8000/](http://localhost:8000/). The Docker Compose port binds to localhost by default. Keep it private: authentication and multi-user authorization are not implemented.
+
+For local development and operational details, see [Development and operations](docs/development-and-operations.md).
+
+## Core standards
+
+- Models propose; trusted code validates and executes.
+- Permissions are server-side and default-deny.
+- Agents receive minimized, capability-scoped context rather than inherited conversation histories.
+- Evidence identifiers are generated by the trusted evidence store.
+- Findings must distinguish observations, source-reported claims, derivations and inferences.
+- Source URL, title and retrieval time should be preserved.
+- Missing information, access failures, ambiguity and uncertainty must be visible.
+- Structured data is task-specific; the report envelope is generic.
+- Suggested memory is only a candidate for Ginger's memory policy.
+- Browser actions remain read-only unless a separately reviewed capability is introduced.
+
+## Quality gates
+
+CI currently runs Ruff, pytest and a Vite production build. Use the commands below locally:
+
+```bash
 uv sync --group dev
-```
-
-Commit the generated `uv.lock` file so local development and Docker builds use the same resolved dependency versions.
-
-Run checks and the API with uv:
-
-```bash
-uv run pytest
 uv run ruff check .
-uv run uvicorn nightwalker.api:app --reload
-```
-
-For local browser setup, use the Playwright browser image (recommended) or install the browser with:
-
-```bash
-uv run playwright install chromium
-```
-
-## Operator control centre
-
-The operator UI is a **Vite + React + TypeScript + Tailwind CSS** application in `frontend/`. Docker builds the frontend in a Node build stage and copies the compiled assets into the Python image; FastAPI serves the built application at `http://localhost:8000/`. During local frontend development, run the API on port 8000 and use:
-
-```bash
+uv run pytest
 cd frontend
 npm install
-npm run dev
+npm run build
 ```
 
-Vite proxies `/health` and `/tasks` to the FastAPI service. The clarification composer is controlled React state, so task polling updates do not replace the textarea or steal focus. The UI provides mission submission, task selection, live status/log polling, clarification, stop control, and plan/evidence inspection.
-
-The Docker Compose port is bound to `127.0.0.1` by default. Keep it private; authentication and multi-user authorization are not implemented.
-
-## Remote Ollama setup
-
-Ollama runs on a separate server. **Do not add an Ollama container to this Compose project and do not install models on Ginger OS.**
-
-1. Configure the remote Ollama host to accept requests from the Ginger OS network.
-2. Put a reverse proxy or private network gateway in front of Ollama. Prefer HTTPS, authentication, and source-IP restrictions. Do not expose an unauthenticated Ollama port to the public internet.
-3. Pull the chosen models on the remote server, for example:
-
-   ```bash
-   ollama pull qwen2.5:7b
-   ```
-
-4. On Ginger OS, copy the environment template and configure the endpoint and model:
-
-   ```bash
-   cp .env.example .env
-   ```
-
-   Set `OLLAMA_BASE_URL` to the reachable remote URL (including any reverse-proxy path prefix), and set `OLLAMA_API_KEY` if the gateway requires a bearer token. Keep the key only in the untracked `.env` file.
-
-5. Start Ginger Night Walker:
-
-   ```bash
-   docker compose up --build -d
-   docker compose ps
-   curl http://localhost:8000/health
-   curl http://localhost:8000/health/ollama
-   ```
-
-The Docker build copies the pinned uv executable from the Astral uv image and runs `uv sync`; it does not invoke pip. The Docker build includes `uv.lock` automatically when it exists. Until the first lockfile is committed, a fresh checkout can still build by resolving from `pyproject.toml`; commit `uv.lock` after generating it with `uv lock` to make builds reproducible.
-
-The Ollama client uses the Ollama `/api/chat` endpoint with a JSON Schema response format. The model must be available on the remote host before use.
-
-### Model routing
-
-Set a default model and optionally override each capability:
-
-- `OLLAMA_MODEL_DECIDER` (optional Decider override)
-- `OLLAMA_MODEL_DEFAULT`
-- `OLLAMA_MODEL_NAVIGATE`
-- `OLLAMA_MODEL_INTERACT`
-- `OLLAMA_MODEL_EXTRACT`
-- `OLLAMA_MODEL_RECOVER`
-
-If a capability-specific variable is blank, the default model is used. Model names are configuration on the Ginger server, not supplied by the task caller.
-
-## Natural-language task API
-
-Submit one plain-language objective to `POST /tasks`:
-
-```json
-{
-  "objective": "Find Acme's latest product catalogue, extract product names and prices, and summarise them."
-}
-```
-
-The Decider uses the configured `OLLAMA_MODEL_DECIDER` (or the default model) to identify a likely site, choose an ordered sequence of the four capabilities, and return a structured plan. If the site is unclear, the task enters `needs_clarification` with a question. The task monitor exposes the plan, browser output, evidence ID, logs, and Stop control. The legacy `/tasks/agent` endpoint remains available for direct capability-specific proposals.
-
-**Site discovery limitation:** site identification currently relies on the Decider model's knowledge and the task wording; it is not backed by live search. It may ask for clarification rather than guess. A model-suggested URL is a candidate, not verified evidence.
-
-**Execution scope:** a ready Decider plan is executed by a task-isolated Playwright context. The runtime can navigate to the inferred public site, follow relevant same-origin links selected from the plan, recover with a bounded reload, and extract visible text, headings and title. Evidence is written as a JSON record under `EVIDENCE_DIR` (default `./evidence`) and returned by ID. It is deliberately read-only: it does not fill forms, submit forms, click purchase/submit buttons, download files, or perform transactions. Interaction is currently limited to same-origin anchor navigation. Tasks with an uncertain destination should enter `needs_clarification`.
-
-## Agent inference API
-
-Submit a task to `POST /tasks/agent`:
-
-```json
-{
-  "task_id": "demo-extract-001",
-  "capability": "extract",
-  "objective": "Extract the product names from the supplied page evidence",
-  "input_data": {
-    "dom_snapshot": "<main><h1>Products</h1></main>",
-    "url": "https://example.com"
-  },
-  "requirements": {
-    "fields": ["name"],
-    "output_schema": "A JSON object containing a products array"
-  }
-}
-```
-
-The current inference endpoint returns a validated **proposal** with status `planned` or `blocked`. It does not execute browser actions. The browser extraction endpoint remains a separate deterministic operation. The task contract deliberately has no caller-controlled permissions field; a trusted permission broker must issue grants before any future action executor is enabled.
-
-## Security model and limitations
-
-- Default deny: an absent permission is denied by the policy engine.
-- Context is allowlisted per capability; no conversation history is passed to agents.
-- No direct agent-to-agent calls.
-- Model selection and credentials are server-side configuration.
-- The model receives no Ollama API key.
-- Model-generated evidence references are rejected.
-- Model output must match the Pydantic task result schema and the submitted task identity.
-- Ollama inference has a configurable timeout and output-token limit.
-
-The current `/tasks/agent` endpoint is a development integration, **not a public multi-user API**. Keep the service bound to localhost or a trusted private network until authentication, per-caller authorization, quotas, and audit logging are implemented. A remote Ollama URL is trusted operator configuration; use a controlled HTTPS endpoint, not a user-provided URL.
-
-The browser container is for local development and testing. Playwright's standard Docker image is not intended for visiting untrusted websites. This is an initial development baseline, not a hardened hostile-tenant browser service. Before exposing it to untrusted users, add per-task OS/container isolation, network egress controls, secret management, authenticated API access, quotas, and a stronger browser sandbox.
+Documentation is part of the engineering contract: update diagrams, schemas, security notes, API tables and implementation status whenever behavior or boundaries change.
