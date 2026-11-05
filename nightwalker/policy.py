@@ -3,6 +3,7 @@ from __future__ import annotations
 import ipaddress
 import socket
 from dataclasses import dataclass
+from typing import ClassVar
 from urllib.parse import urlparse
 
 
@@ -32,7 +33,7 @@ DEFAULT_MANIFESTS = {
 
 
 class PolicyEngine:
-    BLOCKED_HOSTS = {
+    BLOCKED_HOSTS: ClassVar[set[str]] = {
         "localhost", "localhost.localdomain", "metadata.google.internal",
         "metadata", "instance-data",
     }
