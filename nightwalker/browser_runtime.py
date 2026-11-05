@@ -257,6 +257,19 @@ class BrowserRuntime:
                 }
                 for heading in headings
             )
+            excerpt_lines = [
+                re.sub(r"\\s+", " ", line).strip()
+                for line in body_text.splitlines()
+                if len(line.strip()) >= 35
+            ][:8]
+            findings.extend(
+                {
+                    "claim": "Visible page text: " + line[:400],
+                    "type": "visible_text_excerpt",
+                    "confidence": "observed",
+                }
+                for line in excerpt_lines
+            )
             sources = [{
                 "source_id": "s-001",
                 "url": page.url,
