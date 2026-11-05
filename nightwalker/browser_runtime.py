@@ -139,7 +139,7 @@ class BrowserRuntime:
                     )
                     visited.append(page.url)
                 elif capability == "extract":
-                    break
+                    continue
 
             title = (await page.title())[:500]
             headings = [
