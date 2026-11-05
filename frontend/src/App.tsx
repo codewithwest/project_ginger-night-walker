@@ -478,7 +478,10 @@ export default function App() {
                     <div className="working-panel__icon"><LoaderCircle size={20} /></div>
                     <div>
                       <strong>Working on it</strong>
-                      <p>Night Walker is carrying out the mission. The report will appear here.</p>
+                      <p>Execution phase {selected.round || 0} · budget up to {selected.max_rounds || 30} rounds. Progress is saved as work resolves.</p>
+                      {selected.logs?.slice(-3).map((log, index) => (
+                        <p key={(log.at || "") + index}>{log.message}</p>
+                      ))}
                     </div>
                   </section>
                 ) : null}
