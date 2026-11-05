@@ -30,6 +30,10 @@ class TaskClarificationRequest(BaseModel):
     answer: str = Field(min_length=1, max_length=2000)
 
 
+class TaskFollowUpRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=2000)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await browser.start()
@@ -100,6 +104,19 @@ async def clarify_task(task_id: str, request: TaskClarificationRequest):
         raise HTTPException(status_code=404, detail="Task not found")
     return task
 
+
+
+@app.post("/tasks/{task_id}/follow-up")
+async def follow_up_task(task_id: str, request: TaskFollowUpRequest):
+    if not request.message.strip():
+        raise HTTPException(status_code=422, detail="A follow-up instruction is required")
+    try:
+        task = task_manager.add_follow_up(task_id, request.message.strip())
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
 
 @app.delete("/tasks/{task_id}")
 async def stop_task(task_id: str):
