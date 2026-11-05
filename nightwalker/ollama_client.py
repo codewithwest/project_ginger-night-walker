@@ -107,11 +107,7 @@ class OllamaClient:
         import re
 
         match = re.search(
-            r"(?i)(?:https?://)?(?:www\\.)?"
-            r"([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
-            r"(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+)"
-            r"(?::\\d{1,5})?(?:/[a-z0-9._~:/?#\\[\\]@!    async def decide_task(self, objective: str) -> DecisionPlan:
-'()*+,;=%-]*)?",
+            r"(?i)\b(?:https?://)?(?:www\.)?([a-z0-9-]+(?:\.[a-z0-9-]+)+)(?::\d{1,5})?\b",
             objective,
         )
         if not match:
