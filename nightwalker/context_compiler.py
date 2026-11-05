@@ -40,5 +40,6 @@ class ContextCompiler:
             objective=task.objective,
             input_data={k: v for k, v in task.input_data.items() if k in allowed_inputs},
             requirements={k: v for k, v in task.requirements.items() if k in allowed_requirements},
-            permissions=frozenset(task.permissions),
+            # Permissions are deliberately absent until a trusted broker issues task-scoped grants.
+            permissions=frozenset(),
         )
