@@ -177,11 +177,16 @@ class OllamaClient:
                 if plan.status.value == "ready" and not plan.target_url:
                     explicit_url = self._explicit_target_url(objective)
                     if explicit_url:
-                        plan.target_url = explicit_url
-                        if not plan.site_name:
-                            from urllib.parse import urlsplit
+                        from urllib.parse import urlsplit
 
-                            plan.site_name = urlsplit(explicit_url).hostname
+                        plan = DecisionPlan.model_validate(
+                            {
+                                **plan.model_dump(mode="python"),
+                                "target_url": explicit_url,
+                                "site_name": plan.site_name
+                                or urlsplit(explicit_url).hostname,
+                            }
+                        )
                     else:
                         return self._make_clarification(
                             plan,
