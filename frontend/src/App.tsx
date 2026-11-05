@@ -105,8 +105,8 @@ function Status({ value }: { value: string }) {
 
 function extractProducts(text: string): Product[] {
   const lines = text
-    .split("\\n")
-    .map((line) => line.replace(/\\s+/g, " ").trim())
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
     .filter(Boolean);
   const ignored = new Set([
     "from",
@@ -120,7 +120,7 @@ function extractProducts(text: string): Product[] {
   const products: Product[] = [];
 
   lines.forEach((line, index) => {
-    const match = line.match(/R\\s*\\d[\\d,]*(?:\\.\\d{2})?/i);
+    const match = line.match(/R\s*\d[\d,]*(?:\.\d{2})?/i);
     if (!match) return;
 
     let name = line.slice(0, match.index).trim().replace(/[| -]+$/, "");
