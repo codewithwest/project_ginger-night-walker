@@ -10,6 +10,7 @@ from nightwalker.ollama_client import OllamaUnavailable
 from nightwalker.orchestrator import Orchestrator
 from nightwalker.scratchpad import TaskScratchpad
 from nightwalker.goal_state import GoalStateManager
+from nightwalker.research_guard import ResearchLoopGuard
 
 
 class TaskManager:
@@ -84,6 +85,7 @@ class TaskManager:
         evidence: list[dict[str, Any]] = []
         visited_urls: list[str] = []
         candidates: list[dict[str, str]] = []
+        loop_guard = ResearchLoopGuard(max_attempts_per_url=2)
         structured_data: dict[str, list[Any]] = {}
         limitations: list[str] = []
         try:
@@ -137,10 +139,29 @@ class TaskManager:
                     task_id,
                     f"Round {round_count}/{self.max_rounds}: {next_assignment}",
                 )
-                if next_url in visited_urls:
-                    limitations.append(f"Skipped duplicate source URL: {next_url}")
-                    next_url = ""
-                    break
+                attempt = loop_guard.begin(next_url, next_assignment)
+                if attempt["should_skip"]:
+                    reason = (
+                        f"Repeated source/action detected; skipped after "
+                        f"{attempt['attempt'] - 1} attempts: {next_url}"
+                    )
+                    limitations.append(reason)
+                    self._log(task_id, reason, "warning")
+                    self._note(task_id, {
+                        "round": round_count, "assignment": next_assignment,
+                        "status": "skipped_repeated_action",
+                        "sources": [{"url": next_url}],
+                        "remaining_work": [reason],
+                        "loop_guard": loop_guard.snapshot(),
+                        "seed_for_next_round": ["Choose a different undiscovered source"],
+                    })
+                    available = loop_guard.filter_candidates(candidates, visited_urls)
+                    if not available:
+                        next_url = ""
+                        break
+                    next_url = available[0]["url"]
+                    next_assignment = "Recovery: inspect a different source after repeat detection"
+                    continue
 
                 one_page_plan = initial_plan.model_copy(update={
                     "target_url": next_url,
@@ -157,17 +178,21 @@ class TaskManager:
                 if result.get("status") not in {"completed", "blocked"}:
                     issue_text = "; ".join(result.get("issues", [])) or "Source inspection failed"
                     limitations.append(f"{next_url}: {issue_text}")
+                    loop_guard.record_outcome(next_url, next_assignment, result.get("status", "failed"), issue_text)
                     self._note(task_id, {
                         "round": round_count, "assignment": next_assignment,
                         "status": result.get("status", "failed"),
                         "sources": [{"url": next_url}],
                         "remaining_work": [issue_text],
-                        "seed_for_next_round": ["Continue with another discovered source"],
+                        "loop_guard": loop_guard.snapshot(),
+                        "seed_for_next_round": ["Retry once if useful, otherwise choose a different discovered source"],
                     })
                     candidates.extend(result.get("candidate_urls", []))
+                    candidates = loop_guard.filter_candidates(candidates, visited_urls)
                     next_url = ""
                 else:
                     final_url = result.get("final_url") or next_url
+                    loop_guard.record_outcome(next_url, next_assignment, "completed")
                     visited_urls.append(final_url)
                     if next_url not in visited_urls:
                         visited_urls.append(next_url)
@@ -214,12 +239,7 @@ class TaskManager:
                             structured_data.setdefault(key, []).append(value)
                     candidates.extend(result.get("candidate_urls", []))
                     # Deduplicate candidates while preserving browser discovery order.
-                    deduped: dict[str, dict[str, str]] = {}
-                    for item in candidates:
-                        url_value = str(item.get("url", "")).split("#", 1)[0]
-                        if url_value and url_value not in visited_urls and url_value not in deduped:
-                            deduped[url_value] = {"url": url_value, "label": str(item.get("label", ""))[:240]}
-                    candidates = list(deduped.values())[:120]
+                    candidates = loop_guard.filter_candidates(candidates, visited_urls)
                     round_findings = [
                         item["claim"][:300] for item in findings[-12:]
                         if source_id in item.get("source_ids", [])
@@ -270,6 +290,7 @@ class TaskManager:
                     "suggested_memory": [], "rounds_completed": round_count,
                     "max_rounds": self.max_rounds, "visited_urls": list(visited_urls),
                     "goal_state": record.get("goal_state"),
+                    "loop_guard": loop_guard.snapshot(),
                 }
 
                 if not candidates or round_count >= self.max_rounds:
@@ -287,10 +308,7 @@ class TaskManager:
                 except (OllamaUnavailable, ValueError, TypeError) as exc:
                     # A model planning failure must not discard successfully captured
                     # evidence. Deterministically continue with a browser-discovered URL.
-                    available = [
-                        item for item in candidates
-                        if item.get("url") and item["url"] not in visited_urls
-                    ]
+                    available = loop_guard.filter_candidates(candidates, visited_urls)
                     if not available:
                         limitations.append(
                             "Research planner failed and no discovered source remained."
@@ -360,6 +378,7 @@ class TaskManager:
                 "suggested_memory": [], "rounds_completed": round_count,
                 "max_rounds": self.max_rounds, "visited_urls": visited_urls,
                 "goal_state": record.get("goal_state"),
+                "loop_guard": loop_guard.snapshot(),
             }
             record["status"] = final_status
             record["current_step"] = None
