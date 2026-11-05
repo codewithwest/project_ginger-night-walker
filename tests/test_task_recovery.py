@@ -14,6 +14,17 @@ class NoExecutionOrchestrator:
         raise AssertionError("A completed checkpoint must not restart browser work")
 
 
+class InFlightOrchestrator:
+    ollama = object()
+
+    def __init__(self):
+        self.calls = []
+
+    async def run_browser_workflow(self, task_id, objective, plan):
+        self.calls.append(str(plan.target_url))
+        return {"status": "failed", "issues": ["simulated interrupted-source retry"], "candidate_urls": []}
+
+
 @pytest.mark.asyncio
 async def test_restart_restores_task_and_resumes_from_completed_checkpoint(tmp_path):
     manager = TaskManager(NoExecutionOrchestrator())
@@ -90,3 +101,71 @@ async def test_restart_does_not_resume_terminal_or_clarification_tasks(tmp_path)
     assert manager.snapshot("done")["status"] == "completed"
     assert manager.snapshot("waiting")["status"] == "needs_clarification"
     assert manager.running == {}
+
+
+@pytest.mark.asyncio
+async def test_restart_retries_in_flight_source_without_incrementing_round(tmp_path):
+    orchestrator = InFlightOrchestrator()
+    manager = TaskManager(orchestrator)
+    manager.state_store = TaskStateStore(str(tmp_path / "tasks"))
+    manager.scratchpad = TaskScratchpad(str(tmp_path / "evidence"))
+    manager.state_store.save({
+        "task_id": "in-flight",
+        "capability": "auto",
+        "objective": "Research an example topic",
+        "status": "running",
+        "created_at": "2026-11-05T10:00:00+00:00",
+        "updated_at": "2026-11-05T10:01:00+00:00",
+        "result": None,
+        "error": None,
+        "plan": None,
+        "current_step": None,
+        "step_results": [],
+        "logs": [],
+        "progress_events": [],
+        "round": 3,
+        "max_rounds": 30,
+        "scratchpad": [],
+        "follow_up_instructions": [],
+        "goal_state": None,
+        "checkpoint": {
+            "version": 1,
+            "initial_plan": {
+                "status": "ready",
+                "summary": "Research the topic",
+                "site_name": "Example",
+                "target_url": "https://example.com/",
+                "clarification_question": None,
+                "steps": [
+                    {"step_id": "open", "capability": "navigate", "objective": "Open source"},
+                    {"step_id": "extract", "capability": "extract", "objective": "Capture evidence"},
+                ],
+            },
+            "sources": [],
+            "findings": [],
+            "evidence": [],
+            "visited_urls": [],
+            "candidates": [],
+            "structured_data": {},
+            "limitations": [],
+            "loop_guard": {
+                "attempts": {"https://example.com/next": 1},
+                "recent_outcomes": [],
+                "repeated_actions": [],
+                "max_attempts_per_url": 2,
+            },
+            "round_count": 3,
+            "next_url": "https://example.com/next",
+            "next_assignment": "Inspect next source",
+            "research_complete": False,
+            "round_in_progress": True,
+        },
+    })
+
+    assert await manager.restore_and_resume() == 1
+    await manager.running["in-flight"]
+
+    task = manager.snapshot("in-flight")
+    assert orchestrator.calls == ["https://example.com/next"]
+    assert task["round"] == 3
+    assert task["status"] == "blocked"
