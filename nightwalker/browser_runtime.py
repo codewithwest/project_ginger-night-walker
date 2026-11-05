@@ -258,7 +258,7 @@ class BrowserRuntime:
                 for heading in headings
             )
             excerpt_lines = [
-                re.sub(r"\\s+", " ", line).strip()
+                re.sub(r"\s+", " ", line).strip()
                 for line in body_text.splitlines()
                 if len(line.strip()) >= 35
             ][:8]
