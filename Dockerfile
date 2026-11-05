@@ -13,11 +13,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:$PATH"
 
 WORKDIR /app
-COPY pyproject.toml README.md ./
+COPY pyproject.toml uv.lock README.md ./
 COPY nightwalker ./nightwalker
 
-# Resolve and install the project and runtime dependencies without pip.
-RUN uv sync --no-dev --no-editable
+# --locked ensures Docker installs the exact committed dependency resolution.
+RUN uv sync --locked --no-dev --no-editable
 
 RUN useradd --create-home --shell /bin/bash appuser
 RUN mkdir -p /app/evidence && chown -R appuser:appuser /app
