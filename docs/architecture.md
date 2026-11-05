@@ -21,7 +21,7 @@
 | Ginger OS / caller | User intent, identity, memory policy and downstream use | Browser implementation details |
 | Task API / Task Manager | Task lifecycle, status, clarification, progress events, cancellation and scratchpad coordination | Permission escalation |
 | Context Compiler | Minimal capability-scoped input packets | Shared conversation-history inheritance |
-| Decider | Candidate plan, target suggestion and clarification | Browser actions, policy grants, truth verification |
+| Decider | Candidate plan, target suggestion and clarification | Browser actions, policy grants, truth verification |\n| Goal State Manager | Immutable original objective, success criteria and evidence-gated progress ledger | Declaring completion without exact captured evidence |\n| Optional Strands Decider | Chooses among browser-discovered source candidates | Direct browser access, URL invention or policy decisions |
 | Policy Engine | URL and capability allow/deny decisions | Model reasoning |
 | Browser Runtime | Playwright lifecycle, navigation, capture and runtime enforcement | Memory writes or unsupported actions |
 | Evidence Store | Immutable task-scoped capture records | Declaring claims true |
@@ -83,7 +83,7 @@ sequenceDiagram
     participant E as Evidence Store
     Caller->>API: POST /tasks objective
     API->>TM: create task
-    TM->>D: decide objective / initial search URL
+    TM->>D: decide objective / initial search URL\n    TM->>LLM: extract immutable success criteria (Qwen3 0.6B)\n    LLM-->>TM: criteria proposal; Python stores original goal
     D->>LLM: bounded structured request
     LLM-->>D: candidate DecisionPlan
     D-->>TM: validated plan or clarification
@@ -129,7 +129,7 @@ Website text, metadata, links and embedded instructions are untrusted input. The
 | Capability | Status | Notes |
 |---|---|---|
 | Natural-language task intake | Implemented | `POST /tasks` |
-| Structured Decider plan | Implemented | Remote Ollama; URL ambiguity can request clarification |
+| Structured Decider plan | Implemented | Remote Ollama; URL ambiguity can request clarification |\n| Goal State Manager | Initial implementation | Dedicated `OLLAMA_MODEL_GOAL_STATE` proposes criteria and evidence quotes; Python verifies exact quote and evidence ID before completion |\n| Strands Decider integration | Optional | `STRANDS_DECIDER_URL` selects only among discovered source candidates; falls back to Ollama planner; no direct browser tools |
 | Task-scoped Playwright context | Implemented | Context closed after each run |
 | Public URL validation | Implemented | Application-level DNS/IP checks; not a complete egress firewall |
 | Same-origin anchor navigation | Partial | Heuristic relevance matching; not general-purpose interaction |
