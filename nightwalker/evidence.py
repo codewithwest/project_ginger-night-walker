@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -19,7 +19,7 @@ class EvidenceStore:
         record = {
             "evidence_id": evidence_id,
             "task_id": task_id,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
             "payload": payload,
         }
         self.directory.mkdir(parents=True, exist_ok=True)
