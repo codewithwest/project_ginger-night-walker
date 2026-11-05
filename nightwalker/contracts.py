@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from enum import Enum
 from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 
@@ -20,7 +21,6 @@ class AgentTask(BaseModel):
     target_url: HttpUrl | None = None
     input_data: dict[str, Any] = Field(default_factory=dict)
     requirements: dict[str, Any] = Field(default_factory=dict)
-    permissions: set[str] = Field(default_factory=set)
 
 
 class EvidenceRef(BaseModel):
