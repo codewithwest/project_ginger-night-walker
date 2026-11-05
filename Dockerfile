@@ -10,6 +10,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
+    UV_PYTHON_INSTALL_DIR=/opt/uv/python \
     PATH="/app/.venv/bin:$PATH"
 
 WORKDIR /app
@@ -21,7 +22,10 @@ COPY . .
 RUN uv sync --no-dev --no-editable
 
 RUN useradd --create-home --shell /bin/bash appuser
-RUN mkdir -p /app/evidence && chown -R appuser:appuser /app
+RUN mkdir -p /app/evidence /opt/uv/python && \
+    chown -R appuser:appuser /app /opt/uv/python && \
+    chmod -R 755 /opt/uv/python
+ENV HOME=/home/appuser
 USER appuser
 
 EXPOSE 8000
