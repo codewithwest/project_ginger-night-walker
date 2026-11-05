@@ -26,3 +26,10 @@ class ResearchRoundPlan(BaseModel):
         if value.next_url and str(value.next_url) not in allowed_urls:
             raise ValueError("The selected URL was not discovered by the browser")
         return value
+
+
+class ResearchSynthesis(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    answer: str = Field(min_length=1, max_length=3000)
+    coverage_summary: str = Field(default="", max_length=1200)
+    gaps: list[str] = Field(default_factory=list, max_length=12)
