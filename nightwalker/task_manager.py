@@ -53,6 +53,7 @@ class TaskManager:
         structured_data: dict[str, list[Any]], limitations: list[str],
         loop_guard: ResearchLoopGuard, round_count: int, next_url: str,
         next_assignment: str, research_complete: bool = False,
+        round_in_progress: bool = False,
     ) -> None:
         self.tasks[task_id]["checkpoint"] = {
             "version": 1, "initial_plan": initial_plan.model_dump(mode="json"),
@@ -62,6 +63,7 @@ class TaskManager:
             "loop_guard": loop_guard.snapshot(), "round_count": round_count,
             "next_url": next_url, "next_assignment": next_assignment,
             "research_complete": research_complete,
+            "round_in_progress": round_in_progress,
         }
         self._persist(task_id)
 
@@ -158,6 +160,7 @@ class TaskManager:
             next_url = str(checkpoint.get("next_url") or "")
             next_assignment = str(checkpoint.get("next_assignment") or "Resume research")
             research_complete = bool(checkpoint.get("research_complete", False))
+            resume_in_flight = bool(checkpoint.get("round_in_progress", False))
             if not next_url and not research_complete:
                 available = loop_guard.filter_candidates(candidates, visited_urls)
                 if available:
@@ -179,6 +182,7 @@ class TaskManager:
             next_assignment = ""
             round_count = 0
             research_complete = False
+            resume_in_flight = False
         try:
             if not checkpoint:
                 self._log(task_id, "Decider analysing objective and identifying the starting point")
@@ -223,8 +227,11 @@ class TaskManager:
                     loop_guard=loop_guard, round_count=round_count,
                     next_url=next_url, next_assignment=next_assignment,
                 )
-            while next_url and round_count < self.max_rounds:
-                round_count += 1
+            while next_url and (round_count < self.max_rounds or resume_in_flight):
+                if resume_in_flight:
+                    resume_in_flight = False
+                else:
+                    round_count += 1
                 record["round"] = round_count
                 record["current_step"] = {
                     "index": round_count, "total": self.max_rounds,
@@ -240,6 +247,7 @@ class TaskManager:
                     structured_data=structured_data, limitations=limitations,
                     loop_guard=loop_guard, round_count=round_count,
                     next_url=next_url, next_assignment=next_assignment,
+                    round_in_progress=True,
                 )
                 if attempt["should_skip"] or already_visited:
                     reason = (
