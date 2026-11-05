@@ -19,7 +19,7 @@
 | Component | Owns | Must not own |
 |---|---|---|
 | Ginger OS / caller | User intent, identity, memory policy and downstream use | Browser implementation details |
-| Task API / Task Manager | Task lifecycle, status, clarification and logs | Permission escalation |
+| Task API / Task Manager | Task lifecycle, status, clarification, progress events, cancellation and scratchpad coordination | Permission escalation |
 | Context Compiler | Minimal capability-scoped input packets | Shared conversation-history inheritance |
 | Decider | Candidate plan, target suggestion and clarification | Browser actions, policy grants, truth verification |
 | Policy Engine | URL and capability allow/deny decisions | Model reasoning |
@@ -128,6 +128,9 @@ Website text, metadata, links and embedded instructions are untrusted input. The
 | Same-origin anchor navigation | Partial | Heuristic relevance matching; not general-purpose interaction |
 | Visible text and heading capture | Implemented | Bounded capture, currently one final page |
 | Immutable evidence JSON | Implemented | Task-scoped file record |
+| Task scratchpad | Initial implementation | Append-only task notes for plan resolution, browser result and cancellation; not yet a full iterative round scheduler |
+| Progress events | Initial implementation | Task snapshots expose progress events and UI surfaces recent log updates |
+| Operator cancellation | Implemented | DELETE `/tasks/{task_id}` cancels active work and marks queued/clarification-waiting tasks stopped |
 | Generic report envelope | Partial | Present in browser runtime; cross-source synthesis not implemented |
 | Product name/price extraction | Specialised partial capability | One task-specific structured-data adapter |
 | Multi-source research and reconciliation | Planned | Needs source collection and synthesis workflow |
