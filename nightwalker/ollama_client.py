@@ -341,7 +341,9 @@ class OllamaClient:
                 response.raise_for_status()
                 answer = response.json().get("answers", {}).get("next_action", {})
                 choice = answer.get("choice")
-                probabilities = answer.get("probabilities") or {}
+                probabilities = answer.get("probabilities")
+                if not isinstance(probabilities, dict):
+                    probabilities = {}
                 if not choice and probabilities:
                     choice = max(probabilities, key=probabilities.get)
                 if choice == "finish":
