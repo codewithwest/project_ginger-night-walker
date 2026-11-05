@@ -23,8 +23,10 @@ class ResearchRoundPlan(BaseModel):
             raise ValueError("A completed research plan cannot select another URL")
         if not value.done and not value.next_url:
             raise ValueError("An unfinished research plan must select a URL")
-        if value.next_url and str(value.next_url) not in allowed_urls:
-            raise ValueError("The selected URL was not discovered by the browser")
+        if value.next_url:
+            selected = str(value.next_url)
+            if not any(selected.rstrip("/") == item.rstrip("/") for item in allowed_urls):
+                raise ValueError("The selected URL was not discovered by the browser")
         return value
 
 
