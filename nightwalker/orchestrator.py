@@ -11,6 +11,7 @@ from nightwalker.contracts import (
     BrowserExtractRequest,
     BrowserExtractResponse,
 )
+from nightwalker.decision_contracts import DecisionPlan
 from nightwalker.ollama_client import OllamaClient
 
 
@@ -22,6 +23,22 @@ class Orchestrator:
     async def run_agent_task(self, task: AgentTask) -> AgentResult:
         return await self.ollama.run_agent(task)
 
+    async def run_browser_workflow(self, task_id: str, objective: str, plan: DecisionPlan) -> dict:
+        if not plan.target_url:
+            raise ValueError("The Decider plan has no target URL")
+        steps = [step.model_dump(mode="json") for step in plan.steps]
+        try:
+            return await self.browser.run_plan(
+                task_id=task_id,
+                url=str(plan.target_url),
+                steps=steps,
+                objective=objective,
+            )
+        except PermissionError as exc:
+            return {"status": "blocked", "issues": [str(exc)[:500]]}
+        except (RuntimeError, PlaywrightError, OSError, ValueError) as exc:
+            return {"status": "failed", "issues": [str(exc)[:500]]}
+
     async def run_browser_extract(self, request: BrowserExtractRequest) -> BrowserExtractResponse:
         task_id = str(uuid4())
         try:
@@ -32,6 +49,7 @@ class Orchestrator:
                 url=data["url"],
                 title=data["title"],
                 headings=data["headings"],
+                evidence_id=data.get("evidence_id"),
             )
         except PermissionError as exc:
             return BrowserExtractResponse(
@@ -40,7 +58,7 @@ class Orchestrator:
                 url=str(request.url),
                 issues=[str(exc)[:500]],
             )
-        except (RuntimeError, PlaywrightError, OSError) as exc:
+        except (RuntimeError, PlaywrightError, OSError, ValueError) as exc:
             return BrowserExtractResponse(
                 task_id=task_id,
                 status="failed",

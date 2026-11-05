@@ -3,8 +3,8 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 
 from nightwalker.browser_runtime import BrowserRuntime
 from nightwalker.contracts import AgentTask, BrowserExtractRequest
@@ -32,8 +32,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Ginger Night Walker",
-    version="0.3.0",
-    description="Least-privilege, context-isolated Playwright agent runtime with remote Ollama",
+    version="0.4.0",
+    description="Local-first, least-privilege Playwright agent with remote Ollama planning",
     lifespan=lifespan,
 )
 
@@ -96,6 +96,6 @@ async def run_agent(task: AgentTask):
 @app.post("/tasks/browser-extract")
 async def browser_extract(request: BrowserExtractRequest):
     result = await orchestrator.run_browser_extract(request)
-    if result.status == "failed":
+    if result.status in {"failed", "blocked"}:
         raise HTTPException(status_code=502, detail=result.model_dump())
     return result

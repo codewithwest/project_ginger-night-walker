@@ -31,8 +31,13 @@ class DecisionPlan(BaseModel):
 
     @classmethod
     def validate_plan(cls, value: DecisionPlan) -> DecisionPlan:
-        if value.status == DecisionStatus.READY and not value.steps:
-            raise ValueError("A ready plan must contain at least one step")
+        if value.status == DecisionStatus.READY:
+            if not value.steps:
+                raise ValueError("A ready plan must contain at least one step")
+            if not value.target_url:
+                raise ValueError(
+                    "A ready plan must include a verified-by-user or inferred target URL"
+                )
         if value.status == DecisionStatus.NEEDS_CLARIFICATION and not value.clarification_question:
             raise ValueError("A clarification plan must include a question")
         if value.status != DecisionStatus.READY and value.steps:
