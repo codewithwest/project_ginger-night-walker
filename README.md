@@ -43,7 +43,7 @@ uv run playwright install chromium
 
 ## Operator control centre
 
-The Night Walker web UI is served by the API at `http://localhost:8000/` when the Compose service is running. It provides a task composer, capability selector, task state monitor, live log polling, validated agent output, and a stop control. Task records and logs are held in process memory and are cleared when the service restarts.
+The Night Walker web UI is served by the API at `http://localhost:8000/` when the Compose service is running. It provides a single natural-language task field, Decider-generated site and capability plan, ordered agent-step results, task state monitor, live log polling, and a stop control. A clarification state is returned when the site or task cannot be identified confidently. Task records and logs are held in process memory and are cleared when the service restarts.
 
 Start the service and open the UI:
 
@@ -91,6 +91,7 @@ The Ollama client uses the Ollama `/api/chat` endpoint with a JSON Schema respon
 
 Set a default model and optionally override each capability:
 
+- `OLLAMA_MODEL_DECIDER` (optional Decider override)
 - `OLLAMA_MODEL_DEFAULT`
 - `OLLAMA_MODEL_NAVIGATE`
 - `OLLAMA_MODEL_INTERACT`
@@ -98,6 +99,22 @@ Set a default model and optionally override each capability:
 - `OLLAMA_MODEL_RECOVER`
 
 If a capability-specific variable is blank, the default model is used. Model names are configuration on the Ginger server, not supplied by the task caller.
+
+## Natural-language task API
+
+Submit one plain-language objective to `POST /tasks`:
+
+```json
+{
+  "objective": "Find Acme's latest product catalogue, extract product names and prices, and summarise them."
+}
+```
+
+The Decider uses the configured `OLLAMA_MODEL_DECIDER` (or the default model) to identify a likely site, choose an ordered sequence of the four capabilities, and return a structured plan. If the site is unclear, the task enters `needs_clarification` with a question. The task monitor exposes the plan, per-step agent outputs, logs, and Stop control. The legacy `/tasks/agent` endpoint remains available for direct capability-specific proposals.
+
+**Site discovery limitation:** site identification currently relies on the Decider model's knowledge and the task wording; it is not backed by live search. It may ask for clarification rather than guess. A model-suggested URL is a candidate, not verified evidence.
+
+**Execution limitation:** each selected agent currently produces a validated proposal. This workflow does not yet click, type, submit forms, or perform autonomous multi-step browsing. Stop cancels the active inference/task.
 
 ## Agent inference API
 
