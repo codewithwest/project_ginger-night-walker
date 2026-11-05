@@ -63,7 +63,7 @@ class TaskManager:
             self.tasks[task_id]["status"] = "failed"
             self.tasks[task_id]["error"] = str(exc)[:1000]
             self._log(task_id, f"Task failed: {exc}", "error")
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - keep task state observable on unexpected failures
             self.tasks[task_id]["status"] = "failed"
             self.tasks[task_id]["error"] = "Unexpected internal error"
             self._log(task_id, f"Unexpected internal error: {type(exc).__name__}", "error")
