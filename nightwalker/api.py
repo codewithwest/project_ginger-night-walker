@@ -2,9 +2,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
-
 from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
 from fastapi.responses import FileResponse
 
 from nightwalker.browser_runtime import BrowserRuntime
