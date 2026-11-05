@@ -73,12 +73,11 @@ Submit a task to `POST /tasks/agent`:
   "requirements": {
     "fields": ["name"],
     "output_schema": "A JSON object containing a products array"
-  },
-  "permissions": ["browser.read_dom"]
+  }
 }
 ```
 
-The current inference endpoint returns a validated **proposal** with status `planned` or `blocked`. It does not execute browser actions. The browser extraction endpoint remains a separate deterministic operation.
+The current inference endpoint returns a validated **proposal** with status `planned` or `blocked`. It does not execute browser actions. The browser extraction endpoint remains a separate deterministic operation. The task contract deliberately has no caller-controlled permissions field; a trusted permission broker must issue grants before any future action executor is enabled.
 
 ## Security model and limitations
 
