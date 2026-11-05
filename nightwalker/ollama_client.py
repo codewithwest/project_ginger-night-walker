@@ -11,6 +11,7 @@ from nightwalker.context_compiler import ContextCompiler
 from nightwalker.contracts import AgentResult, AgentTask
 from nightwalker.decision_contracts import DecisionPlan
 from nightwalker.model_registry import ModelRegistry
+from nightwalker.goal_state import GoalCriteriaPlan, GoalProgressProposal
 from nightwalker.research_contracts import ResearchRoundPlan, ResearchSynthesis
 
 SYSTEM_PROMPTS = {
@@ -262,6 +263,38 @@ class OllamaClient:
             ) from exc
 
 
+    async def initialise_goal_criteria(self, objective: str, proposed_steps: list[str]) -> list[str]:
+        base_url = self._require_base_url()
+        model = os.getenv("OLLAMA_MODEL_GOAL_STATE", "qwen3:0.6b")
+        body = {"model": model, "stream": False, "think": False, "format": GoalCriteriaPlan.model_json_schema(),
+            "messages": [{"role": "system", "content": "Extract 1-6 concrete success criteria from the original user objective. Preserve explicit requirements; do not invent requirements. Return JSON only."},
+                {"role": "user", "content": json.dumps({"original_goal": objective[:2000], "planner_steps": proposed_steps[:8]}, ensure_ascii=False)}],
+            "options": {"temperature": 0, "num_predict": 300}}
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(f"{base_url}/api/chat", headers=self._headers(), json=body)
+                response.raise_for_status()
+                raw = self._chat_content(response.json(), model=model, operation="Goal criteria")
+                return GoalCriteriaPlan.model_validate_json(raw).criteria
+        except (httpx.HTTPError, ValueError, ValidationError, KeyError) as exc:
+            raise OllamaUnavailable(f"Goal criteria inference failed: {exc}") from exc
+
+    async def evaluate_goal_progress(self, goal_state: dict[str, Any], round_evidence: list[dict[str, Any]]) -> GoalProgressProposal:
+        base_url = self._require_base_url()
+        model = os.getenv("OLLAMA_MODEL_GOAL_STATE", "qwen3:0.6b")
+        evidence = [{"evidence_id": item.get("evidence_id"), "captured_text": str(item.get("captured_text") or "")[:1800]} for item in round_evidence[:8]]
+        body = {"model": model, "stream": False, "think": False, "format": GoalProgressProposal.model_json_schema(),
+            "messages": [{"role": "system", "content": "Only propose completed criteria when supplied evidence directly supports them. Copy an exact quote of at least 8 characters and the evidence_id. Never infer completion. Return JSON only."},
+                {"role": "user", "content": json.dumps({"original_goal": goal_state["original_goal"], "criteria": goal_state["criteria"], "already_completed": goal_state["completed"], "remaining": goal_state["remaining"], "current_round_evidence": evidence}, ensure_ascii=False)}],
+            "options": {"temperature": 0, "num_predict": 400}}
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(f"{base_url}/api/chat", headers=self._headers(), json=body)
+                response.raise_for_status()
+                raw = self._chat_content(response.json(), model=model, operation="Goal progress")
+                return GoalProgressProposal.model_validate_json(raw)
+        except (httpx.HTTPError, ValueError, ValidationError, KeyError) as exc:
+            raise OllamaUnavailable(f"Goal progress evaluation failed: {exc}") from exc
     async def plan_research_round(
         self,
         objective: str,
