@@ -37,6 +37,22 @@ class ResearchLoopGuard:
         self.action_attempts: Counter[tuple[str, str]] = Counter()
         self.outcomes: list[dict[str, Any]] = []
 
+    @classmethod
+    def from_snapshot(cls, snapshot: dict[str, Any] | None) -> "ResearchLoopGuard":
+        snapshot = snapshot or {}
+        guard = cls(max_attempts_per_url=int(snapshot.get("max_attempts_per_url", 2)))
+        for key, count in (snapshot.get("attempts") or {}).items():
+            guard.attempts[str(key)] = max(0, int(count))
+        for item in snapshot.get("repeated_actions", []):
+            if isinstance(item, dict):
+                action = (str(item.get("url_key", "")), str(item.get("assignment", "")))
+                guard.action_attempts[action] = max(0, int(item.get("attempts", 0)))
+        guard.outcomes = [
+            item for item in snapshot.get("recent_outcomes", [])
+            if isinstance(item, dict)
+        ][-60:]
+        return guard
+
     def begin(self, url: str, assignment: str) -> dict[str, Any]:
         key = canonical_url_key(url)
         action = (key, " ".join(str(assignment).casefold().split())[:300])
