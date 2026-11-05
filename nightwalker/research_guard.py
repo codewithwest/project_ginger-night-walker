@@ -60,6 +60,11 @@ class ResearchLoopGuard:
         })
         self.outcomes = self.outcomes[-60:]
 
+    @staticmethod
+    def is_visited(url: str, visited_urls: list[str]) -> bool:
+        key = canonical_url_key(url)
+        return any(canonical_url_key(item) == key for item in visited_urls)
+
     def filter_candidates(
         self, candidates: list[dict[str, Any]], visited_urls: list[str]
     ) -> list[dict[str, str]]:
