@@ -38,6 +38,7 @@
 flowchart LR
     U[User / Ginger OS] -->|objective| API[Task API]
     API --> TM[Task Manager]
+    TM <--> TS[Task State Store]
     TM --> CC[Context Compiler]
     CC --> D[Decider]
     D <-->|bounded inference| O[Remote Ollama]
@@ -102,6 +103,7 @@ sequenceDiagram
         B->>B: isolated Playwright context; capture text and links
         B->>E: persist evidence
         E-->>TM: evidence identifier and observations
+        TM->>TS: atomically save completed-round checkpoint
         TM->>TM: append scratchpad and publish progress
         TM->>LLM: compact objective + scratchpad + discovered URLs
         LLM-->>TM: next discovered URL or done
