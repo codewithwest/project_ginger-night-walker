@@ -1,5 +1,6 @@
 import pytest
-from nightwalker.policy import PolicyEngine, PolicyDenied, DEFAULT_MANIFESTS
+
+from nightwalker.policy import DEFAULT_MANIFESTS, PolicyDenied, PolicyEngine
 
 
 def test_default_deny_for_ungranted_capability():
