@@ -149,3 +149,99 @@ def test_chat_content_reports_ollama_error_payload():
             model="qwen3.5:9b",
             operation="Decider",
         )
+
+
+@pytest.mark.asyncio
+async def test_decider_uses_explicit_user_domain_when_ready_plan_omits_url(monkeypatch):
+    monkeypatch.setenv("OLLAMA_BASE_URL", "https://ollama.example.test")
+    monkeypatch.setenv("OLLAMA_MODEL_DECIDER", "test-model")
+
+    class FakeAsyncClient:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, headers, json):
+            plan = {
+                "status": "ready",
+                "summary": "Find the first product and its price",
+                "site_name": None,
+                "target_url": None,
+                "clarification_question": None,
+                "steps": [
+                    {
+                        "step_id": "step-1",
+                        "capability": "navigate",
+                        "objective": "Open the product catalogue",
+                    },
+                    {
+                        "step_id": "step-2",
+                        "capability": "extract",
+                        "objective": "Read the first product name and price",
+                    },
+                ],
+            }
+            return httpx.Response(
+                200,
+                json={"message": {"content": __import__("json").dumps(plan)}},
+                request=httpx.Request("POST", url),
+            )
+
+    monkeypatch.setattr("nightwalker.ollama_client.httpx.AsyncClient", FakeAsyncClient)
+    plan = await OllamaClient().decide_task(
+        "Find me the first product price on weylandts.co.za"
+    )
+
+    assert plan.status.value == "ready"
+    assert str(plan.target_url) == "https://weylandts.co.za/"
+    assert plan.site_name == "weylandts.co.za"
+
+
+@pytest.mark.asyncio
+async def test_decider_requests_clarification_when_ready_plan_has_no_destination(
+    monkeypatch,
+):
+    monkeypatch.setenv("OLLAMA_BASE_URL", "https://ollama.example.test")
+
+    class FakeAsyncClient:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, headers, json):
+            plan = {
+                "status": "ready",
+                "summary": "Search for the requested information",
+                "site_name": None,
+                "target_url": None,
+                "clarification_question": None,
+                "steps": [
+                    {
+                        "step_id": "step-1",
+                        "capability": "navigate",
+                        "objective": "Open the relevant website",
+                    }
+                ],
+            }
+            return httpx.Response(
+                200,
+                json={"message": {"content": __import__("json").dumps(plan)}},
+                request=httpx.Request("POST", url),
+            )
+
+    monkeypatch.setattr("nightwalker.ollama_client.httpx.AsyncClient", FakeAsyncClient)
+    plan = await OllamaClient().decide_task("Find the latest product price")
+
+    assert plan.status.value == "needs_clarification"
+    assert plan.clarification_question
+    assert not plan.steps
