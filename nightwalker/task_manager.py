@@ -66,6 +66,7 @@ class TaskManager:
             "round": 0,
             "max_rounds": self.max_rounds,
             "scratchpad": self.scratchpad.read(task_id),
+            "follow_up_instructions": [],
         }
         self._log(task_id, "Natural-language task accepted; starting Decider")
         self.running[task_id] = asyncio.create_task(
@@ -138,8 +139,10 @@ class TaskManager:
                         {"step_id": "capture", "capability": "extract", "objective": next_assignment[:500]},
                     ],
                 })
+                one_page_plan = type(initial_plan).model_validate(one_page_plan.model_dump(mode="python"))
+                effective_objective = self._effective_objective(task_id, objective)
                 result = await self.orchestrator.run_browser_workflow(
-                    task_id, objective, one_page_plan
+                    task_id, effective_objective, one_page_plan
                 )
                 if result.get("status") not in {"completed", "blocked"}:
                     issue_text = "; ".join(result.get("issues", [])) or "Source inspection failed"
@@ -239,7 +242,7 @@ class TaskManager:
                     next_url = ""
                     break
                 round_plan = await self.orchestrator.ollama.plan_research_round(
-                    objective=objective,
+                    objective=self._effective_objective(task_id, objective),
                     round_number=round_count,
                     max_rounds=self.max_rounds,
                     scratchpad=self.scratchpad.read(task_id)[-8:],
@@ -260,7 +263,7 @@ class TaskManager:
             if sources:
                 try:
                     synthesis = await self.orchestrator.ollama.synthesise_research(
-                        objective, findings, sources, round_count, self.max_rounds
+                        self._effective_objective(task_id, objective), findings, sources, round_count, self.max_rounds
                     )
                     answer = synthesis.answer
                     if synthesis.coverage_summary:
@@ -327,6 +330,39 @@ class TaskManager:
             record["updated_at"] = self._now()
             self.running.pop(task_id, None)
 
+    def add_follow_up(self, task_id: str, message: str) -> dict[str, Any] | None:
+        """Attach a user instruction to an active research task for the next round."""
+        record = self.tasks.get(task_id)
+        if record is None:
+            return None
+        if record.get("status") not in {"queued", "running"}:
+            raise ValueError("Follow-ups can only be added while a task is active")
+        instruction = message.strip()
+        if not instruction:
+            raise ValueError("A follow-up instruction is required")
+        if len(instruction) > 2000:
+            raise ValueError("Follow-up instruction must be 2000 characters or fewer")
+        record.setdefault("follow_up_instructions", []).append(instruction)
+        self._note(task_id, {
+            "round": record.get("round", 0), "assignment": "User follow-up instruction",
+            "status": "accepted", "operator_input": instruction,
+            "seed_for_next_round": [instruction],
+        })
+        record["progress_events"].append({
+            "at": self._now(), "event_type": "user_follow_up",
+            "status": record["status"],
+            "message": "Additional user instruction received; it will guide subsequent research rounds.",
+        })
+        self._log(task_id, "User added a follow-up instruction for subsequent research rounds")
+        return self.snapshot(task_id)
+
+    def _effective_objective(self, task_id: str, base_objective: str) -> str:
+        additions = self.tasks[task_id].get("follow_up_instructions", [])
+        if not additions:
+            return base_objective
+        return base_objective + "\n\nAdditional user instructions:\n" + "\n".join(
+            f"- {item}" for item in additions[-10:]
+        )
     async def _execute(self, task: AgentTask) -> None:
         task_id = task.task_id
         self.tasks[task_id]["status"] = "running"
