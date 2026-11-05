@@ -170,24 +170,63 @@ class OllamaClient:
                 envelope = response.json()
                 content = self._chat_content(envelope, model=model, operation="Decider")
                 plan = DecisionPlan.model_validate_json(content)
-                if plan.status.value == "ready" and not plan.target_url:
-                    explicit_url = self._explicit_target_url(objective)
-                    if explicit_url:
-                        from urllib.parse import urlsplit
+                explicit_url = self._explicit_target_url(objective)
+                if explicit_url and (
+                    not plan.target_url
+                    or (
+                        plan.status.value == "needs_clarification"
+                        and any(
+                            term in (plan.clarification_question or "").lower()
+                            for term in ("website", "web site", "site", "url", "domain")
+                        )
+                    )
+                ):
+                    from urllib.parse import urlsplit
 
+                    if plan.status.value == "needs_clarification":
+                        # The user already supplied the destination. Do not ask them
+                        # to repeat it; make a minimal, read-only browse/extract plan.
+                        plan = DecisionPlan.model_validate(
+                            {
+                                "status": "ready",
+                                "summary": plan.summary,
+                                "site_name": urlsplit(explicit_url).hostname,
+                                "target_url": explicit_url,
+                                "clarification_question": None,
+                                "steps": [
+                                    {
+                                        "step_id": "open-site",
+                                        "capability": "navigate",
+                                        "objective": (
+                                            "Open the explicitly supplied website and "
+                                            "inspect its publicly accessible pages."
+                                        ),
+                                    },
+                                    {
+                                        "step_id": "inspect-site",
+                                        "capability": "extract",
+                                        "objective": (
+                                            "Extract publicly visible information relevant "
+                                            "to the user's requested research."
+                                        ),
+                                    },
+                                ],
+                            }
+                        )
+                    else:
                         plan = DecisionPlan.model_validate(
                             {
                                 **plan.model_dump(mode="python"),
-                                "target_url": explicit_url,
+                                "target_url": plan.target_url or explicit_url,
                                 "site_name": plan.site_name
                                 or urlsplit(explicit_url).hostname,
                             }
                         )
-                    else:
-                        return self._make_clarification(
-                            plan,
-                            "Which website should I use? Please provide its exact public URL.",
-                        )
+                elif plan.status.value == "ready" and not plan.target_url:
+                    return self._make_clarification(
+                        plan,
+                        "Which website should I use? Please provide its exact public URL.",
+                    )
                 return DecisionPlan.validate_plan(plan)
         except OllamaUnavailable:
             raise
