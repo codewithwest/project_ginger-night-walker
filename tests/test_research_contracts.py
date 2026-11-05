@@ -35,3 +35,40 @@ def test_completed_round_cannot_select_another_url():
     )
     with pytest.raises(ValueError, match="cannot select"):
         ResearchRoundPlan.validate_plan(plan, {"https://example.com/"})
+
+
+
+def test_round_plan_accepts_http_url_canonicalisation():
+    plan = ResearchRoundPlan(
+        done=False,
+        next_url="https://EXAMPLE.com:443/research/",
+        assignment="Inspect the discovered page",
+    )
+    validated = ResearchRoundPlan.validate_plan(
+        plan, {"https://example.com/research"}
+    )
+    assert validated.next_url is not None
+
+
+def test_round_plan_rejects_different_path_or_query():
+    plan = ResearchRoundPlan(
+        done=False,
+        next_url="https://example.com/research?other=1",
+        assignment="Inspect another page",
+    )
+    with pytest.raises(ValueError, match="not discovered"):
+        ResearchRoundPlan.validate_plan(
+            plan, {"https://example.com/research?allowed=1"}
+        )
+
+
+def test_round_plan_rejects_credentials_even_if_host_matches():
+    plan = ResearchRoundPlan(
+        done=False,
+        next_url="https://user:pass@example.com/research",
+        assignment="Inspect a page",
+    )
+    with pytest.raises(ValueError, match="without credentials"):
+        ResearchRoundPlan.validate_plan(
+            plan, {"https://example.com/research"}
+        )
