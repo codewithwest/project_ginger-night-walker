@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from urllib.parse import urlparse
 import ipaddress
 import socket
+from dataclasses import dataclass
+from urllib.parse import urlparse
 
 
 class PolicyDenied(PermissionError):
@@ -45,4 +45,6 @@ class PolicyEngine:
             addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved
             for addr in addresses
         ):
-            raise PolicyDenied("Private, loopback, link-local, and reserved network targets are blocked")
+            raise PolicyDenied(
+                "Private, loopback, link-local, and reserved network targets are blocked"
+            )
