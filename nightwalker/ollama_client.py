@@ -286,6 +286,12 @@ class OllamaClient:
                 assignment="Complete research and synthesise captured evidence",
                 reason="No remaining discovered sources or round budget exhausted.",
             )
+        objective_lower = objective.lower()
+        multi_source_objective = any(term in objective_lower for term in (
+            "research", "compare", "comparison", "competitor", "top five",
+            "top 5", "best", "audit", "review", "market", "industry", "seo",
+        ))
+        minimum_rounds = 3 if multi_source_objective else 1
         schema = ResearchRoundPlan.model_json_schema()
         compact_notes = [
             {
@@ -330,9 +336,17 @@ class OllamaClient:
                 envelope = response.json()
                 content = self._chat_content(envelope, model=model, operation="Research round planner")
                 plan = ResearchRoundPlan.model_validate_json(content)
-                return ResearchRoundPlan.validate_plan(
+                validated = ResearchRoundPlan.validate_plan(
                     plan, {item["url"] for item in allowed}
                 )
+                if validated.done and round_number < minimum_rounds:
+                    return ResearchRoundPlan(
+                        done=False,
+                        next_url=allowed[0]["url"],
+                        assignment="Inspect another independent source before concluding",
+                        reason="The objective requires multi-source coverage.",
+                    )
+                return validated
         except OllamaUnavailable:
             raise
         except (httpx.HTTPError, ValueError, ValidationError, KeyError) as exc:
