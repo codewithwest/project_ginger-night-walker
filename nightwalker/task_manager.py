@@ -92,13 +92,24 @@ class TaskManager:
             record.setdefault("checkpoint", None)
             self.tasks[task_id] = record
             checkpoint = record.get("checkpoint")
-            if record.get("status") in {"queued", "running"}:
+            status = record.get("status")
+            saved_plan = record.get("plan") or {}
+            saved_question = str(saved_plan.get("clarification_question") or "").casefold()
+            legacy_site_prompt = (
+                status == DecisionStatus.NEEDS_CLARIFICATION.value
+                and any(term in saved_question for term in ("website", "web site", "url", "domain"))
+            )
+            if status in {"queued", "running"} or legacy_site_prompt:
+                if legacy_site_prompt:
+                    record["plan"] = None
+                    record["error"] = None
+                    self._log(task_id, "Retrying an old website-only clarification with automatic search discovery", "warning")
                 if checkpoint:
                     try:
                         DecisionPlan.model_validate(checkpoint["initial_plan"])
                         ResearchLoopGuard.from_snapshot(checkpoint.get("loop_guard"))
                         int(checkpoint.get("round_count", 0))
-                    except (KeyError, TypeError, ValueError) as exc:
+                    except (AttributeError, KeyError, TypeError, ValueError) as exc:
                         record["status"] = "failed"
                         record["error"] = f"Saved research checkpoint is invalid: {exc}"[:500]
                         self._log(task_id, record["error"], "error")
