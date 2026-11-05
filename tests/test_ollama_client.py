@@ -103,3 +103,49 @@ async def test_missing_remote_url_fails_closed(monkeypatch):
     monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
     with pytest.raises(OllamaUnavailable, match="not configured"):
         await OllamaClient().health()
+
+
+@pytest.mark.asyncio
+async def test_decider_empty_content_reports_ollama_generation_metadata(monkeypatch):
+    monkeypatch.setenv("OLLAMA_BASE_URL", "https://ollama.example.test")
+    monkeypatch.setenv("OLLAMA_MODEL_DECIDER", "qwen3.5:9b")
+
+    class FakeAsyncClient:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, headers, json):
+            return httpx.Response(
+                200,
+                json={
+                    "model": "qwen3.5:9b",
+                    "done": True,
+                    "done_reason": "stop",
+                    "prompt_eval_count": 100,
+                    "eval_count": 0,
+                    "message": {"role": "assistant", "content": "", "thinking": "reasoning"},
+                },
+                request=httpx.Request("POST", url),
+            )
+
+    monkeypatch.setattr("nightwalker.ollama_client.httpx.AsyncClient", FakeAsyncClient)
+    with pytest.raises(
+        OllamaUnavailable,
+        match=r"empty message.content.*done_reason='stop'.*thinking_chars=9",
+    ):
+        await OllamaClient().decide_task("Find the latest product catalogue")
+
+
+def test_chat_content_reports_ollama_error_payload():
+    with pytest.raises(OllamaUnavailable, match="model is unavailable"):
+        OllamaClient._chat_content(
+            {"error": "model is unavailable"},
+            model="qwen3.5:9b",
+            operation="Decider",
+        )
