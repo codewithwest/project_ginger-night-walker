@@ -128,10 +128,19 @@ class BrowserRuntime:
             price = match.group(0).strip()
             name = line[:match.start()].strip(" -|") if match.start() else ""
             if not name and index:
-                name = lines[index - 1]
-                if name.lower() in ignored and index > 1:
-                    name = lines[index - 2]
-            if not name or name.lower() in ignored or price.lower() == name.lower():
+                previous = index - 1
+                while previous >= 0 and (
+                    lines[previous].lower() in ignored
+                    or "price depends on the options" in lines[previous].lower()
+                ):
+                    previous -= 1
+                name = lines[previous] if previous >= 0 else ""
+            if (
+                not name
+                or name.lower() in ignored
+                or "price depends on the options" in name.lower()
+                or price.lower() == name.lower()
+            ):
                 continue
             if len(name) > 180 or re.fullmatch(r"(?i)r?\s*[\d,.]+", name):
                 continue
