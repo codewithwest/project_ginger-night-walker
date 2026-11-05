@@ -225,7 +225,7 @@ class OllamaClient:
                         )
                 elif plan.status.value == "ready" and not plan.target_url:
                     from urllib.parse import quote
-                    search_url = "https://www.google.com/search?q=" + quote(objective[:500])
+                    search_url = "https://www.bing.com/search?q=" + quote(objective[:500])
                     plan = DecisionPlan.model_validate({
                         "status": "ready",
                         "summary": "Research the objective using public web search and browser-discovered sources.",
@@ -242,7 +242,7 @@ class OllamaClient:
                     from urllib.parse import quote
                     question = (plan.clarification_question or "").lower()
                     if any(term in question for term in ("website", "web site", "url", "domain")):
-                        search_url = "https://www.google.com/search?q=" + quote(objective[:500])
+                        search_url = "https://www.bing.com/search?q=" + quote(objective[:500])
                         plan = DecisionPlan.model_validate({
                             "status": "ready",
                             "summary": "Research the objective using public web search and browser-discovered sources.",
