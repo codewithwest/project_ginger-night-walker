@@ -44,6 +44,7 @@ type BrowserResult = {
   structured_data?: Record<string, unknown>;
   limitations?: string[];
   suggested_memory?: string[];
+  goal_state?: { original_goal: string; criteria: string[]; completed: string[]; remaining: string[]; evidence_by_criterion: Record<string, { evidence_id: string; quote: string }> };
 };
 
 type Task = {
@@ -65,6 +66,7 @@ type Task = {
   round?: number;
   max_rounds?: number;
   scratchpad?: { round?: number; assignment?: string; status?: string; findings?: unknown[]; evidence_ids?: string[] }[];
+  goal_state?: { original_goal: string; criteria: string[]; completed: string[]; remaining: string[]; evidence_by_criterion: Record<string, { evidence_id: string; quote: string }> } | null;
 };
 
 const isTerminal = (status: string) =>
@@ -129,6 +131,17 @@ function ResearchReport({ result }: { result: BrowserResult }) {
         <span className="answer-highlight__label">ANSWER</span>
         <h2>{result.answer || "The page was captured. Review the findings and source evidence below."}</h2>
       </div>
+      {result.goal_state && <div className="research-section">
+        <h3>Goal coverage · {result.goal_state.completed.length}/{result.goal_state.criteria.length} verified</h3>
+        <ul className="finding-list">{result.goal_state.criteria.map((criterion) => {
+          const proof = result.goal_state?.evidence_by_criterion[criterion];
+          return <li key={criterion}>
+            <span>{criterion}</span>
+            <small>{proof ? "Verified · " + proof.evidence_id : "Evidence still required"}</small>
+            {proof && <blockquote>{proof.quote}</blockquote>}
+          </li>;
+        })}</ul>
+      </div>}
       {findings.length > 0 && <div className="research-section">
         <h3>Findings</h3>
         <ul className="finding-list">{findings.map((finding, index) => <li key={index}>
@@ -488,6 +501,13 @@ export default function App() {
                   <ResearchReport result={selected.result} />
                 )}
 
+                {selected.goal_state && (selected.status === "running" || selected.status === "queued") && (
+                  <section className="working-panel">
+                    <div><strong>Goal coverage · {selected.goal_state.completed.length}/{selected.goal_state.criteria.length}</strong>
+                      <p>{selected.goal_state.remaining.length ? "Still to verify: " + selected.goal_state.remaining.join(" · ") : "All success criteria have evidence."}</p>
+                    </div>
+                  </section>
+                )}
                 {selected.status === "running" || selected.status === "queued" ? (
                   <section className="working-panel">
                     <div className="working-panel__icon"><LoaderCircle size={20} /></div>
