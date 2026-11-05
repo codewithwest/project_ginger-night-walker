@@ -240,6 +240,7 @@ class BrowserRuntime:
                 for heading in headings
             )
             sources = [{
+                "source_id": "s-001",
                 "url": page.url,
                 "title": title,
                 "retrieved_at": retrieved_at,
@@ -249,6 +250,7 @@ class BrowserRuntime:
             if not body_text.strip():
                 limitations.append("No visible page text was available to analyse.")
             report = {
+                "schema_version": "1.0",
                 "answer": answer or (
                     f"Captured the page “{title}” and its visible content."
                     if title else "Captured page content; no concise answer was inferred."
@@ -257,6 +259,9 @@ class BrowserRuntime:
                 "sources": sources,
                 "evidence": [{
                     "evidence_id": None,
+                    "source_id": "s-001",
+                    "kind": "visible_text",
+                    "captured_at": retrieved_at,
                     "source_url": page.url,
                     "captured_text": body_text,
                     "visited_urls": visited[:10],
@@ -278,6 +283,11 @@ class BrowserRuntime:
             }
             evidence_id = self.evidence.save(task_id, payload)
             report["evidence"][0]["evidence_id"] = evidence_id
+            for index, finding in enumerate(report["findings"], start=1):
+                finding["finding_id"] = "f-" + str(index).zfill(3)
+                finding["kind"] = "observed"
+                finding["source_ids"] = ["s-001"]
+                finding["evidence_ids"] = [evidence_id]
             return {
                 "status": "completed" if body_text.strip() and not issues else "blocked",
                 **report,
