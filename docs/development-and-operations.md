@@ -75,7 +75,8 @@ Vite proxies API requests to the local FastAPI service on port 8000.
 | `OLLAMA_MODEL_EXTRACT` | Extraction capability model | Falls back to default |
 | `OLLAMA_MODEL_RECOVER` | Recovery capability model | Falls back to default |
 | `NAVIGATION_TIMEOUT_MS` | Browser navigation timeout | Keep bounded |
-| `EVIDENCE_DIR` | Evidence, scratchpad and default task-state root | Docker default `/app/evidence`; must be on persistent storage |\n| `TASK_STATE_DIR` | Optional override for atomic task JSON snapshots | Defaults to `EVIDENCE_DIR/tasks` |
+| `EVIDENCE_DIR` | Evidence, scratchpad and default task-state root | Docker default `/app/evidence`; must be on persistent storage |
+| `TASK_STATE_DIR` | Optional override for atomic task JSON snapshots | Defaults to `EVIDENCE_DIR/tasks` |
 
 Check `.env.example` for the current supported values and defaults.
 
