@@ -7,8 +7,8 @@ from typing import Any
 import httpx
 from pydantic import ValidationError
 
-from nightwalker.contracts import AgentResult, AgentTask
 from nightwalker.context_compiler import ContextCompiler
+from nightwalker.contracts import AgentResult, AgentTask
 from nightwalker.model_registry import ModelRegistry
 
 
