@@ -1,5 +1,8 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
+from uuid import uuid4
+
+from pydantic import BaseModel, Field
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
@@ -14,6 +17,11 @@ browser = BrowserRuntime()
 orchestrator = Orchestrator(browser)
 task_manager = TaskManager(orchestrator)
 UI_FILE = Path(__file__).parent / "static" / "index.html"
+
+
+class NaturalLanguageTaskRequest(BaseModel):
+    objective: str = Field(min_length=1, max_length=2000)
+    task_id: str = Field(default_factory=lambda: "nw-" + str(uuid4()))
 
 
 @asynccontextmanager
@@ -63,9 +71,9 @@ async def get_task(task_id: str):
 
 
 @app.post("/tasks", status_code=202)
-async def submit_task(task: AgentTask):
+async def submit_task(task: NaturalLanguageTaskRequest):
     try:
-        return task_manager.submit(task)
+        return task_manager.submit_natural_language(task.task_id, task.objective.strip())
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
