@@ -181,10 +181,15 @@ class TaskManager:
                         finding["evidence_ids"] = [result["evidence_id"]] if result.get("evidence_id") else []
                         findings.append(finding)
                     for key, values in (result.get("structured_data") or {}).items():
-                        if isinstance(values, list):
-                            structured_data.setdefault(key, []).extend(values)
-                        else:
-                            structured_data.setdefault(key, []).append(values)
+                        records = values if isinstance(values, list) else [values]
+                        for value in records:
+                            if isinstance(value, dict):
+                                value = {
+                                    **value,
+                                    "source_id": source_id,
+                                    "evidence_ids": [result["evidence_id"]] if result.get("evidence_id") else [],
+                                }
+                            structured_data.setdefault(key, []).append(value)
                     candidates.extend(result.get("candidate_urls", []))
                     # Deduplicate candidates while preserving browser discovery order.
                     deduped: dict[str, dict[str, str]] = {}
