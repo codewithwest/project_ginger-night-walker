@@ -65,7 +65,7 @@ Partial or not yet implemented:
 - product name/price parsing is a specialised extraction adapter;
 - goal completion is evidence-gated but still model-assisted; it does not prove a source's real-world truth; broader claim validation remains future work;
 - synthesis uses captured page titles, headings and visible-text excerpts; deeper claim extraction, authority assessment and conflict reconciliation remain future work;
-- scratchpad/evidence records persist to the evidence volume, but task state is still in memory and cannot automatically resume after service restart;
+- task records, scratchpad notes and evidence persist on the Compose evidence volume; queued/running research resumes from the latest saved checkpoint after restart. Storage is single-process JSON, not a multi-worker transactional queue;
 - automatic Ginger memory writes are intentionally not implemented;
 - arbitrary interactions, form submission, purchases, downloads and transactions are not supported;
 - the service is not hardened or authenticated for hostile multi-user workloads.
