@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from urllib.parse import urlsplit, urlunsplit
+
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 
@@ -17,6 +19,26 @@ class ResearchRoundPlan(BaseModel):
     assignment: str = Field(min_length=1, max_length=400)
     reason: str = Field(default="", max_length=400)
 
+    @staticmethod
+    def _canonical_url(value: str) -> str:
+        """Normalise URL syntax without weakening path/query identity."""
+        parsed = urlsplit(str(value).strip())
+        scheme = parsed.scheme.lower()
+        hostname = (parsed.hostname or "").lower()
+        if not scheme or not hostname or parsed.username or parsed.password:
+            raise ValueError("Research source must be an absolute URL without credentials")
+        try:
+            port = parsed.port
+        except ValueError as exc:
+            raise ValueError("Research source has an invalid port") from exc
+        if (scheme, port) in {("http", 80), ("https", 443)}:
+            port = None
+        netloc = hostname if port is None else f"{hostname}:{port}"
+        path = parsed.path or "/"
+        if path != "/":
+            path = path.rstrip("/") or "/"
+        return urlunsplit((scheme, netloc, path, parsed.query, ""))
+
     @classmethod
     def validate_plan(cls, value: ResearchRoundPlan, allowed_urls: set[str]) -> ResearchRoundPlan:
         if value.done and value.next_url:
@@ -24,8 +46,9 @@ class ResearchRoundPlan(BaseModel):
         if not value.done and not value.next_url:
             raise ValueError("An unfinished research plan must select a URL")
         if value.next_url:
-            selected = str(value.next_url)
-            if not any(selected.rstrip("/") == item.rstrip("/") for item in allowed_urls):
+            selected = cls._canonical_url(str(value.next_url))
+            allowed = {cls._canonical_url(item) for item in allowed_urls}
+            if selected not in allowed:
                 raise ValueError("The selected URL was not discovered by the browser")
         return value
 
