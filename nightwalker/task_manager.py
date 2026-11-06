@@ -326,7 +326,6 @@ class TaskManager:
                 if not research_queries and not explicit_target:
                     # Deterministic fallback when the planning model is unavailable:
                     # use the task's subject sentence, not its report instructions.
-                    import re
                     subject = re.split(
                         r"\n\s*\n|\bfor each\b|\buse publicly accessible\b|"
                         r"\brecord the urls\b|\bclearly distinguish\b|\bproduce a\b",
