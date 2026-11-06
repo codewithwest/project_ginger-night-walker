@@ -28,7 +28,7 @@ def main(argv=None):
     else:
         manager = GoalStateManager(ChatModel(config.state_base_url, config.state_model, config.api_key, config.timeout_seconds, config.ollama_think))
         decider = StrandsDecider(config.decider_url, config.decider_path, config.timeout_seconds)
-        coder = CodingToolGenerator(ChatModel(config.coder_base_url, config.coder_model, config.api_key, config.timeout_seconds, config.ollama_think))
+        coder = CodingToolGenerator(ChatModel(config.coder_base_url, config.coder_model, config.api_key, config.timeout_seconds, config.ollama_think, agent="coding-model"))
     backend = MockBrowser() if (args.demo or args.mock_browser) else MCPStdio(config.mcp_command, config.timeout_seconds)
     try:
         with backend as tools:
