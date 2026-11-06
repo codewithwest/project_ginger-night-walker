@@ -429,6 +429,7 @@ class TaskManager:
                 result = await self.orchestrator.run_browser_workflow(
                     task_id, effective_objective, one_page_plan
                 )
+                round_evidence = []
                 if result.get("status") not in {"completed", "blocked"}:
                     issue_text = "; ".join(result.get("issues", [])) or "Source inspection failed"
                     limitations.append(f"{next_url}: {issue_text}")
@@ -540,14 +541,14 @@ class TaskManager:
                     str(item.get("captured_text") or "") for item in round_evidence
                 )
                 substantive_tokens = set(re.findall(r"[a-z0-9]{3,}", latest_text.casefold()))
-                if len(latest_text.strip()) < 120 or len(substantive_tokens) < 12:
+                if result.get("status") in {"completed", "blocked"} and (len(latest_text.strip()) < 120 or len(substantive_tokens) < 12):
                     record["low_information_rounds"] = int(record.get("low_information_rounds", 0)) + 1
                     limitations.append(
                         f"Round {round_count} yielded insufficient substantive page text; "
                         "it cannot verify success criteria."
                     )
                     self._log(task_id, f"Low-information source streak: {record['low_information_rounds']}/3", "warning")
-                else:
+                elif result.get("status") in {"completed", "blocked"}:
                     record["low_information_rounds"] = 0
 
                 # Persist a useful partial report after every resolved round. If cancelled,
