@@ -485,9 +485,8 @@ class BrowserRuntime:
                         lambda opened: asyncio.create_task(self._enforce_tab_limit(task_id, opened)),
                     )
                     self._tab_listener_contexts.add(id(context))
-            for extra_page in list(getattr(context, "pages", [page])):
-                if extra_page != page and not extra_page.is_closed():
-                    await extra_page.close()
+            # Secondary pages are reviewed by the AI janitor in Orchestrator;
+            # this runtime only enforces the hard cap and protects the primary page.
             response = await page.goto(
                 url,
                 wait_until="domcontentloaded",
