@@ -71,3 +71,42 @@ def source_relevance(objective: str, url: str, title: str, captured_text: str) -
     if not (text_tokens & _FURNITURE_TERMS) and not known_retailer_signal:
         return False, "Rejected: furniture terms appeared only in the URL/title, not captured page text."
     return True, "Furniture-retail relevance confirmed by captured page content."
+
+
+
+def rank_research_candidates(objective: str, candidates: list[dict]) -> list[dict]:
+    """Discard off-topic discovery links and rank likely retailer sources first."""
+    if not is_furniture_retail_research(objective):
+        return candidates
+
+    from urllib.parse import urlsplit
+
+    known_brands = (
+        "weylandts", "coricraft", "decofurn", "homechoice", "furniturecity",
+        "furniture-city", "bradlows", "russells", "lewis", "okfurniture",
+        "dialabed", "dial-a-bed", "rochester", "blockandchisel",
+        "block-and-chisel", "furniturewarehouse", "furniture-warehouse",
+        "mattresswarehouse", "mattress-warehouse", "@home", "at home",
+    )
+    deny_hosts = (
+        "dictionary.cambridge.org", "britannica.com", "southafricafacts.co.za",
+        "southafrica-info.com", "polokwane.gov.za", "gov.za",
+    )
+    ranked: list[tuple[int, int, dict]] = []
+    for position, candidate in enumerate(candidates):
+        url = str(candidate.get("url") or "")
+        label = str(candidate.get("label") or "")
+        host = (urlsplit(url).hostname or "").casefold()
+        haystack = (host + " " + url.replace("-", " ") + " " + label).casefold()
+        if any(host == denied or host.endswith("." + denied) for denied in deny_hosts):
+            continue
+        brand_hits = [brand for brand in known_brands if brand in haystack]
+        tokens = _tokens(haystack)
+        furniture_hits = tokens & _FURNITURE_TERMS
+        retail_hits = tokens & _RETAIL_TERMS
+        if not brand_hits and not furniture_hits:
+            continue
+        score = (12 if brand_hits else 0) + min(len(furniture_hits), 4) * 3 + min(len(retail_hits), 2)
+        ranked.append((score, -position, candidate))
+    ranked.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    return [item[2] for item in ranked]
