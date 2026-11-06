@@ -327,7 +327,12 @@ class OllamaClient:
             "evidence_read, research_search. If a named tool is not available in the runtime, list it as "
             "a requirement but do not imply it exists. Keep read-only work read-only. Do not assign agents, "
             "execute tools, invent evidence, or grant permissions. All subtasks must map to the success "
-            "criteria. Dependencies must be acyclic. Return only JSON matching the schema."
+            "criteria. Dependencies must be acyclic. Generate 3-6 concise research_queries that name the "
+            "actual subject/category, geography and evidence dimensions. Do not turn instruction words such "
+            "as 'top', 'best', 'five' or 'compare' into standalone search topics. For furniture-retailer "
+            "research in South Africa, every discovery query must explicitly include 'furniture' and "
+            "'South Africa'; cover retailer discovery, product ranges, categories, pricing and online "
+            "shopping experience. Avoid lexical matches unrelated to the subject. Return only JSON matching the schema."
         )
         packet = {"original_objective": objective[:2000], "available_capabilities": [
             "navigate", "interact", "extract", "recover"
