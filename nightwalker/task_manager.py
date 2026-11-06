@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -271,6 +272,7 @@ class TaskManager:
             next_assignment = str(checkpoint.get("next_assignment") or "Resume research")
             research_complete = bool(checkpoint.get("research_complete", False))
             resume_in_flight = bool(checkpoint.get("round_in_progress", False))
+            record["low_information_rounds"] = int(record.get("low_information_rounds", 0))
             if not next_url and not research_complete:
                 available = loop_guard.filter_candidates(candidates, visited_urls)
                 if available:
@@ -293,6 +295,7 @@ class TaskManager:
             round_count = 0
             research_complete = False
             resume_in_flight = False
+            record["low_information_rounds"] = 0
         try:
             if not checkpoint:
                 self._log(task_id, "Goal analyst defining success criteria, subtasks, dependencies and tool requirements")
@@ -528,6 +531,22 @@ class TaskManager:
                     if result.get("issues"):
                         limitations.extend(str(issue) for issue in result["issues"])
 
+                # Stop early when consecutive pages contain only navigation chrome,
+                # duplicated snippets or otherwise non-substantive content.
+                latest_text = " ".join(
+                    str(item.get("captured_text") or "") for item in evidence[-3:]
+                )
+                substantive_tokens = set(re.findall(r"[a-z0-9]{3,}", latest_text.casefold()))
+                if len(latest_text.strip()) < 120 or len(substantive_tokens) < 12:
+                    record["low_information_rounds"] = int(record.get("low_information_rounds", 0)) + 1
+                    limitations.append(
+                        f"Round {round_count} yielded insufficient substantive page text; "
+                        "it cannot verify success criteria."
+                    )
+                    self._log(task_id, f"Low-information source streak: {record['low_information_rounds']}/3", "warning")
+                else:
+                    record["low_information_rounds"] = 0
+
                 # Persist a useful partial report after every resolved round. If cancelled,
                 # the operator still receives the evidence collected so far.
                 record["result"] = {
@@ -549,6 +568,21 @@ class TaskManager:
                     loop_guard=loop_guard, round_count=round_count,
                     next_url="", next_assignment=next_assignment,
                 )
+                if record.get("low_information_rounds", 0) >= 3:
+                    limitations.append(
+                        "Research stopped after three consecutive low-information sources. "
+                        "No further search-navigation pages will be counted as progress."
+                    )
+                    next_url = ""
+                    research_complete = True
+                    self._save_checkpoint(
+                        task_id, initial_plan, sources=sources, findings=findings,
+                        evidence=evidence, visited_urls=visited_urls, candidates=candidates,
+                        structured_data=structured_data, limitations=limitations,
+                        loop_guard=loop_guard, round_count=round_count,
+                        next_url="", next_assignment=next_assignment, research_complete=True,
+                    )
+                    break
                 if not candidates or round_count >= self.max_rounds:
                     next_url = ""
                     research_complete = True
