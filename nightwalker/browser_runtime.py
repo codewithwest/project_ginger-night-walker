@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import os
 import re
-import base64
 from urllib.parse import parse_qs, unquote, urljoin, urlparse
 
 from playwright.async_api import Browser, BrowserContext, Page, Route, async_playwright
