@@ -121,7 +121,7 @@ class BrowserRuntime:
             index for index in close_indices
             if isinstance(index, int) and not isinstance(index, bool) and 0 < index < len(pages)
         }
-        max_tabs = self._max_browser_tabs()
+        max_tabs = min(self._max_browser_tabs(), 3)
         # A model cannot retain an unbounded set of secondary tabs.
         overflow = set(range(max_tabs, len(pages)))
         selected.update(overflow)
