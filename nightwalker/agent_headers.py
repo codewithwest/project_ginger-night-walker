@@ -31,7 +31,7 @@ def agent_headers(
             continue
         text = str(value).strip()
         # Header values must be single-line and bounded.
-        text = re.sub(r"[\\r\\n\\x00-\\x1f\\x7f]", " ", text)[:200]
+        text = re.sub(r"[\r\n\x00-\x1f\x7f]", " ", text)[:200]
         if text:
             result[key] = text
     return result
