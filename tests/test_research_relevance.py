@@ -1,6 +1,6 @@
 OBJECTIVE = (
     "Research the top five furniture retailers in South Africa. Compare product "
-    "categories, pricing, target customers and online shopping experiences."
+    "categories, pricing, target customers and online shopping experiences, and opportunities for Weylandts."
 )
 
 
