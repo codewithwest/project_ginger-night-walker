@@ -12,7 +12,7 @@ from nightwalker.contracts import (
     BrowserExtractResponse,
 )
 from nightwalker.decision_contracts import DecisionPlan
-from nightwalker.ollama_client import OllamaClient
+from nightwalker.ollama_client import OllamaClient, OllamaUnavailable
 
 
 class Orchestrator:
@@ -28,12 +28,32 @@ class Orchestrator:
             raise ValueError("The Decider plan has no target URL")
         steps = [step.model_dump(mode="json") for step in plan.steps]
         try:
-            return await self.browser.run_plan(
+            result = await self.browser.run_plan(
                 task_id=task_id,
                 url=str(plan.target_url),
                 steps=steps,
                 objective=objective,
             )
+            # AI classifies only secondary tabs. The browser runtime protects the
+            # primary page and enforces the hard tab cap regardless of model output.
+            tabs = await self.browser.tab_inventory(task_id)
+            if len(tabs) > 1:
+                try:
+                    proposal = await self.ollama.cleanup_browser_tabs(
+                        objective, tabs, task_id=task_id
+                    )
+                    cleanup = await self.browser.cleanup_task_tabs(
+                        task_id, proposal["close_indices"], proposal.get("reason", "AI recommendation")
+                    )
+                    cleanup["mode"] = "ai"
+                except (OllamaUnavailable, RuntimeError, ValueError, TypeError, KeyError) as cleanup_error:
+                    cleanup = await self.browser.cleanup_task_tabs(
+                        task_id, list(range(1, len(tabs))),
+                        "Safe fallback: AI cleanup unavailable (" + str(cleanup_error)[:160] + ")",
+                    )
+                    cleanup["mode"] = "fallback"
+                result["tab_cleanup"] = cleanup
+            return result
         except PermissionError as exc:
             return {"status": "blocked", "issues": [str(exc)[:500]]}
         except (RuntimeError, PlaywrightError, OSError, ValueError) as exc:
