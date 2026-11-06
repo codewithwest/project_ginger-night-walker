@@ -144,3 +144,35 @@ def test_steel_websocket_url_uses_ip_host_header(monkeypatch, websocket_url, exp
     assert runtime._normalise_steel_websocket_url(
         websocket_url, "http://steel-browser:3000/v1"
     ) == expected
+
+
+
+def test_steel_debug_url_is_host_reachable_for_compose_ui(monkeypatch):
+    monkeypatch.setenv("BROWSER_BACKEND", "steel")
+    runtime = BrowserRuntime()
+
+    assert runtime._normalise_steel_debug_url(
+        "http://steel-browser:3000/session/abc?token=viewer"
+    ) == "http://localhost:3000/session/abc?token=viewer"
+    assert runtime._normalise_steel_debug_url(
+        "http://0.0.0.0:3000/session/abc"
+    ) == "http://localhost:3000/session/abc"
+
+
+def test_task_session_exposes_browser_activity_without_session_id(monkeypatch):
+    monkeypatch.setenv("BROWSER_BACKEND", "steel")
+    runtime = BrowserRuntime()
+    runtime._task_sessions["task-1"] = {
+        "backend": "steel",
+        "status": "active",
+        "active": True,
+        "session_id": "internal-session-id",
+        "debug_url": "http://localhost:3000/session/abc",
+        "activity": [{"message": "Navigated"}],
+    }
+
+    snapshot = runtime.task_session("task-1")
+
+    assert snapshot["status"] == "active"
+    assert snapshot["debug_url"] == "http://localhost:3000/session/abc"
+    assert "session_id" not in snapshot
