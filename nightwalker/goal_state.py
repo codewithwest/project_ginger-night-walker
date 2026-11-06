@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class GoalCriteriaPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    criteria: list[str] = Field(min_length=1, max_length=6)
+    criteria: list[str] = Field(min_length=1, max_length=12)
 
 
 class GoalEvidenceClaim(BaseModel):
@@ -36,7 +36,7 @@ class GoalStateManager:
         cleaned = list(dict.fromkeys(
             item.strip()[:240] for item in criteria
             if isinstance(item, str) and item.strip()
-        ))[:6]
+        ))[:12]
         if not cleaned:
             cleaned = [objective.strip()[:240] or "Answer the user's research objective"]
         return {
