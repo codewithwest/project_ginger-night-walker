@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from nightwalker.a2a import A2AMessage
 from nightwalker.browser_runtime import BrowserRuntime
 from nightwalker.contracts import AgentTask, BrowserExtractRequest
 from nightwalker.ollama_client import OllamaUnavailable
@@ -108,6 +109,25 @@ async def clarify_task(task_id: str, request: TaskClarificationRequest):
         raise HTTPException(status_code=404, detail="Task not found")
     return task
 
+
+
+@app.get("/tasks/{task_id}/a2a")
+async def get_a2a_messages(task_id: str):
+    task = task_manager.snapshot(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"task_id": task_id, "messages": task.get("a2a_messages", [])}
+
+
+@app.post("/tasks/{task_id}/a2a")
+async def post_a2a_message(task_id: str, message: A2AMessage):
+    try:
+        result = task_manager.send_a2a_message(task_id, message)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return result
 
 
 @app.post("/tasks/{task_id}/follow-up")
