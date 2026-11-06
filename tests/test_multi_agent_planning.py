@@ -32,6 +32,7 @@ def test_blueprint_preserves_goal_and_models_criteria_and_tools():
     blueprint = sample_blueprint()
     assert blueprint.original_objective.startswith("Research three")
     assert len(blueprint.success_criteria) == 2
+    assert blueprint.research_queries[0] == "top furniture retailers South Africa"
     assert blueprint.subtasks[1].required_tools == ["browser_snapshot", "browser_extract"]
 
 
