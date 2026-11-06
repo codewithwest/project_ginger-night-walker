@@ -4,17 +4,22 @@ on:
   push:
     branches:
       - main
+  # Run checks for every PR, regardless of its target branch.
   pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
+    name: Lint, test and build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -28,10 +33,8 @@ jobs:
       - name: Set up Python
         run: uv python install 3.11
 
-      - name: Resolve and install dependencies
-        run: |
-          uv lock
-          uv sync --locked --group dev
+      - name: Install locked dependencies
+        run: uv sync --locked --group dev
 
       - name: Lint
         run: uv run --locked ruff check .
@@ -39,8 +42,10 @@ jobs:
       - name: Test
         run: uv run --locked pytest
 
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install
+
       - name: Build React frontend
         working-directory: frontend
-        run: |
-          npm install
-          npm run build
+        run: npm run build
