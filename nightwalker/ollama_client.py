@@ -52,12 +52,15 @@ class OllamaClient:
             headers["Authorization"] = f"Bearer {api_key}"
         return headers
 
-    def _require_base_url(self) -> str:
-        if not self.base_url:
-            raise OllamaUnavailable("OLLAMA_BASE_URL is not configured")
-        if not self.base_url.startswith(("https://", "http://")):
-            raise OllamaUnavailable("OLLAMA_BASE_URL must use HTTP or HTTPS")
-        return self.base_url
+    def _require_base_url(self, role: str = "DEFAULT") -> str:
+        """Resolve a role-specific Ollama endpoint, falling back to the shared URL."""
+        key = f"OLLAMA_BASE_URL_{role.upper()}"
+        base_url = (os.getenv(key) or self.base_url).rstrip("/")
+        if not base_url:
+            raise OllamaUnavailable(f"{key} or OLLAMA_BASE_URL is not configured")
+        if not base_url.startswith(("https://", "http://")):
+            raise OllamaUnavailable(f"{key} must use HTTP or HTTPS")
+        return base_url
 
     @staticmethod
     def _chat_content(envelope: Any, *, model: str, operation: str) -> str:
@@ -172,7 +175,7 @@ class OllamaClient:
 
     async def decide_task(self, objective: str) -> DecisionPlan:
         """Turn one natural-language request into a bounded, capability-scoped plan."""
-        base_url = self._require_base_url()
+        base_url = self._require_base_url("DECIDER")
         model = os.getenv("OLLAMA_MODEL_DECIDER") or os.getenv(
             "OLLAMA_MODEL_DEFAULT", "qwen2.5:7b"
         )
@@ -296,7 +299,7 @@ class OllamaClient:
 
 
     async def initialise_goal_criteria(self, objective: str, proposed_steps: list[str]) -> list[str]:
-        base_url = self._require_base_url()
+        base_url = self._require_base_url("GOAL_STATE")
         model = os.getenv("OLLAMA_MODEL_GOAL_STATE", "qwen3:0.6b")
         body = {"model": model, "stream": False, "think": False, "format": GoalCriteriaPlan.model_json_schema(),
             "messages": [{"role": "system", "content": "Extract 1-6 concrete success criteria from the original user objective. Preserve explicit requirements; do not invent requirements. Return JSON only."},
@@ -415,7 +418,7 @@ class OllamaClient:
         visited_urls: list[str],
     ) -> ResearchRoundPlan:
         """Choose only from browser-discovered URLs; context is a compact task packet."""
-        base_url = self._require_base_url()
+        base_url = self._require_base_url("DECIDER")
         model = os.getenv("OLLAMA_MODEL_DECIDER") or os.getenv(
             "OLLAMA_MODEL_DEFAULT", "qwen2.5:7b"
         )
@@ -511,8 +514,8 @@ class OllamaClient:
         round_count: int, max_rounds: int,
     ) -> ResearchSynthesis:
         """Produce a concise synthesis from captured observations, not raw conversation history."""
-        base_url = self._require_base_url()
-        model = os.getenv("OLLAMA_MODEL_DECIDER") or os.getenv(
+        base_url = self._require_base_url("SYNTHESIS")
+        model = os.getenv("OLLAMA_MODEL_SYNTHESIS") or os.getenv("OLLAMA_MODEL_DECIDER") or os.getenv(
             "OLLAMA_MODEL_DEFAULT", "qwen2.5:7b"
         )
         compact_findings = [
@@ -567,7 +570,7 @@ class OllamaClient:
             ) from exc
 
     async def run_agent(self, task: AgentTask) -> AgentResult:
-        base_url = self._require_base_url()
+        base_url = self._require_base_url(task.capability.value.upper())
         context = self.compiler.compile(task)
         model = self.registry.model_for(task.capability)
         packet = {
