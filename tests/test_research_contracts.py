@@ -14,7 +14,7 @@ def test_round_plan_must_select_a_discovered_url():
     validated = ResearchRoundPlan.validate_plan(
         plan, {"https://example.com/research/"}
     )
-    assert str(validated.next_url) == "https://example.com/research/"
+    assert str(validated.next_url) == "https://example.com/research"
 
 
 def test_round_plan_rejects_model_invented_url():
