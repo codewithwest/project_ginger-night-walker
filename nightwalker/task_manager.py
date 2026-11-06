@@ -292,10 +292,30 @@ class TaskManager:
             resume_in_flight = bool(checkpoint.get("round_in_progress", False))
             record["low_information_rounds"] = int(record.get("low_information_rounds", 0))
             if not next_url and not research_complete:
-                available = loop_guard.filter_candidates(rank_research_candidates(self._effective_objective(task_id, objective), candidates), visited_urls)
+                effective_objective = self._effective_objective(task_id, objective)
+                available = loop_guard.filter_candidates(
+                    rank_research_candidates(effective_objective, candidates), visited_urls
+                )
+                if not available:
+                    # Older checkpoints may contain only unrelated discovery links.
+                    # Re-seed the remaining rounds from the original focused query set.
+                    from urllib.parse import quote
+
+                    queries = focused_research_queries(
+                        effective_objective, record.get("research_queries", [])
+                    )
+                    candidates.extend({
+                        "url": "https://www.bing.com/search?q=" + quote(query),
+                        "label": "Recovery research query: " + query[:180],
+                    } for query in queries)
+                    available = loop_guard.filter_candidates(
+                        rank_research_candidates(effective_objective, candidates), visited_urls
+                    )
+                    if available:
+                        self._log(task_id, "Checkpoint recovery discarded unrelated links and re-seeded focused research queries", "warning")
                 if available:
                     next_url = available[0]["url"]
-                    next_assignment = "Resume: inspect the next available discovered source"
+                    next_assignment = "Resume: inspect the next relevant discovered source"
                 else:
                     research_complete = True
             self._log(task_id, f"Restored research checkpoint at round {round_count}; {len(sources)} sources already captured")
