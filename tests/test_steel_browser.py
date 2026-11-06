@@ -92,7 +92,7 @@ async def test_self_hosted_steel_session_connects_without_api_key(monkeypatch):
         def json(self):
             return {
                 "id": "session-123",
-                "websocketUrl": "ws://steel-browser:9223/devtools/browser/session-123",
+                "websocketUrl": "ws://0.0.0.0:3000/",
             }
 
     class FakeAsyncClient:
@@ -116,5 +116,22 @@ async def test_self_hosted_steel_session_connects_without_api_key(monkeypatch):
     assert result is context
     assert captured["api_url"] == "http://steel-browser:3000/v1/sessions"
     assert "steel-api-key" not in captured["headers"]
-    assert captured["websocket_url"].startswith("ws://steel-browser:9223/")
+    assert captured["websocket_url"] == "ws://steel-browser:3000/"
     assert captured["route_pattern"] == "**/*"
+
+
+@pytest.mark.parametrize(
+    ("websocket_url", "expected"),
+    [
+        ("ws://0.0.0.0:3000/", "ws://steel-browser:3000/"),
+        ("ws://[::]:3000/cdp", "ws://steel-browser:3000/cdp"),
+        ("ws://steel-browser:9223/cdp", "ws://steel-browser:9223/cdp"),
+    ],
+)
+def test_steel_websocket_url_replaces_only_wildcard_hosts(monkeypatch, websocket_url, expected):
+    monkeypatch.setenv("BROWSER_BACKEND", "steel")
+    runtime = BrowserRuntime()
+
+    assert runtime._normalise_steel_websocket_url(
+        websocket_url, "http://steel-browser:3000/v1"
+    ) == expected
