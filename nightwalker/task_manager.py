@@ -534,7 +534,7 @@ class TaskManager:
                 # Stop early when consecutive pages contain only navigation chrome,
                 # duplicated snippets or otherwise non-substantive content.
                 latest_text = " ".join(
-                    str(item.get("captured_text") or "") for item in evidence[-3:]
+                    str(item.get("captured_text") or "") for item in round_evidence
                 )
                 substantive_tokens = set(re.findall(r"[a-z0-9]{3,}", latest_text.casefold()))
                 if len(latest_text.strip()) < 120 or len(substantive_tokens) < 12:
