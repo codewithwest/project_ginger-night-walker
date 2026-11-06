@@ -62,11 +62,18 @@ Vite proxies API requests to the local FastAPI service on port 8000.
 
 | Variable | Purpose | Guidance |
 |---|---|---|
-| `OLLAMA_BASE_URL` | Remote Ollama API base URL | Operator-controlled trusted endpoint |
+| `OLLAMA_BASE_URL` | Default remote Ollama API base URL | Operator-controlled trusted endpoint; fallback for role-specific URLs |
+| `OLLAMA_BASE_URL_DEFAULT` | Default-role Ollama endpoint override | Optional; falls back to `OLLAMA_BASE_URL` |
+| `OLLAMA_BASE_URL_DECIDER` | Decider/research-planner endpoint | Optional; falls back to `OLLAMA_BASE_URL` |
+| `OLLAMA_BASE_URL_GOAL_STATE` | Goal criteria/progress endpoint | Optional; falls back to `OLLAMA_BASE_URL` |
+| `OLLAMA_BASE_URL_SYNTHESIS` | Research synthesis endpoint | Optional; falls back to `OLLAMA_BASE_URL` |
+| `OLLAMA_BASE_URL_NAVIGATE`, `_INTERACT`, `_EXTRACT`, `_RECOVER` | Capability-specific inference endpoints | Optional; each falls back to `OLLAMA_BASE_URL` |
 | `OLLAMA_API_KEY` | Optional bearer credential | Secret; never commit |
 | `OLLAMA_MODEL_DEFAULT` | Default inference model | Must exist on remote Ollama |
 | `OLLAMA_MODEL_DECIDER` | Research planner override | Optional |
-| `OLLAMA_MODEL_GOAL_STATE` | Small model for success criteria and evidence progress (default `qwen3:0.6b`) | Must exist on remote Ollama |
+| `OLLAMA_MODEL_GOAL_STATE` | Small model for success criteria and evidence progress (default `qwen3.5:0.8b`) | Must exist on the configured goal-state Ollama endpoint |
+| `OLLAMA_MODEL_SYNTHESIS` | Optional model override for final research synthesis | Falls back to Decider model |
+| `OLLAMA_MODEL_DEFAULT` | Default inference model (default `qwen3.5:9b`) | Must exist on the selected endpoint |
 | `STRANDS_DECIDER_URL` | Optional Strands Decider base URL | Leave empty to use the Ollama research planner |
 | `STRANDS_DECIDER_PATH` | Strands endpoint path (default `/v1/systemone`) | Match the deployed Strands API |
 | `STRANDS_DECIDER_API_KEY` | Optional Strands bearer token | Separate from Ollama credentials |
@@ -78,7 +85,7 @@ Vite proxies API requests to the local FastAPI service on port 8000.
 | `EVIDENCE_DIR` | Evidence, scratchpad and default task-state root | Docker default `/app/evidence`; must be on persistent storage |
 | `TASK_STATE_DIR` | Optional override for atomic task JSON snapshots | Defaults to `EVIDENCE_DIR/tasks` |
 
-Check `.env.example` for the current supported values and defaults.
+Check `.env.example` for the current supported values and defaults. Role-specific endpoint variables use the matching `OLLAMA_MODEL_*` role but are independently configurable. The experimental standalone integration has its own `STATE_BASE_URL`, `CODER_BASE_URL` and `DECIDER_URL` settings; copy `integrations/goal_aware_strands/.env.example` or use its JSON config. Its state/coder endpoints can point to different Ollama servers, while Strands Decider remains a separate service.
 
 ## 6. API surface
 
