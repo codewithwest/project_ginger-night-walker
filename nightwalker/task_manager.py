@@ -309,7 +309,10 @@ class TaskManager:
                 except (OllamaUnavailable, AttributeError, ValueError) as exc:
                     self._log(task_id, f"Goal-first planning unavailable; using bounded legacy planning fallback: {exc}", "warning")
                 self._log(task_id, "Decider resolving the initial public research entry point")
-                initial_plan = await self.orchestrator.ollama.decide_task(objective, task_id=task_id)
+                try:
+                    initial_plan = await self.orchestrator.ollama.decide_task(objective, task_id=task_id)
+                except TypeError:
+                    initial_plan = await self.orchestrator.ollama.decide_task(objective)
                 record["plan"] = initial_plan.model_dump(mode="json")
                 if blueprint is None:
                     proposed_steps = [step.objective for step in initial_plan.steps]
