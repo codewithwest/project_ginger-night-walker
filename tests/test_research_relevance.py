@@ -1,4 +1,8 @@
-from nightwalker.research_relevance import focused_research_queries, is_furniture_retail_research, source_relevance
+from nightwalker.research_relevance import (
+    focused_research_queries,
+    is_furniture_retail_research,
+    source_relevance,
+)
 
 
 OBJECTIVE = (
