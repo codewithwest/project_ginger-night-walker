@@ -1,9 +1,4 @@
 """Deterministic relevance checks for research discovery and source admission."""
-from __future__ import annotations
-
-import re
-from urllib.parse import urlsplit
-
 
 _FURNITURE_TERMS = {
     "furniture", "furnishings", "sofa", "sofas", "couch", "couches",
@@ -12,16 +7,10 @@ _FURNITURE_TERMS = {
     "sideboard", "cabinet", "homeware", "decor", "upholstery",
 }
 _RETAIL_TERMS = {"retailer", "retailers", "store", "stores", "shop", "shops", "online"}
-_STOPWORDS = {
-    "about", "after", "analyse", "analyze", "and", "are", "based", "clearly",
-    "compare", "comparison", "determine", "each", "evaluate", "find", "for",
-    "from", "gather", "identify", "information", "into", "main", "online",
-    "record", "research", "south", "africa", "the", "their", "top", "five",
-    "with", "website", "websites", "what", "which",
-}
-
 
 def _tokens(value: str) -> set[str]:
+    import re
+
     return set(re.findall(r"[a-z0-9]{3,}", value.casefold()))
 
 
@@ -52,6 +41,8 @@ def focused_research_queries(objective: str, proposed: list[str] | None = None) 
 
 def source_relevance(objective: str, url: str, title: str, captured_text: str) -> tuple[bool, str]:
     """Reject unrelated pages before they can enter the evidence set."""
+    from urllib.parse import urlsplit
+
     if not is_furniture_retail_research(objective):
         return True, "No category-specific relevance gate applies."
 
