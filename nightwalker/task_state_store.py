@@ -26,11 +26,25 @@ class TaskStateStore:
         self.directory.mkdir(parents=True, exist_ok=True)
         destination = self.directory / self._filename(task_id)
         temporary = destination.with_suffix(".tmp")
-        temporary.write_text(
-            json.dumps(task, ensure_ascii=False, separators=(",", ":"), default=str),
-            encoding="utf-8",
-        )
+        # Flush the complete JSON document before the atomic rename. The rename
+        # prevents readers from seeing a partial file; fsync makes the checkpoint
+        # resilient to an abrupt container/host restart on the mounted volume.
+        payload = json.dumps(task, ensure_ascii=False, separators=(",", ":"))
+        with temporary.open("w", encoding="utf-8") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
         os.replace(temporary, destination)
+        try:
+            directory_fd = os.open(self.directory, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        except OSError:
+            # Some filesystems do not support fsync on directories. The file itself
+            # has still been flushed and atomically replaced.
+            pass
 
     def load_all(self) -> list[dict[str, Any]]:
         if not self.directory.is_dir():
