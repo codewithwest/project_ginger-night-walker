@@ -87,7 +87,11 @@ Vite proxies API requests to the local FastAPI service on port 8000.
 
 Check `.env.example` for the current supported values and defaults. Role-specific endpoint variables use the matching `OLLAMA_MODEL_*` role but are independently configurable. The experimental standalone integration has its own `STATE_BASE_URL`, `CODER_BASE_URL` and `DECIDER_URL` settings; copy `integrations/goal_aware_strands/.env.example` or use its JSON config. Its state/coder endpoints can point to different Ollama servers, while Strands Decider remains a separate service.
 
-## 6. API surface
+## 6. Agent identity and request tracing
+
+Every model-service request carries explicit `X-Ginger-Agent`, `X-Ginger-Capability`, `X-Ginger-Operation` and `X-Ginger-Integration` headers. When known, requests also carry `X-Ginger-Model`, `X-Ginger-Task-Id` and `X-Ginger-Research-Round`. The standalone Goal-Aware Strands integration uses the same header convention and identifies its integration separately. These are observability/routing metadata only: headers are not authentication, authorization, or permission grants. The orchestrator and PolicyEngine remain authoritative for access and browser actions.
+
+## 7. API surface
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -104,7 +108,7 @@ Check `.env.example` for the current supported values and defaults. Role-specifi
 
 FastAPI's OpenAPI schema is available at `/openapi.json`; Swagger UI is available at `/docs` unless disabled by deployment configuration.
 
-## 7. Quality gates and coding standards
+## 8. Quality gates and coding standards
 
 CI currently runs:
 - Python 3.11 dependency resolution with uv;
@@ -121,7 +125,7 @@ Engineering rules:
 - Tests: test policy denials, failure paths, task cancellation, evidence persistence, schema validation and frontend build.
 - Documentation: update diagrams, API tables, standards and status matrices whenever boundaries or behavior change.
 
-## 8. Test strategy
+## 9. Test strategy
 
 | Layer | Required coverage |
 |---|---|
@@ -135,7 +139,7 @@ Engineering rules:
 
 A passing build is not evidence that a browser security boundary is complete. Keep security tests separate and explicit.
 
-## 9. Operational checks
+## 10. Operational checks
 
 ```bash
 docker compose ps
@@ -152,7 +156,7 @@ Common diagnoses:
 - Evidence missing: check `EVIDENCE_DIR`, mount and container write permissions.
 - Browser blocked: inspect task limitations and policy logs; do not weaken URL policy to make a target load.
 
-## 10. Known limitations
+## 11. Known limitations
 
 - Task snapshots and research checkpoints are durable and restart-resumable for the single-process service. This is atomic JSON storage, not a transactional multi-worker queue; do not run multiple Night Walker workers against the same task directory. A crash during a page inspection can retry that one source, bounded by the loop guard. Terminal and clarification-waiting tasks are restored but not auto-resumed.
 - Research runs up to 30 bounded page-inspection rounds, starting from Bing search results or a user-supplied URL; discovered links are the candidate source pool. The Research Loop Guard canonicalises URL comparisons, deduplicates candidates, permits at most two attempts per URL, records bounded recent outcomes in task state/scratchpad, skips repeated or already visited sources, and falls back to another discovered candidate when a selected source is exhausted.
