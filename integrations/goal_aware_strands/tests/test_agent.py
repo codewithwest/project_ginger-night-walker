@@ -71,7 +71,7 @@ def test_strands_uses_official_systemone_payload(monkeypatch):
     import agent.models as m
     captured = {}
     def fake_post(url, payload, **kwargs):
-        captured.update(url=url, payload=payload)
+        captured.update(url=url, payload=payload, headers=kwargs.get("headers"))
         return {"answers":{"next_action":{"type":"choice","choice":"read_page","confidence":0.6}}}
     monkeypatch.setattr(m, "post_json", fake_post)
     out = StrandsDecider("http://127.0.0.1:8021").choose("Read page",{"page_snapshot":""},["read_page","finish"])
@@ -79,13 +79,15 @@ def test_strands_uses_official_systemone_payload(monkeypatch):
     assert captured["url"] == "http://127.0.0.1:8021/v1/systemone"
     assert captured["payload"]["questions"]["next_action"]["type"] == "choice"
     assert "original_goal" in captured["payload"]["state"]
+    assert captured["headers"]["X-Ginger-Agent"] == "strands-decider"
+    assert captured["headers"]["X-Ginger-Capability"] == "action-selection"
 
 
 def test_ollama_native_chat_payload(monkeypatch):
     import agent.models as m
     captured = {}
     def fake_post(url, payload, **kwargs):
-        captured.update(url=url, payload=payload)
+        captured.update(url=url, payload=payload, headers=kwargs.get("headers"))
         return {"message":{"role":"assistant","content":"{\"criteria\":[\"done\"]}"},"done":True}
     monkeypatch.setattr(m, "post_json", fake_post)
     response = m.ChatModel("http://127.0.0.1:11434", "qwen3:0.6b").generate("sys", "task", 200)
@@ -93,6 +95,8 @@ def test_ollama_native_chat_payload(monkeypatch):
     assert captured["url"] == "http://127.0.0.1:11434/api/chat"
     assert captured["payload"]["think"] is False
     assert captured["payload"]["options"]["num_predict"] == 200
+    assert captured["headers"]["X-Ginger-Agent"] == "goal-state"
+    assert captured["headers"]["X-Ginger-Integration"] == "goal-aware-strands"
 
 
 def test_placeholder_goal_is_rejected():
