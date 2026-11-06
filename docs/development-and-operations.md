@@ -70,6 +70,7 @@ Vite proxies API requests to the local FastAPI service on port 8000.
 | `OLLAMA_BASE_URL_SYNTHESIS` | Research synthesis endpoint | Optional; falls back to `OLLAMA_BASE_URL` |
 | `OLLAMA_BASE_URL_NAVIGATE`, `_INTERACT`, `_EXTRACT`, `_RECOVER` | Capability-specific inference endpoints | Optional; each falls back to `OLLAMA_BASE_URL` |
 | `OLLAMA_API_KEY` | Optional bearer credential | Secret; never commit |
+| `OLLAMA_KEEP_ALIVE` | Ollama model residency after each request (default `0`) | `0` unloads after each call to reduce peak RAM; increase only if the host can keep both models loaded |
 | `OLLAMA_MODEL_DEFAULT` | Main model for planning, navigation, interaction and synthesis (default `qwen3.5:9b`) | Must exist on remote Ollama |
 | `OLLAMA_MODEL_LIGHT` | Smaller model for extraction, recovery and goal-progress proposals (default `qwen3.5:4b`) | Must exist on remote Ollama; Python validates evidence and outputs |
 | `NAVIGATION_TIMEOUT_MS` | Browser navigation timeout | Keep bounded |
