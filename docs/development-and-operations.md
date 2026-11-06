@@ -6,7 +6,7 @@
 - Remote Ollama serves model inference; no Ollama container is part of this Compose stack.
 - Browser execution defaults to local Playwright. Set `BROWSER_BACKEND=steel` and provide `STEEL_API_KEY` to use Steel-managed cloud browser sessions.
 - The default Compose binding is `127.0.0.1:8000`.
-- Task records and resumable checkpoints are persisted as atomic JSON snapshots under `EVIDENCE_DIR/tasks` (Docker default: `/app/evidence/tasks`). Evidence JSON and append-only scratchpad notes share the same persistent volume.
+- Task records and resumable checkpoints are persisted as atomic JSON snapshots under `EVIDENCE_DIR/tasks` (Docker default: `/app/evidence/tasks`). Evidence JSON, append-only scratchpad notes and per-task Markdown goal checklists share the same persistent volume. The checklist is regenerated from the evidence-gated goal ledger and supplied to research planning, goal verification and final synthesis.
 
 ## 2. Prerequisites
 
@@ -36,7 +36,7 @@ docker compose up --build -d
 docker compose logs --tail=100 night-walker
 ```
 
-Task records, scratchpad notes, evidence and round checkpoints persist on the Compose named volume `nightwalker_evidence`. On startup, queued/running tasks are restored and resumed from their last checkpoint. Keep the volume when recreating containers; `docker compose down -v` deletes it.
+Task records, scratchpad notes, generated Markdown checklists, evidence and round checkpoints persist on the Compose named volume `nightwalker_evidence`. On startup, queued/running tasks are restored and resumed from their last checkpoint. Keep the volume when recreating containers; `docker compose down -v` deletes it.
 
 ## 4. Local development
 
@@ -104,7 +104,7 @@ Every model-service request carries explicit `X-Ginger-Agent`, `X-Ginger-Capabil
 | GET | `/health/ollama` | Remote inference connectivity |
 | POST | `/tasks` | Submit natural-language objective (202) |
 | GET | `/tasks` | List restored and in-memory tasks |
-| GET | `/tasks/{task_id}` | Fetch task state, execution blueprint, assignments and progress |\n| GET | `/tasks/{task_id}/a2a` | Read task-scoped A2A messages |\n| POST | `/tasks/{task_id}/a2a` | Send a typed A2A message between agents allocated to this task |
+| GET | `/tasks/{task_id}` | Fetch task state, execution blueprint, assignments, progress and the current `checklist_markdown` |\n| GET | `/tasks/{task_id}/a2a` | Read task-scoped A2A messages |\n| POST | `/tasks/{task_id}/a2a` | Send a typed A2A message between agents allocated to this task |
 | POST | `/tasks/{task_id}/clarify` | Supply clarification |
 | POST | `/tasks/{task_id}/follow-up` | Add an instruction to an active research task for subsequent rounds |
 | DELETE | `/tasks/{task_id}` | Cancel active, queued or clarification-waiting task; preserve partial report |
