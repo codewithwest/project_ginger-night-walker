@@ -8,9 +8,9 @@ ACTIONS = ("navigate", "read_page", "click", "type_text", "select_option", "extr
 @dataclass
 class Config:
     state_base_url: str = "http://127.0.0.1:11434"
-    state_model: str = "qwen3:0.6b"
+    state_model: str = "qwen3.5:0.8b"
     coder_base_url: str = "http://127.0.0.1:11434"
-    coder_model: str = "qwen2.5-coder:1.5b"
+    coder_model: str = "qwen3.5:9b"
     decider_url: str = "http://127.0.0.1:8021"
     decider_path: str = "/v1/systemone"
     api_key: str = "local"
