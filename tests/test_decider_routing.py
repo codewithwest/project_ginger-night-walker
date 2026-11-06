@@ -20,6 +20,12 @@ def test_missing_material_scope_still_requires_clarification():
     assert OllamaClient._clarification_needs_user_input(
         "What city should I use for nearby services?"
     )
+    assert OllamaClient._clarification_needs_user_input(
+        "Please provide the product model to compare."
+    )
+    assert OllamaClient._clarification_needs_user_input(
+        "Specify the date range for this historical comparison."
+    )
 
 
 def test_nonessential_generic_question_falls_back_to_search():
