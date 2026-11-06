@@ -4,7 +4,7 @@
 
 - Ginger OS / Docker host runs FastAPI, Playwright Chromium and the React UI.
 - Remote Ollama serves model inference; no Ollama container is part of this Compose stack.
-- Browser execution defaults to local Playwright. Set `BROWSER_BACKEND=steel` and provide `STEEL_API_KEY` to use Steel-managed cloud browser sessions.
+- Browser execution defaults to local Playwright. Set `BROWSER_BACKEND=steel` to use the self-hosted Steel service in Compose. `STEEL_API_KEY` is only needed if the configured Steel endpoint requires authentication.
 - The default Compose binding is `127.0.0.1:8000`.
 - Task records and resumable checkpoints are persisted as atomic JSON snapshots under `EVIDENCE_DIR/tasks` (Docker default: `/app/evidence/tasks`). Evidence JSON, append-only scratchpad notes and per-task Markdown goal checklists share the same persistent volume. The checklist is regenerated from the evidence-gated goal ledger and supplied to research planning, goal verification and final synthesis.
 
@@ -70,7 +70,7 @@ Vite proxies API requests to the local FastAPI service on port 8000.
 | `OLLAMA_BASE_URL_SYNTHESIS` | Research synthesis endpoint | Optional; falls back to `OLLAMA_BASE_URL` |
 | `OLLAMA_BASE_URL_NAVIGATE`, `_INTERACT`, `_EXTRACT`, `_RECOVER` | Capability-specific inference endpoints | Optional; each falls back to `OLLAMA_BASE_URL` |
 | `OLLAMA_API_KEY` | Optional bearer credential | Secret; never commit |
-| `OLLAMA_MODEL_DEFAULT` | Default inference model | Must exist on remote Ollama |
+| `OLLAMA_MODEL_DEFAULT` | Main model for planning, navigation, interaction and synthesis (default `qwen3.5:9b`) | Must exist on remote Ollama |
 | `OLLAMA_MODEL_DECIDER` | Research planner override | Optional |
 | `OLLAMA_MODEL_GOAL_STATE` | Small model for success criteria and evidence progress (default `qwen3.5:0.8b`) | Must exist on the configured goal-state Ollama endpoint |
 | `OLLAMA_MODEL_SYNTHESIS` | Optional model override for final research synthesis | Falls back to Decider model |
@@ -83,14 +83,14 @@ Vite proxies API requests to the local FastAPI service on port 8000.
 | `OLLAMA_MODEL_EXTRACT` | Extraction capability model | Falls back to default |
 | `OLLAMA_MODEL_RECOVER` | Recovery capability model | Falls back to default |
 | `NAVIGATION_TIMEOUT_MS` | Browser navigation timeout | Keep bounded |
-| `BROWSER_BACKEND` | Browser execution provider (`local` or `steel`) | Defaults to `local`; Steel requires an API key |
-| `STEEL_API_KEY` | Steel API credential | Secret; configure in `.env` or secret manager; never commit |
-| `STEEL_API_BASE_URL` | Steel Sessions REST API base | Defaults to `https://api.steel.dev/v1`; only override for a trusted compatible endpoint |
+| `BROWSER_BACKEND` | Browser execution provider (`local` or `steel`) | Compose defaults to self-hosted Steel; `local` uses Playwright Chromium |
+| `STEEL_API_KEY` | Optional Steel API credential | Leave blank for an unauthenticated self-hosted instance; never commit secrets |
+| `STEEL_API_BASE_URL` | Steel Sessions REST API base | Self-hosted Compose default: `http://steel-browser:3000/v1` |
 | `STEEL_SESSION_TIMEOUT_MS` | Steel session lifetime in milliseconds | Defaults to 300000 (5 minutes); keep bounded |
 | `EVIDENCE_DIR` | Evidence, scratchpad and default task-state root | Docker default `/app/evidence`; must be on persistent storage |
 | `TASK_STATE_DIR` | Optional override for atomic task JSON snapshots | Defaults to `EVIDENCE_DIR/tasks` |
 
-Check `.env.example` for the current supported values and defaults. Role-specific endpoint variables use the matching `OLLAMA_MODEL_*` role but are independently configurable. The experimental standalone integration has its own `STATE_BASE_URL`, `CODER_BASE_URL` and `DECIDER_URL` settings; copy `integrations/goal_aware_strands/.env.example` or use its JSON config. Its state/coder endpoints can point to different Ollama servers, while Strands Decider remains a separate service.
+Night Walker intentionally routes across two model names only: `OLLAMA_MODEL_DEFAULT` (main) and `OLLAMA_MODEL_LIGHT` (small). Planning and synthesis use the main model; extraction, recovery and goal-progress proposals use the light model. The two tiers may share one Ollama endpoint. Do not set role-specific model overrides. Role-specific endpoint URLs remain optional for deployments that serve the same two models from different trusted endpoints. The experimental standalone integration has its own settings and is not part of this two-model runtime.
 
 ## 6. Agent identity and request tracing
 
