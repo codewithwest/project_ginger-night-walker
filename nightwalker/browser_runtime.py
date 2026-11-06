@@ -4,6 +4,8 @@ import asyncio
 import base64
 import os
 import re
+import socket
+import ipaddress
 from urllib.parse import parse_qs, unquote, urlencode, urljoin, urlparse
 
 import httpx
@@ -62,18 +64,30 @@ class BrowserRuntime:
         api = urlparse(api_base)
         host = (websocket.hostname or "").strip("[]").lower()
         if host in {"0.0.0.0", "::", ""}:
-            api_host = api.hostname
-            if not api_host:
-                raise RuntimeError("STEEL_API_BASE_URL must include a reachable hostname")
-            netloc = api_host
-            if websocket.port:
-                netloc += f":{websocket.port}"
-            elif api.port:
-                netloc += f":{api.port}"
-            if ":" in api_host and not api_host.startswith("["):
-                netloc = f"[{api_host}]" + (f":{websocket.port or api.port}" if websocket.port or api.port else "")
-            return websocket._replace(netloc=netloc).geturl()
-        return websocket_url
+            host = (api.hostname or "").strip("[]").lower()
+        if not host:
+            raise RuntimeError("STEEL_API_BASE_URL must include a reachable hostname")
+
+        # Steel's self-hosted CDP gateway rejects DNS-name Host headers. Resolve
+        # the Compose service name and connect using its container IP instead.
+        try:
+            ipaddress.ip_address(host)
+            connect_host = host
+        except ValueError:
+            port = websocket.port or api.port or 80
+            addresses = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+            if not addresses:
+                raise RuntimeError(f"Could not resolve Steel browser host: {host}")
+            connect_host = addresses[0][4][0]
+
+        if ":" in connect_host:
+            netloc = f"[{connect_host}]"
+        else:
+            netloc = connect_host
+        port = websocket.port or api.port
+        if port:
+            netloc += f":{port}"
+        return websocket._replace(netloc=netloc).geturl()
 
     async def _release_steel_session(self, session_id: str) -> None:
         api_base = os.getenv("STEEL_API_BASE_URL", "http://steel-browser:3000/v1").rstrip("/")
