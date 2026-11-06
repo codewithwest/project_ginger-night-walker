@@ -1065,6 +1065,15 @@ class TaskManager:
         )
         return self.snapshot(task_id)
 
+    async def _retry_after_backoff(
+        self, task_id: str, objective: str, delay_seconds: int,
+    ) -> None:
+        await asyncio.sleep(delay_seconds)
+        record = self.tasks.get(task_id)
+        if record is None or record.get("status") != "queued" or self.shutting_down:
+            return
+        await self._execute_decided(task_id, objective, resume=True)
+
     def retry(self, task_id: str) -> dict[str, Any] | None:
         """Retry a failed natural-language task from its latest durable checkpoint."""
         record = self.tasks.get(task_id)
@@ -1096,6 +1105,7 @@ class TaskManager:
                 "warning",
             )
         record["retry_count"] = int(record.get("retry_count", 0)) + 1
+        delay_seconds = min(30, 2 ** min(record["retry_count"], 5))
         record["error"] = None
         record["status"] = "queued"
         record["current_step"] = None
@@ -1105,12 +1115,12 @@ class TaskManager:
             "status": "queued",
             "message": (
                 f"Manual retry #{record['retry_count']} accepted. "
-                "Existing evidence and completed research rounds are preserved."
+                f"Resuming in {delay_seconds} seconds with existing evidence and checkpoints preserved."
             ),
         })
         self._persist(task_id)
         self.running[task_id] = asyncio.create_task(
-            self._execute_decided(task_id, objective, resume=True)
+            self._retry_after_backoff(task_id, objective, delay_seconds)
         )
         return self.snapshot(task_id)
 
