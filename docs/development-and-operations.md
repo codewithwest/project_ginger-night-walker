@@ -71,17 +71,7 @@ Vite proxies API requests to the local FastAPI service on port 8000.
 | `OLLAMA_BASE_URL_NAVIGATE`, `_INTERACT`, `_EXTRACT`, `_RECOVER` | Capability-specific inference endpoints | Optional; each falls back to `OLLAMA_BASE_URL` |
 | `OLLAMA_API_KEY` | Optional bearer credential | Secret; never commit |
 | `OLLAMA_MODEL_DEFAULT` | Main model for planning, navigation, interaction and synthesis (default `qwen3.5:9b`) | Must exist on remote Ollama |
-| `OLLAMA_MODEL_DECIDER` | Research planner override | Optional |
-| `OLLAMA_MODEL_GOAL_STATE` | Small model for success criteria and evidence progress (default `qwen3.5:0.8b`) | Must exist on the configured goal-state Ollama endpoint |
-| `OLLAMA_MODEL_SYNTHESIS` | Optional model override for final research synthesis | Falls back to Decider model |
-| `OLLAMA_MODEL_DEFAULT` | Default inference model (default `qwen3.5:9b`) | Must exist on the selected endpoint |
-| `STRANDS_DECIDER_URL` | Optional Strands Decider base URL | Leave empty to use the Ollama research planner |
-| `STRANDS_DECIDER_PATH` | Strands endpoint path (default `/v1/systemone`) | Match the deployed Strands API |
-| `STRANDS_DECIDER_API_KEY` | Optional Strands bearer token | Separate from Ollama credentials |
-| `OLLAMA_MODEL_NAVIGATE` | Navigation capability model | Falls back to default |
-| `OLLAMA_MODEL_INTERACT` | Interaction capability model | Falls back to default |
-| `OLLAMA_MODEL_EXTRACT` | Extraction capability model | Falls back to default |
-| `OLLAMA_MODEL_RECOVER` | Recovery capability model | Falls back to default |
+| `OLLAMA_MODEL_LIGHT` | Smaller model for extraction, recovery and goal-progress proposals (default `qwen3.5:4b`) | Must exist on remote Ollama; Python validates evidence and outputs |
 | `NAVIGATION_TIMEOUT_MS` | Browser navigation timeout | Keep bounded |
 | `BROWSER_BACKEND` | Browser execution provider (`local` or `steel`) | Compose defaults to self-hosted Steel; `local` uses Playwright Chromium |
 | `STEEL_API_KEY` | Optional Steel API credential | Leave blank for an unauthenticated self-hosted instance; never commit secrets |
