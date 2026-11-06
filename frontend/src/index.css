@@ -23,7 +23,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 button:focus-visible, textarea:focus-visible, a:focus-visible { outline: 2px solid #5e8b6e; outline-offset: 3px; }
 button { cursor: pointer; }
 .app-shell { min-height: 100vh; }
-.topbar { height: 76px; padding: 0 max(28px, calc((100vw - 1320px) / 2)); display: flex; align-items: center; justify-content: space-between; background: #fffefa; border-bottom: 1px solid var(--line); }
+.topbar { height: 76px; padding: 0 max(28px, calc((100vw - 1520px) / 2)); display: flex; align-items: center; justify-content: space-between; background: #fffefa; border-bottom: 1px solid var(--line); }
 .wordmark { display: inline-flex; align-items: center; gap: 11px; color: var(--ink); text-decoration: none; }
 .wordmark__mark { display: grid; place-items: center; width: 37px; height: 37px; border-radius: 12px; background: var(--green); color: #f5f4eb; font: 800 23px var(--serif); letter-spacing: -2px; }
 .wordmark strong, .wordmark small { display: block; }
@@ -35,7 +35,7 @@ button { cursor: pointer; }
 .connection.is-online { color: var(--green); }
 .connection.is-online > span { background: #5a9b6b; box-shadow: 0 0 0 3px #5a9b6b1c; }
 .topbar__divider { width: 1px; height: 18px; background: var(--line); }
-.workspace { width: min(1320px, calc(100% - 56px)); margin: 0 auto; padding: 54px 0 32px; }
+.workspace { width: min(1520px, calc(100% - 56px)); margin: 0 auto; padding: 54px 0 32px; }
 .welcome { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 31px; }
 .eyebrow, .section-kicker { display: flex; align-items: center; gap: 7px; color: #718071; font-size: 9px; font-weight: 700; letter-spacing: .16em; }
 .welcome h1 { margin: 12px 0 9px; color: #1f2c23; font: 700 clamp(34px, 4vw, 48px)/1.12 var(--serif); letter-spacing: -.055em; }
@@ -1029,9 +1029,14 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 11px;
-  width: min(510px, calc(100vw - 32px));
-  max-height: min(78vh, 760px);
+  width: min(760px, calc(100vw - 32px));
+  height: min(760px, 82vh);
+  min-width: min(360px, calc(100vw - 32px));
+  min-height: min(430px, 60vh);
+  max-width: calc(100vw - 32px);
+  max-height: 90vh;
   overflow: auto;
+  resize: both;
   padding: 16px;
   border: 1px solid #24484a;
   border-radius: 16px;
@@ -1061,7 +1066,7 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
 .floating-browser__meta .is-live { color: #00dcb9; }
 .floating-browser__meta .is-live i { background: #00dcb9; box-shadow: 0 0 0 4px #00dcb922; }
 .floating-browser__url { display: flex; align-items: center; gap: 7px; max-width: 100%; overflow: hidden; color: #79cfc0; font: 10px/1.5 "JetBrains Mono", monospace; overflow-wrap: anywhere; }
-.floating-browser__viewer { overflow: hidden; width: 100%; height: 278px; border: 1px solid #24484a; border-radius: 10px; background: #03090b; }
+.floating-browser__viewer { overflow: hidden; width: 100%; height: 54%; min-height: 220px; max-height: 70%; border: 1px solid #24484a; border-radius: 10px; background: #03090b; }
 .floating-browser__viewer iframe { display: block; width: 100%; height: 100%; border: 0; background: #03090b; }
 .floating-browser__viewer-empty { display: grid; place-items: center; min-height: 112px; padding: 16px; border: 1px dashed #2b4a4b; border-radius: 10px; background: #0c2024; color: #8da9a3; font-size: 11px; line-height: 1.6; text-align: center; }
 .floating-browser__error { padding: 9px 11px; border: 1px solid #744444; border-radius: 8px; background: #311b1b; color: #ffb7a9; font-size: 11px; overflow-wrap: anywhere; }
@@ -1073,6 +1078,7 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
 .floating-browser__activity p { margin: 0; color: #c0d4cd; font-size: 11px; line-height: 1.45; }
 .floating-browser__activity time { display: block; margin-top: 3px; color: #6e8b86; font: 9px "JetBrains Mono", monospace; }
 .floating-browser__empty { margin: 4px 0; color: #829d96; font-size: 11px; }
+.floating-browser__resize-hint { color: #688984; font-size: 9px; text-align: right; }
 .floating-browser__footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 10px; border-top: 1px solid #1a3639; color: #708b85; font-size: 9px; }
 .floating-browser__footer a { display: inline-flex; align-items: center; gap: 5px; color: #00d2b5; font-size: 10px; font-weight: 700; }
 :root[data-theme="light"] .floating-browser__trigger { border-color: #c8dfd5; background: #e7f5ee; color: #23483a; box-shadow: 0 9px 30px #23483a20; }
@@ -1094,8 +1100,38 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
 :root[data-theme="light"] .floating-browser__activity time,
 :root[data-theme="light"] .floating-browser__empty,
 :root[data-theme="light"] .floating-browser__footer { color: #83988e; }
+:root[data-theme="light"] .floating-browser__resize-hint { color: #83988e; }
 @media (max-width: 640px) {
   .floating-browser { right: 14px; bottom: 86px; }
   .floating-browser__panel { width: calc(100vw - 28px); max-height: 74vh; padding: 13px; }
   .floating-browser__viewer { height: 210px; }
+}
+
+
+/* Full-screen Markdown task guidance. */
+.checklist-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; color: #86a29b; font-size: 10px; }
+.checklist-actions button { display: inline-flex; align-items: center; gap: 7px; padding: 7px 10px; border: 1px solid #315256; border-radius: 8px; background: #0b2024; color: #00d9bd; font-size: 10px; font-weight: 700; }
+.checklist-fullscreen { position: fixed; z-index: 1000; inset: 0; display: flex; flex-direction: column; padding: clamp(14px, 3vw, 34px); background: #061114; color: #d7e9e3; }
+.checklist-fullscreen__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding-bottom: 18px; border-bottom: 1px solid #24484a; }
+.checklist-fullscreen__header strong { display: block; max-width: 1000px; margin-top: 8px; color: #e7f4ef; font-size: 16px; line-height: 1.5; }
+.checklist-fullscreen__header button { display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; padding: 10px 13px; border: 1px solid #315256; border-radius: 9px; background: #102429; color: #00d9bd; font-size: 11px; font-weight: 700; }
+.checklist-fullscreen__content { flex: 1; min-height: 0; overflow: auto; width: min(1120px, 100%); margin: 20px auto 0; padding: 0 12px 30px; }
+.checklist-markdown--fullscreen { padding: clamp(18px, 3vw, 36px); font-size: 14px; line-height: 1.7; }
+.checklist-markdown--fullscreen h1 { font-size: 1.8em; }
+.checklist-markdown--fullscreen h2 { font-size: 1.45em; }
+.checklist-markdown--fullscreen h3 { font-size: 1.2em; }
+.checklist-markdown--fullscreen table { white-space: normal; }
+:root[data-theme="light"] .checklist-fullscreen { background: #f4faf6; color: #40594e; }
+:root[data-theme="light"] .checklist-fullscreen__header { border-color: #d4e5dc; }
+:root[data-theme="light"] .checklist-fullscreen__header strong { color: #243a33; }
+:root[data-theme="light"] .checklist-fullscreen__header button,
+:root[data-theme="light"] .checklist-actions button { border-color: #cbded4; background: #fff; color: #087c69; }
+:root[data-theme="light"] .checklist-actions { color: #71877e; }
+@media (max-width: 640px) {
+  .floating-browser__panel { width: calc(100vw - 28px); min-width: 0; height: min(680px, 78vh); min-height: 380px; resize: vertical; }
+  .checklist-fullscreen { padding: 12px; }
+  .checklist-fullscreen__header { align-items: flex-start; }
+  .checklist-fullscreen__header strong { font-size: 12px; }
+  .checklist-fullscreen__header button { padding: 8px; font-size: 0; }
+  .checklist-fullscreen__header button svg { width: 17px; height: 17px; }
 }
