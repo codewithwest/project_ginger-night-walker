@@ -75,6 +75,7 @@ async def test_run_plan_uses_task_context_and_persists_evidence(tmp_path, monkey
     monkeypatch.setattr(runtime.policy, "validate_url", lambda *args, **kwargs: None)
 
     async def new_context(task_id=None):
+        runtime._task_contexts[task_id] = context
         return context
 
     monkeypatch.setattr(runtime, "_guarded_context", new_context)
