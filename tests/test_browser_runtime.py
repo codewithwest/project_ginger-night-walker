@@ -25,6 +25,9 @@ class FakeLocator:
     async def evaluate(self, expression):
         return self.text[:20000]
 
+    async def evaluate_all(self, expression):
+        return []
+
 
 class FakePage:
     url = "https://example.com/"
