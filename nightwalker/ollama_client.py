@@ -607,7 +607,7 @@ class OllamaClient:
     ) -> ResearchSynthesis:
         """Produce a concise synthesis from captured observations, not raw conversation history."""
         base_url = self._require_base_url("SYNTHESIS")
-        model = os.getenv("OLLAMA_MODEL_SYNTHESIS") or os.getenv("OLLAMA_MODEL_DEFAULT", "qwen3.5:9b")
+        model = os.getenv("OLLAMA_MODEL_DEFAULT", "qwen3.5:9b")
         compact_findings = [
             {
                 "claim": item.get("claim", "")[:250],
