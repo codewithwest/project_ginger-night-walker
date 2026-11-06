@@ -47,9 +47,15 @@ class TaskChecklist:
         round_number = int(task.get("round") or 0)
         round_limit = int(task.get("max_rounds") or 30)
         status = self._safe(task.get("status") or "queued", 40)
+        current_step = task.get("current_step")
+        if not isinstance(current_step, dict):
+            current_step = {}
+        checkpoint = task.get("checkpoint")
+        if not isinstance(checkpoint, dict):
+            checkpoint = {}
         next_step = self._safe(
-            (task.get("current_step") or {}).get("objective")
-            or (task.get("checkpoint") or {}).get("next_assignment")
+            current_step.get("objective")
+            or checkpoint.get("next_assignment")
             or task.get("next_action")
             or "Review remaining criteria and choose the next useful source.",
             500,
