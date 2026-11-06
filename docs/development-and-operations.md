@@ -89,7 +89,7 @@ Check `.env.example` for the current supported values and defaults. Role-specifi
 
 ## 6. Agent identity and request tracing
 
-Every model-service request carries explicit `X-Ginger-Agent`, `X-Ginger-Capability`, `X-Ginger-Operation` and `X-Ginger-Integration` headers. When known, requests also carry `X-Ginger-Model`, `X-Ginger-Task-Id` and `X-Ginger-Research-Round`. The standalone Goal-Aware Strands integration uses the same header convention and identifies its integration separately. These are observability/routing metadata only: headers are not authentication, authorization, or permission grants. The orchestrator and PolicyEngine remain authoritative for access and browser actions.
+Every model-service request carries explicit `X-Ginger-Agent`, `X-Ginger-Capability`, `X-Ginger-Operation` and `X-Ginger-Integration` headers. When known, requests also carry `X-Ginger-Model`, `X-Ginger-Task-Id` and `X-Ginger-Research-Round`. The standalone Goal-Aware Strands integration uses the same header convention, adds `X-Ginger-Step` for its per-run step counter, and identifies its integration separately. These are observability/routing metadata only: headers are not authentication, authorization, or permission grants. The orchestrator and PolicyEngine remain authoritative for access and browser actions.
 
 ## 7. API surface
 
