@@ -474,14 +474,17 @@ class TaskManager:
                     )
                     continue
 
-                one_page_plan = initial_plan.model_copy(update={
+                one_page_plan = normalise_decision_plan({
+                    "status": initial_plan.status,
+                    "summary": initial_plan.summary,
+                    "site_name": initial_plan.site_name,
                     "target_url": next_url,
+                    "clarification_question": initial_plan.clarification_question,
                     "steps": [
                         {"step_id": "open", "capability": "navigate", "objective": "Open this discovered public source."},
                         {"step_id": "capture", "capability": "extract", "objective": next_assignment[:500]},
                     ],
                 })
-                one_page_plan = type(initial_plan).model_validate(one_page_plan.model_dump(mode="python"))
                 effective_objective = self._effective_objective(task_id, objective)
                 result = await self.orchestrator.run_browser_workflow(
                     task_id, effective_objective, one_page_plan
