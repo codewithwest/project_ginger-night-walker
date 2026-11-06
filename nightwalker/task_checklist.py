@@ -138,6 +138,7 @@ class TaskChecklist:
             [self._safe(item, 400) for item in limitations if self._safe(item)]
             + ([self._safe(task.get("error"), 500)] if task.get("error") else [])
             + ([self._safe(task.get("persistence_error"), 500)] if task.get("persistence_error") else [])
+            + ([self._safe(task.get("checklist_error"), 500)] if task.get("checklist_error") else [])
         ))
         if blockers:
             lines.extend(f"- {item}" for item in blockers[:20])
