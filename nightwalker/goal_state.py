@@ -88,9 +88,9 @@ class GoalStateManager:
             boilerplate = {"images", "videos", "shopping", "maps", "news", "all", "search"}
             meaningful_words = [word for word in words if word not in boilerplate]
             criterion_terms = terms(claim.criterion)
-            criterion_terms.update(
+            criterion_terms = criterion_terms | {
                 alias for term in criterion_terms for alias in synonyms.get(term, set())
-            )
+            }
             overlap = criterion_terms & set(meaningful_words)
             relevant = len(overlap) >= 2 if len(criterion_terms) > 2 else bool(overlap)
             quote_is_informative = len(terms(claim.quote)) >= 3
