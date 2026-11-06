@@ -341,3 +341,130 @@ button { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   .floating-checklist *, .floating-checklist *::before, .floating-checklist *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+
+/* Fixed-viewport control centre: the document never scrolls. Long content is
+   contained by the workspace panes, with scrollbars visually suppressed. */
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+body { overscroll-behavior: none; }
+.app-shell {
+  display: grid;
+  grid-template-rows: 76px minmax(0, 1fr) auto;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+.workspace {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  padding-top: clamp(14px, 2.4vh, 30px);
+  padding-bottom: 12px;
+  overflow: hidden;
+}
+.welcome { flex: 0 0 auto; margin-bottom: clamp(10px, 1.6vh, 18px); }
+.welcome h1 { margin-top: 7px; margin-bottom: 5px; font-size: clamp(28px, 3vw, 40px); }
+.welcome p { line-height: 1.45; }
+.overview { flex: 0 0 auto; margin-bottom: clamp(10px, 1.5vh, 16px); }
+.overview__item { padding-top: 11px; padding-bottom: 11px; }
+.overview__item strong { margin-top: 4px; font-size: 21px; }
+.main-grid {
+  flex: 1 1 0;
+  min-height: 0;
+  align-items: stretch;
+  overflow: hidden;
+}
+.left-column, .result-column {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.left-column::-webkit-scrollbar, .result-column::-webkit-scrollbar,
+.mission-items::-webkit-scrollbar, .floating-checklist__panel::-webkit-scrollbar,
+.report-details__body::-webkit-scrollbar { display: none; }
+.result-column { height: 100%; }
+.mission-list { min-height: 0; }
+.mission-items { min-height: 0; }
+.footer {
+  min-height: 34px;
+  margin: 0 auto;
+  width: min(1320px, calc(100% - 56px));
+  padding: 7px 0;
+}
+
+/* Keep the two work panes visible on smaller screens rather than extending
+   the document vertically. Each pane owns its own content overflow. */
+@media (max-width: 980px) {
+  .app-shell { grid-template-rows: 66px minmax(0, 1fr) auto; }
+  .workspace {
+    width: min(100% - 36px, 760px);
+    padding-top: 12px;
+    padding-bottom: 8px;
+  }
+  .main-grid {
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+    gap: 12px;
+  }
+  .left-column { display: flex; flex-direction: column; }
+  .compose-card { flex: 0 0 auto; padding: 16px; }
+  .mission-list { flex: 1 1 0; overflow: auto; }
+  .result-column { padding: 17px; }
+  .footer { width: min(100% - 36px, 760px); }
+}
+@media (max-width: 640px) {
+  .app-shell { grid-template-rows: 58px minmax(0, 1fr) auto; }
+  .topbar { height: 58px; }
+  .workspace {
+    width: calc(100% - 20px);
+    padding-top: 8px;
+    padding-bottom: 5px;
+  }
+  .welcome { margin-bottom: 8px; }
+  .welcome h1 { margin: 3px 0; font-size: 25px; }
+  .welcome p { max-width: 100%; font-size: 10px; line-height: 1.35; }
+  .eyebrow { font-size: 8px; }
+  .overview { margin-bottom: 8px; }
+  .overview__item { padding: 7px 9px; }
+  .overview__item span { font-size: 7px; }
+  .overview__item strong { font-size: 16px; margin-top: 2px; }
+  .main-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(150px, 0.78fr) minmax(190px, 1.22fr);
+    gap: 8px;
+  }
+  .left-column { gap: 8px; overflow: hidden; }
+  .compose-card { padding: 11px 13px; }
+  .compose-card h2 { margin: 5px 0 3px; font-size: 15px; }
+  .card-intro { margin-bottom: 7px; font-size: 9px; }
+  .compose-card textarea { min-height: 48px; max-height: 66px; padding: 7px 9px; font-size: 10px; }
+  .compose-card__footer { margin-top: 5px; }
+  .mission-list { flex: 1 1 0; padding-top: 9px; }
+  .mission-list__header { padding: 0 11px 6px; }
+  .mission-list h2 { margin-top: 2px; font-size: 14px; }
+  .mission-item { padding: 8px 11px; }
+  .mission-item > strong { margin: 4px 0; font-size: 9px; }
+  .result-column { min-height: 0; padding: 12px; }
+  .result-header { display: block; }
+  .result-header__actions { margin-top: 8px; }
+  .footer {
+    width: calc(100% - 20px);
+    min-height: 25px;
+    padding: 4px 0;
+    font-size: 7px;
+    letter-spacing: .06em;
+  }
+  .footer > span:last-child { gap: 4px; }
+  .floating-checklist { right: 9px; bottom: 30px; }
+  .floating-checklist__panel { max-height: min(55dvh, 440px); }
+}
