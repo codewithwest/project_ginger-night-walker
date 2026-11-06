@@ -52,8 +52,8 @@ def test_checklist_tracks_verified_criteria_and_evidence(tmp_path):
 
     markdown = checklist.write(task)
 
-    assert "- [x] Identify three retailers — evidence: ev-001" in markdown
-    assert "- [ ] Compare current pricing" in markdown
+    assert "1. [x] Identify three retailers — evidence: ev-001" in markdown
+    assert "2. [ ] Compare current pricing" in markdown
     assert "Research rounds:** 2/30" in markdown
     assert "Check the other retailers" in markdown
     assert task["checklist_markdown"] == markdown
@@ -79,5 +79,5 @@ def test_checklist_never_marks_assigned_subtask_as_complete(tmp_path):
         "agent_assignments": [{"subtask_id": "source", "status": "assigned"}],
     })
 
-    assert "- [ ] Find primary sources" in markdown
+    assert "1. [ ] Find primary sources" in markdown
     assert "**source** (assigned)" in markdown
