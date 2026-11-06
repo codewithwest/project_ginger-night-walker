@@ -148,6 +148,8 @@ class OllamaClient:
             r"\bwhich\s+(?:product|item|model|brand|company|service|city|town|country|region|location|date|year|version|variant|size|colour|color|language|market|audience)\b",
             r"\bwhat\s+(?:product|item|model|brand|company|service|city|town|country|region|location|date|timeframe|time period|year|version|variant|size|colour|color|budget|price range|market|audience)\b",
             r"\b(?:how many|how much|what budget|which date|what date|what location|where is|in which city)\b",
+            r"\b(?:specify|provide|choose|select|name)\s+(?:the\s+)?(?:product|item|model|brand|company|service|city|town|country|region|location|date|timeframe|time period|year|version|variant|size|colour|color|budget|price range|market|audience)\b",
+            r"\b(?:which|what)\s+(?:timeframe|time period|budget|price range|market|audience)\b",
         )
         return any(re.search(pattern, value) for pattern in essential_patterns)
 
