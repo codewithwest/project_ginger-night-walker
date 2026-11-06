@@ -54,6 +54,10 @@ async def test_self_hosted_steel_session_connects_without_api_key(monkeypatch):
     monkeypatch.delenv("STEEL_API_KEY", raising=False)
     runtime = BrowserRuntime()
     captured = {}
+    monkeypatch.setattr(
+        "nightwalker.browser_runtime.socket.getaddrinfo",
+        lambda *args, **kwargs: [(None, None, None, None, ("127.0.0.1", 3000))],
+    )
 
     class FakeContext:
         async def route(self, pattern, handler):
