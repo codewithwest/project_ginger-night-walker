@@ -323,6 +323,19 @@ class TaskManager:
                     self.orchestrator.ollama._explicit_target_url(objective)
                     if hasattr(self.orchestrator.ollama, "_explicit_target_url") else None
                 )
+                if not research_queries and not explicit_target:
+                    # Deterministic fallback when the planning model is unavailable:
+                    # use the task's subject sentence, not its report instructions.
+                    import re
+                    subject = re.split(
+                        r"\n\s*\n|\bfor each\b|\buse publicly accessible\b|"
+                        r"\brecord the urls\b|\bclearly distinguish\b|\bproduce a\b",
+                        objective, maxsplit=1, flags=re.IGNORECASE,
+                    )[0]
+                    subject = re.sub(r"^\s*(?:please\s+)?(?:research|investigate|find|compare|analyze)\s+", "", subject, flags=re.IGNORECASE)
+                    subject = " ".join(subject.split()).strip(" .:-")
+                    if len(subject) >= 8:
+                        research_queries = [subject[:180]]
                 if initial_plan.status == DecisionStatus.READY and research_queries and not explicit_target:
                     from urllib.parse import quote
                     initial_plan = DecisionPlan.model_validate({
