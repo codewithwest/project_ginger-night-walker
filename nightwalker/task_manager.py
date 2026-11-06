@@ -217,12 +217,17 @@ class TaskManager:
         return {**record, "logs": list(record["logs"])} if record else None
 
     def list_tasks(self) -> list[dict[str, Any]]:
-        snapshots = [
-            snapshot for task_id in self.tasks
-            if (snapshot := self.snapshot(task_id)) is not None
+        """Return lightweight mission cards; full task state is fetched only when opened."""
+        fields = (
+            "task_id", "objective", "capability", "status", "created_at",
+            "updated_at", "site_name", "current_step", "round", "max_rounds",
+        )
+        summaries = [
+            {key: record.get(key) for key in fields}
+            for record in self.tasks.values()
         ]
         return sorted(
-            snapshots, key=lambda item: item.get("created_at", ""), reverse=True
+            summaries, key=lambda item: item.get("created_at", ""), reverse=True
         )
 
     def submit_natural_language(self, task_id: str, objective: str) -> dict[str, Any]:
