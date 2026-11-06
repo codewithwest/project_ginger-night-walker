@@ -10,7 +10,8 @@ from nightwalker.ollama_client import OllamaClient, OllamaUnavailable
 @pytest.mark.asyncio
 async def test_agent_request_uses_remote_chat_and_validates_contract(monkeypatch):
     monkeypatch.setenv("OLLAMA_BASE_URL", "https://ollama.example.test")
-    monkeypatch.setenv("OLLAMA_MODEL_DEFAULT", "unit-test-model")
+    monkeypatch.setenv("OLLAMA_MODEL_DEFAULT", "main-test-model")
+    monkeypatch.setenv("OLLAMA_MODEL_LIGHT", "unit-test-model")
     captured = {}
 
     class FakeAsyncClient:
