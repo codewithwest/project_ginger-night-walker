@@ -283,8 +283,8 @@ export default function App() {
         body: JSON.stringify({ objective: objective.trim() }),
       });
       setObjective("");
+      setTasks((current) => [task, ...current.filter((item) => item.task_id !== task.task_id)]);
       setSelectedId(task.task_id);
-      await refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Task submission failed");
     } finally {
@@ -305,7 +305,7 @@ export default function App() {
         body: JSON.stringify({ answer: answer.trim() }),
       });
       setAnswer("");
-      await refresh();
+      await refreshSelected(selected.task_id);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Clarification failed");
     } finally {
@@ -320,7 +320,7 @@ export default function App() {
     try {
       await api("/tasks/" + encodeURIComponent(selected.task_id) + "/follow-up", { method: "POST", body: JSON.stringify({ message: followUp.trim() }) });
       setFollowUp("");
-      await refresh();
+      await refreshSelected(selected.task_id);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Follow-up failed");
     } finally { setSendingFollowUp(false); }
@@ -333,7 +333,7 @@ export default function App() {
       await api(`/tasks/${encodeURIComponent(selected.task_id)}`, {
         method: "DELETE",
       });
-      await refresh();
+      await refreshSelected(selected.task_id);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Stop failed");
     }
