@@ -313,6 +313,30 @@ class TaskManager:
                     initial_plan = await self.orchestrator.ollama.decide_task(objective, task_id=task_id)
                 except TypeError:
                     initial_plan = await self.orchestrator.ollama.decide_task(objective)
+                # Use concise goal-derived search queries, never the entire instruction-heavy brief.
+                research_queries = list(dict.fromkeys(
+                    " ".join(query.split()).strip()
+                    for query in (getattr(blueprint, "research_queries", []) if blueprint else [])
+                    if isinstance(query, str) and len(query.strip()) >= 8
+                ))[:8]
+                explicit_target = (
+                    self.orchestrator.ollama._explicit_target_url(objective)
+                    if hasattr(self.orchestrator.ollama, "_explicit_target_url") else None
+                )
+                if initial_plan.status == DecisionStatus.READY and research_queries and not explicit_target:
+                    from urllib.parse import quote
+                    initial_plan = DecisionPlan.model_validate({
+                        **initial_plan.model_dump(mode="python"),
+                        "target_url": "https://www.bing.com/search?q=" + quote(research_queries[0]),
+                        "site_name": "Web search",
+                        "summary": "Search using concise, objective-derived queries, then inspect independent sources.",
+                    })
+                    candidates.extend({
+                        "url": "https://www.bing.com/search?q=" + quote(query),
+                        "label": "Targeted research query: " + query[:180],
+                    } for query in research_queries[1:])
+                    self._log(task_id, f"Research planner generated {len(research_queries)} focused search queries; avoiding the full instruction prompt as a search term")
+                record["research_queries"] = research_queries
                 record["plan"] = initial_plan.model_dump(mode="json")
                 if blueprint is None:
                     proposed_steps = [step.objective for step in initial_plan.steps]
