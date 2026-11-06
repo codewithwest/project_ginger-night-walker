@@ -67,6 +67,7 @@ type Task = {
   max_rounds?: number;
   scratchpad?: { round?: number; assignment?: string; status?: string; findings?: unknown[]; evidence_ids?: string[] }[];
   goal_state?: { original_goal: string; criteria: string[]; completed: string[]; remaining: string[]; evidence_by_criterion: Record<string, { evidence_id: string; quote: string }> } | null;
+  checklist_markdown?: string;
 };
 
 const isTerminal = (status: string) =>
@@ -534,6 +535,18 @@ export default function App() {
                     <CircleAlert size={16} />
                     <span>{selected.error}</span>
                   </div>
+                )}
+
+                {selected.checklist_markdown && (
+                  <details className="report-details" open>
+                    <summary>
+                      <span><Check size={15} /> Goal &amp; progress checklist</span>
+                      <ArrowDownRight size={15} />
+                    </summary>
+                    <div className="report-details__body">
+                      <pre className="structured-data">{selected.checklist_markdown}</pre>
+                    </div>
+                  </details>
                 )}
 
                 <details className="report-details">
