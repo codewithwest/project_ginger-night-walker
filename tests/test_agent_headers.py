@@ -24,8 +24,8 @@ def test_agent_headers_identify_agent_capability_and_trace_context():
 
 def test_agent_headers_strip_newlines_and_bound_values():
     headers = agent_headers(agent="agent\r\nforged: yes", capability="extract", operation="run")
-    assert "\\r" not in headers["X-Ginger-Agent"]
-    assert "\\n" not in headers["X-Ginger-Agent"]
+    assert "\r" not in headers["X-Ginger-Agent"]
+    assert "\n" not in headers["X-Ginger-Agent"]
     assert len(headers["X-Ginger-Agent"]) <= 200
 
 
