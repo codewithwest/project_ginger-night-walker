@@ -8,7 +8,7 @@ from typing import Any
 from nightwalker.a2a import A2ABus
 from nightwalker.agent_allocator import AgentAllocator
 from nightwalker.contracts import AgentTask
-from nightwalker.decision_contracts import DecisionPlan, DecisionStatus
+from nightwalker.decision_contracts import DecisionPlan, DecisionStatus, normalise_decision_plan
 from nightwalker.goal_state import GoalStateManager
 from nightwalker.ollama_client import OllamaUnavailable
 from nightwalker.orchestrator import Orchestrator
@@ -81,7 +81,7 @@ class TaskManager:
         # Revalidate the complete object before serialisation. This also repairs
         # legacy/in-memory plans restored from older snapshots where URL and step
         # fields may still be plain strings/dicts instead of typed Pydantic values.
-        initial_plan = DecisionPlan.model_validate(initial_plan.__dict__)
+        initial_plan = normalise_decision_plan(initial_plan)
         self.tasks[task_id]["checkpoint"] = {
             "version": 1, "initial_plan": initial_plan.model_dump(mode="json"),
             "sources": sources, "findings": findings, "evidence": evidence,
@@ -276,7 +276,7 @@ class TaskManager:
             record["execution_objective"] = objective
         checkpoint = record.get("checkpoint") if resume else None
         if checkpoint:
-            initial_plan = DecisionPlan.model_validate(checkpoint["initial_plan"])
+            initial_plan = normalise_decision_plan(checkpoint["initial_plan"])
             sources = list(checkpoint.get("sources", []))
             findings = list(checkpoint.get("findings", []))
             evidence = list(checkpoint.get("evidence", []))
@@ -331,6 +331,9 @@ class TaskManager:
                     initial_plan = await self.orchestrator.ollama.decide_task(objective, task_id=task_id)
                 except TypeError:
                     initial_plan = await self.orchestrator.ollama.decide_task(objective)
+                # Normalise model/tool/legacy values before any model_dump call.
+                # This repairs HttpUrl strings and dict-shaped PlannedStep values.
+                initial_plan = normalise_decision_plan(initial_plan)
                 # Use concise goal-derived search queries, never the entire instruction-heavy brief.
                 proposed_queries = (
                     getattr(blueprint, "research_queries", []) if blueprint else []
