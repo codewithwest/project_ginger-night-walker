@@ -360,6 +360,7 @@ class TaskManager:
                         "label": "Targeted research query: " + query[:180],
                     } for query in research_queries[1:])
                     self._log(task_id, f"Research planner generated {len(research_queries)} focused search queries; avoiding the full instruction prompt as a search term")
+                initial_plan = DecisionPlan.model_validate(initial_plan.__dict__)
                 record["research_queries"] = research_queries
                 record["plan"] = initial_plan.model_dump(mode="json")
                 if blueprint is None:
