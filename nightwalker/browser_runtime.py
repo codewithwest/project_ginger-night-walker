@@ -55,9 +55,10 @@ class BrowserRuntime:
         api_key = os.getenv("STEEL_API_KEY", "").strip()
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
+                headers = {"steel-api-key": api_key} if api_key else {}
                 response = await client.delete(
                     f"{api_base}/sessions/{session_id}",
-                    headers={"steel-api-key": api_key},
+                    headers=headers,
                 )
                 if response.status_code not in {200, 202, 204, 404}:
                     response.raise_for_status()
@@ -70,12 +71,15 @@ class BrowserRuntime:
             raise RuntimeError("Browser runtime is not started")
         if self.backend == "steel":
             api_key = os.getenv("STEEL_API_KEY", "").strip()
-            api_base = os.getenv("STEEL_API_BASE_URL", "https://api.steel.dev/v1").rstrip("/")
+            api_base = os.getenv("STEEL_API_BASE_URL", "http://steel-browser:3000/v1").rstrip("/")
             timeout_ms = max(60_000, int(os.getenv("STEEL_SESSION_TIMEOUT_MS", "300000")))
+            headers = {"Content-Type": "application/json"}
+            if api_key:
+                headers["steel-api-key"] = api_key
             async with httpx.AsyncClient(timeout=20.0) as client:
                 response = await client.post(
                     f"{api_base}/sessions",
-                    headers={"steel-api-key": api_key, "Content-Type": "application/json"},
+                    headers=headers,
                     json={"timeout": timeout_ms},
                 )
                 response.raise_for_status()
