@@ -5,7 +5,10 @@ OBJECTIVE = (
 
 
 def test_furniture_retail_queries_are_category_led_and_specific():
-    from nightwalker.research_relevance import focused_research_queries, is_furniture_retail_research
+    from nightwalker.research_relevance import (
+        focused_research_queries,
+        is_furniture_retail_research,
+    )
 
     assert is_furniture_retail_research(OBJECTIVE)
     queries = focused_research_queries(OBJECTIVE, ["top", "dictionary top meaning"])
