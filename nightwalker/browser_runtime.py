@@ -34,10 +34,6 @@ class BrowserRuntime:
         self._playwright = await async_playwright().start()
         if self.backend == "local":
             self._browser = await self._playwright.chromium.launch(headless=True)
-        elif not os.getenv("STEEL_API_KEY", "").strip():
-            await self._playwright.stop()
-            self._playwright = None
-            raise RuntimeError("BROWSER_BACKEND=steel requires STEEL_API_KEY")
 
     async def close(self) -> None:
         for context_id, (session_id, browser) in list(self._steel_sessions.items()):
@@ -55,7 +51,7 @@ class BrowserRuntime:
             self._playwright = None
 
     async def _release_steel_session(self, session_id: str) -> None:
-        api_base = os.getenv("STEEL_API_BASE_URL", "https://api.steel.dev/v1").rstrip("/")
+        api_base = os.getenv("STEEL_API_BASE_URL", "http://steel-browser:3000/v1").rstrip("/")
         api_key = os.getenv("STEEL_API_KEY", "").strip()
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
@@ -90,11 +86,14 @@ class BrowserRuntime:
                 if session_id:
                     await self._release_steel_session(session_id)
                 raise RuntimeError("Steel session response did not include id and websocketUrl")
-            separator = "&" if "?" in websocket_url else "?"
             browser = None
             try:
+                connect_url = websocket_url
+                if api_key:
+                    separator = "&" if "?" in connect_url else "?"
+                    connect_url += separator + urlencode({"apiKey": api_key})
                 browser = await self._playwright.chromium.connect_over_cdp(
-                    websocket_url + separator + urlencode({"apiKey": api_key}),
+                    connect_url,
                     timeout=30_000,
                 )
                 if not browser.contexts:
