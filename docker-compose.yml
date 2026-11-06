@@ -11,7 +11,6 @@ services:
     environment:
       EVIDENCE_DIR: /app/evidence
       BROWSER_BACKEND: ${BROWSER_BACKEND:-steel}
-      STEEL_CDP_URL: ${STEEL_CDP_URL:-ws://steel-browser:3000}
     volumes:
       - nightwalker_evidence:/app/evidence
     depends_on:
