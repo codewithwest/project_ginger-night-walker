@@ -372,11 +372,13 @@ class BrowserRuntime:
     async def run_plan(self, task_id: str, url: str, steps: list[dict], objective: str) -> dict:
         """Execute only public-site navigation, same-origin link following and extraction."""
         self.policy.validate_url(url, allow_private_networks=False)
-        self._task_sessions[task_id] = {
+        self._task_sessions.setdefault(task_id, {
             "backend": self.backend, "status": "connecting", "active": True,
             "activity": [], "started_at": datetime.now(UTC).isoformat(),
-        }
-        self._browser_event(task_id, "Starting browser session")
+        })
+        self._task_sessions[task_id]["status"] = "connecting"
+        self._task_sessions[task_id]["active"] = True
+        self._browser_event(task_id, "Starting or reusing the task browser session")
         try:
             context = await self._guarded_context(task_id)
         except Exception as exc:
