@@ -114,10 +114,19 @@ class TaskManager:
             saved_plan = record.get("plan")
             if not isinstance(saved_plan, dict):
                 saved_plan = {}
-            saved_question = str(saved_plan.get("clarification_question") or "").casefold()
+            # Older Decider versions sometimes stored the website-only prompt
+            # in summary rather than clarification_question. Check both fields so
+            # those persisted tasks are automatically re-planned after an upgrade.
+            saved_question = " ".join((
+                str(saved_plan.get("clarification_question") or ""),
+                str(saved_plan.get("summary") or ""),
+            )).casefold()
             legacy_site_prompt = (
                 status == DecisionStatus.NEEDS_CLARIFICATION.value
-                and any(term in saved_question for term in ("website", "web site", "url", "domain"))
+                and any(term in saved_question for term in (
+                    "website", "web site", "exact website", "url", "domain",
+                    "which site", "what site",
+                ))
             )
             if status in {"queued", "running"} or legacy_site_prompt:
                 if legacy_site_prompt:
