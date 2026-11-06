@@ -444,20 +444,22 @@ class OllamaClient:
                 )
                 proposal = json.loads(raw)
                 if not isinstance(proposal, dict):
-                    raise ValueError("Tab cleanup response must be a JSON object")
+                    raise TypeError("Tab cleanup response must be a JSON object")
                 indices = proposal.get("close_indices")
                 reason = proposal.get("reason")
                 if not isinstance(indices, list) or not isinstance(reason, str):
-                    raise ValueError("Tab cleanup response has invalid fields")
+                    raise TypeError("Tab cleanup response has invalid fields")
                 allowed = {
                     int(tab["index"]) for tab in bounded_tabs
                     if not tab["primary"] and isinstance(tab.get("index"), int)
                 }
                 close_indices = []
                 for index in indices:
-                    if isinstance(index, int) and not isinstance(index, bool) and index in allowed:
-                        if index not in close_indices:
-                            close_indices.append(index)
+                    if (
+                        isinstance(index, int) and not isinstance(index, bool)
+                        and index in allowed and index not in close_indices
+                    ):
+                        close_indices.append(index)
                 return {"close_indices": close_indices, "reason": reason[:300]}
         except (httpx.HTTPError, ValueError, TypeError, KeyError) as exc:
             raise OllamaUnavailable(f"Browser tab cleanup inference failed: {exc}") from exc
