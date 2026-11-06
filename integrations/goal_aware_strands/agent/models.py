@@ -12,7 +12,7 @@ def identity_headers(agent, capability, operation, task_id=None, step=None, mode
               "X-Ginger-Operation": operation, "X-Ginger-Integration": "goal-aware-strands",
               "X-Ginger-Task-Id": task_id, "X-Ginger-Step": step,
               "X-Ginger-Model": model}
-    return {key: re.sub(r"[\\r\\n\\x00-\\x1f\\x7f]", " ", str(value).strip())[:200]
+    return {key: re.sub(r"[\r\n\x00-\x1f\x7f]", " ", str(value).strip())[:200]
             for key, value in values.items() if value is not None and str(value).strip()}
 
 
