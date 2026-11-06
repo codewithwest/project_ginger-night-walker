@@ -24,11 +24,13 @@ The demo is **scripted test doubles**, NOT real inference. Its synthetic Python 
 
 ## Your prior Ubuntu setup (preconfigured)
 
-The included `config.json` matches your previously used endpoint layout:
+Endpoint configuration is fully independent for the standalone integration. Set `STATE_BASE_URL` and `CODER_BASE_URL` to different Ollama servers if desired, and set `DECIDER_URL` / `DECIDER_PATH` for the Strands service. Values in the JSON config can also be overridden by these environment variables. Copy `.env.example` to your own environment file and export its values before running. The checked-in `config.json` is only a local-development example.
+
+The example endpoint layout is:
 
 - Ollama: `http://127.0.0.1:11434/api/chat` (native API, `stream: false`, `think: false`, `temperature: 0`).
-- Goal/state: `qwen3:0.6b` in Ollama.
-- Tool arguments: `qwen2.5-coder:1.5b` in Ollama. This is the **proposed coding model**, not a previously confirmed model you already had pulled.
+- Goal/state: `qwen3.5:0.8b` in Ollama.
+- Tool arguments: `qwen3.5:9b` in Ollama.
 - Strands: `http://127.0.0.1:8021/v1/systemone` using typed `choice` question with `state`, `questions`, and response `answers.next_action`.
 - Strands checkpoint: `StrandsAgents/strands-decider-2B-qwen3.5-v1-2610`.
 
