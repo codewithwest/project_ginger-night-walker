@@ -13,7 +13,7 @@ from nightwalker.goal_state import GoalStateManager
 from nightwalker.ollama_client import OllamaUnavailable
 from nightwalker.orchestrator import Orchestrator
 from nightwalker.research_guard import ResearchLoopGuard
-from nightwalker.research_relevance import focused_research_queries, source_relevance
+from nightwalker.research_relevance import focused_research_queries, rank_research_candidates, source_relevance
 from nightwalker.scratchpad import TaskScratchpad
 from nightwalker.task_checklist import TaskChecklist
 from nightwalker.task_state_store import TaskStateStore
@@ -292,7 +292,7 @@ class TaskManager:
             resume_in_flight = bool(checkpoint.get("round_in_progress", False))
             record["low_information_rounds"] = int(record.get("low_information_rounds", 0))
             if not next_url and not research_complete:
-                available = loop_guard.filter_candidates(candidates, visited_urls)
+                available = loop_guard.filter_candidates(rank_research_candidates(effective_objective, candidates), visited_urls)
                 if available:
                     next_url = available[0]["url"]
                     next_assignment = "Resume: inspect the next available discovered source"
@@ -531,7 +531,7 @@ class TaskManager:
                         )
                         break
                     candidates.extend(result.get("candidate_urls", []))
-                    candidates = loop_guard.filter_candidates(candidates, visited_urls)
+                    candidates = loop_guard.filter_candidates(rank_research_candidates(effective_objective, candidates), visited_urls)
                     next_url = ""
                 else:
                     final_url = result.get("final_url") or next_url
@@ -936,6 +936,10 @@ class TaskManager:
             record["error"] = "Unexpected internal error"
             self._log(task_id, f"Unexpected internal error: {type(exc).__name__}", "error")
         finally:
+            try:
+                await self.orchestrator.browser.close_task_session(task_id)
+            except (AttributeError, RuntimeError, OSError) as browser_close_error:
+                self._log(task_id, f"Browser session cleanup warning: {browser_close_error}", "warning")
             record["current_step"] = None
             record["updated_at"] = self._now()
             self._persist(task_id)
