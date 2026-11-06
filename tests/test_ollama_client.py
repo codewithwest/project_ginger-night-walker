@@ -59,6 +59,7 @@ async def test_agent_request_uses_remote_chat_and_validates_contract(monkeypatch
     assert captured["url"] == "https://ollama.example.test/api/chat"
     assert captured["body"]["model"] == "unit-test-model"
     assert captured["body"]["stream"] is False
+    assert captured["body"]["keep_alive"] == "0"
     assert "unrelated_secret" not in captured["body"]["messages"][1]["content"]
 
 
