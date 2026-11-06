@@ -377,13 +377,17 @@ class OllamaClient:
         except (httpx.HTTPError, ValueError, ValidationError, KeyError) as exc:
             raise OllamaUnavailable(f"Goal criteria inference failed: {exc}") from exc
 
-    async def evaluate_goal_progress(self, goal_state: dict[str, Any], round_evidence: list[dict[str, Any]], task_id: str | None = None, round_number: int | None = None) -> GoalProgressProposal:
+    async def evaluate_goal_progress(
+        self, goal_state: dict[str, Any], round_evidence: list[dict[str, Any]],
+        task_id: str | None = None, round_number: int | None = None,
+        checklist_markdown: str = "",
+    ) -> GoalProgressProposal:
         base_url = self._require_base_url("GOAL_STATE")
         model = os.getenv("OLLAMA_MODEL_GOAL_STATE", "qwen3.5:0.8b")
         evidence = [{"evidence_id": item.get("evidence_id"), "captured_text": str(item.get("captured_text") or "")[:1800]} for item in round_evidence[:8]]
         body = {"model": model, "stream": False, "think": False, "format": GoalProgressProposal.model_json_schema(),
-            "messages": [{"role": "system", "content": "Only propose completed criteria when supplied evidence directly supports them. Copy an exact quote of at least 8 characters and the evidence_id. Never infer completion. Return JSON only."},
-                {"role": "user", "content": json.dumps({"original_goal": goal_state["original_goal"], "criteria": goal_state["criteria"], "already_completed": goal_state["completed"], "remaining": goal_state["remaining"], "current_round_evidence": evidence}, ensure_ascii=False)}],
+            "messages": [{"role": "system", "content": "Use the goal_progress_checklist and criterion acceptance tests. Only propose completed criteria when current-round evidence directly satisfies the acceptance test. Copy an exact quote and evidence_id. Never infer completion or mark work complete based on a plan, URL visit or prior model claim. Return JSON only."},
+                {"role": "user", "content": json.dumps({"original_goal": goal_state["original_goal"], "criteria": goal_state["criteria"], "already_completed": goal_state["completed"], "remaining": goal_state["remaining"], "goal_progress_checklist": checklist_markdown[:12000], "current_round_evidence": evidence}, ensure_ascii=False)}],
             "options": {"temperature": 0, "num_predict": 400}}
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
