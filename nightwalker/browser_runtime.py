@@ -62,7 +62,7 @@ class BrowserRuntime:
     @staticmethod
     def _max_browser_tabs() -> int:
         try:
-            return max(1, min(8, int(os.getenv("BROWSER_MAX_TABS", "4"))))
+            return max(1, min(8, int(os.getenv("BROWSER_MAX_TABS", "3"))))
         except ValueError:
             return 4
 
@@ -485,7 +485,7 @@ class BrowserRuntime:
                         lambda opened: asyncio.create_task(self._enforce_tab_limit(task_id, opened)),
                     )
                     self._tab_listener_contexts.add(id(context))
-            for extra_page in list(context.pages):
+            for extra_page in list(getattr(context, "pages", [page])):
                 if extra_page != page and not extra_page.is_closed():
                     await extra_page.close()
             response = await page.goto(
