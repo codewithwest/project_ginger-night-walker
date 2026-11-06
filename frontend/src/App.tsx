@@ -12,6 +12,8 @@ import {
   RefreshCw,
   Send,
   ShieldCheck,
+  Sun,
+  Moon,
   Square,
   Terminal,
   X,
@@ -205,6 +207,15 @@ export default function App() {
   const [online, setOnline] = useState(false);
   const [checklistPinned, setChecklistPinned] = useState(false);
   const [checklistDismissed, setChecklistDismissed] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    try { return localStorage.getItem("night-walker-theme") === "light" ? "light" : "dark"; }
+    catch { return "dark"; }
+  });
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try { localStorage.setItem("night-walker-theme", theme); } catch { /* storage is optional */ }
+  }, [theme]);
 
   const selected = useMemo(
     () => tasks.find((task) => task.task_id === selectedId) || null,
