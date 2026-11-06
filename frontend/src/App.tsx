@@ -820,7 +820,7 @@ export default function App() {
             </div>
             <div className="floating-browser__footer">
               <span>Live view is read-only</span>
-              <a href="http://localhost:3000/ui" target="_blank" rel="noreferrer">Open Steel UI <ExternalLink size={11} /></a>
+              {selected?.browser?.backend === "steel" && <a href="http://localhost:3000/ui" target="_blank" rel="noreferrer">Open Steel UI <ExternalLink size={11} /></a>}
             </div>
           </section>
         </div>
