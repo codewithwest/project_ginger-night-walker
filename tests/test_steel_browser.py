@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from nightwalker.browser_runtime import BrowserRuntime
@@ -35,8 +37,6 @@ def test_steel_backend_requires_api_key_at_start(monkeypatch):
             return fake
 
     monkeypatch.setattr("nightwalker.browser_runtime.async_playwright", FakePlaywrightStarter)
-
-    import asyncio
 
     with pytest.raises(RuntimeError, match="STEEL_API_KEY"):
         asyncio.run(runtime.start())
