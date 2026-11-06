@@ -488,6 +488,41 @@ class TaskManager:
                     visited_urls.append(final_url)
                     if not loop_guard.is_visited(next_url, visited_urls):
                         visited_urls.append(next_url)
+                    # Search engines are discovery surfaces, never research evidence.
+                    from urllib.parse import urlsplit
+                    search_host = (urlsplit(final_url).hostname or "").lower()
+                    is_search_page = (
+                        search_host == "bing.com" or search_host.endswith(".bing.com")
+                        or search_host == "google.com" or search_host.endswith(".google.com")
+                        or search_host == "duckduckgo.com" or search_host.endswith(".duckduckgo.com")
+                    )
+                    if is_search_page:
+                        candidates.extend(result.get("candidate_urls", []))
+                        candidates = loop_guard.filter_candidates(candidates, visited_urls)
+                        available = loop_guard.filter_candidates(candidates, visited_urls)
+                        next_url = available[0]["url"] if available else ""
+                        next_assignment = (
+                            "Inspect an actual result destination discovered from search: "
+                            + available[0].get("label", "relevant source")
+                            if available else "No relevant destination discovered from search"
+                        )
+                        self._note(task_id, {
+                            "round": round_count, "assignment": "Search-result discovery only",
+                            "status": "completed", "actions": [final_url],
+                            "findings": [], "sources": [],
+                            "discovered_source_count": len(candidates),
+                            "seed_for_next_round": ["Inspect destination pages; do not cite this search page as evidence"],
+                        })
+                        self._log(task_id, f"Search results inspected for discovery only; {len(candidates)} candidate destinations available.")
+                        self._save_checkpoint(
+                            task_id, initial_plan, sources=sources, findings=findings,
+                            evidence=evidence, visited_urls=visited_urls, candidates=candidates,
+                            structured_data=structured_data, limitations=limitations,
+                            loop_guard=loop_guard, round_count=round_count,
+                            next_url=next_url, next_assignment=next_assignment,
+                            research_complete=not bool(next_url),
+                        )
+                        continue
                     source_id = f"s-{len(sources) + 1:03d}"
                     source_records = result.get("sources", [])
                     source = dict(source_records[0]) if source_records else {
