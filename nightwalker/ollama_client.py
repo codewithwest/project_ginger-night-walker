@@ -13,6 +13,7 @@ from nightwalker.contracts import AgentResult, AgentTask
 from nightwalker.decision_contracts import DecisionPlan
 from nightwalker.goal_state import GoalCriteriaPlan, GoalProgressProposal
 from nightwalker.model_registry import ModelRegistry
+from nightwalker.planning_contracts import ExecutionBlueprint
 from nightwalker.research_contracts import ResearchRoundPlan, ResearchSynthesis
 
 SYSTEM_PROMPTS = {
@@ -309,6 +310,48 @@ class OllamaClient:
                 f"Decider inference failed or returned an invalid plan: {exc}"
             ) from exc
 
+
+    async def create_execution_blueprint(self, objective: str, task_id: str | None = None) -> ExecutionBlueprint:
+        """Plan measurable success, subtasks, dependencies and tool needs before allocation."""
+        base_url = self._require_base_url("DECIDER")
+        model = os.getenv("OLLAMA_MODEL_DECIDER") or os.getenv("OLLAMA_MODEL_DEFAULT", "qwen3.5:9b")
+        schema = ExecutionBlueprint.model_json_schema()
+        system_prompt = (
+            "You are Ginger's goal analyst and execution architect. Before any agent is assigned, "
+            "interpret the immutable user objective, define measurable success criteria with explicit "
+            "acceptance tests and evidence requirements, then decompose the work into the smallest useful "
+            "subtasks. For each subtask choose exactly one capability from navigate, interact, extract, recover; "
+            "list the tool names it needs, criteria it contributes to, dependencies, whether it can run in "
+            "parallel, and its expected output. Use only tools from this catalogue: browser_navigate, "
+            "browser_snapshot, browser_click, browser_type, browser_select_option, browser_extract, "
+            "evidence_read, research_search. If a named tool is not available in the runtime, list it as "
+            "a requirement but do not imply it exists. Keep read-only work read-only. Do not assign agents, "
+            "execute tools, invent evidence, or grant permissions. All subtasks must map to the success "
+            "criteria. Dependencies must be acyclic. Return only JSON matching the schema."
+        )
+        packet = {"original_objective": objective[:2000], "available_capabilities": [
+            "navigate", "interact", "extract", "recover"
+        ]}
+        body = {"model": model, "stream": False, "think": False, "format": schema,
+            "messages": [{"role": "system", "content": system_prompt},
+                         {"role": "user", "content": json.dumps(packet, ensure_ascii=False)}],
+            "options": {"temperature": 0.1, "num_predict": int(os.getenv("OLLAMA_PLAN_MAX_TOKENS", "1800"))}}
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(
+                    f"{base_url}/api/chat",
+                    headers=self._headers(agent="goal-analyst-planner", capability="planning",
+                        operation="create-execution-blueprint", model=model, task_id=task_id),
+                    json=body,
+                )
+                response.raise_for_status()
+                raw = self._chat_content(response.json(), model=model, operation="Execution blueprint")
+                blueprint = ExecutionBlueprint.model_validate_json(raw)
+                if blueprint.original_objective.strip() != objective.strip():
+                    raise ValueError("Planner changed the immutable original objective")
+                return blueprint
+        except (httpx.HTTPError, ValueError, ValidationError, KeyError) as exc:
+            raise OllamaUnavailable(f"Execution blueprint planning failed: {exc}") from exc
 
     async def initialise_goal_criteria(self, objective: str, proposed_steps: list[str], task_id: str | None = None) -> list[str]:
         base_url = self._require_base_url("GOAL_STATE")
