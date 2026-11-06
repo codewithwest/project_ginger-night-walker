@@ -11,6 +11,7 @@ def sample_blueprint():
         "version": 1,
         "original_objective": "Research three competitors and compare their pricing",
         "interpretation": "Find three competitors and compare publicly listed prices.",
+        "research_queries": ["top furniture retailers South Africa", "Weylandts competitors furniture prices South Africa"],
         "success_criteria": [
             {"criterion_id": "competitors", "description": "Identify three relevant competitors",
              "evidence_required": True, "acceptance_test": "Three distinct competitor sources are captured."},
