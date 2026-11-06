@@ -5,6 +5,7 @@ from nightwalker.decision_contracts import (
     DecisionPlan,
     DecisionStatus,
     PlannedStep,
+    normalise_decision_plan,
 )
 
 
@@ -65,3 +66,33 @@ def test_clarification_plan_without_question_gets_safe_fallback():
 def test_unknown_capability_is_rejected():
     with pytest.raises(ValidationError):
         PlannedStep(step_id="step-1", capability="admin", objective="Do anything")
+
+
+
+def test_normalise_repairs_string_url_and_dict_steps_before_serialization():
+    malformed = DecisionPlan.model_construct(
+        status=DecisionStatus.READY,
+        summary="Search the public web",
+        site_name="Web search",
+        target_url="https://www.bing.com/search?q=ginger",
+        clarification_question=None,
+        steps=[
+            {
+                "step_id": "open",
+                "capability": "navigate",
+                "objective": "Open a discovered public source.",
+            },
+            {
+                "step_id": "capture",
+                "capability": "extract",
+                "objective": "Capture relevant source details.",
+            },
+        ],
+    )
+
+    repaired = normalise_decision_plan(malformed)
+    payload = repaired.model_dump(mode="json")
+
+    assert str(repaired.target_url).startswith("https://www.bing.com/")
+    assert all(isinstance(step, PlannedStep) for step in repaired.steps)
+    assert payload["steps"][0]["step_id"] == "open"
