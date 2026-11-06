@@ -451,7 +451,7 @@ class TaskManager:
                         "remaining_work": [reason], "loop_guard": loop_guard.snapshot(),
                         "seed_for_next_round": ["Choose a different undiscovered source"],
                     })
-                    available = loop_guard.filter_candidates(candidates, visited_urls)
+                    available = loop_guard.filter_candidates(rank_research_candidates(self._effective_objective(task_id, objective), candidates), visited_urls)
                     if not available:
                         next_url = ""
                         research_complete = True
@@ -548,8 +548,8 @@ class TaskManager:
                     )
                     if is_search_page:
                         candidates.extend(result.get("candidate_urls", []))
-                        candidates = loop_guard.filter_candidates(candidates, visited_urls)
-                        available = loop_guard.filter_candidates(candidates, visited_urls)
+                        candidates = loop_guard.filter_candidates(rank_research_candidates(self._effective_objective(task_id, objective), candidates), visited_urls)
+                        available = loop_guard.filter_candidates(rank_research_candidates(self._effective_objective(task_id, objective), candidates), visited_urls)
                         next_url = available[0]["url"] if available else ""
                         next_assignment = (
                             "Inspect an actual result destination discovered from search: "
@@ -604,8 +604,8 @@ class TaskManager:
                         })
                         self._log(task_id, f"Rejected irrelevant source before evidence admission: {final_url}", "warning")
                         candidates.extend(result.get("candidate_urls", []))
-                        candidates = loop_guard.filter_candidates(candidates, visited_urls)
-                        available = loop_guard.filter_candidates(candidates, visited_urls)
+                        candidates = loop_guard.filter_candidates(rank_research_candidates(self._effective_objective(task_id, objective), candidates), visited_urls)
+                        available = loop_guard.filter_candidates(rank_research_candidates(self._effective_objective(task_id, objective), candidates), visited_urls)
                         next_url = available[0]["url"] if available else ""
                         next_assignment = "Find a relevant furniture retailer source"
                         self._save_checkpoint(
@@ -653,7 +653,7 @@ class TaskManager:
                             structured_data.setdefault(key, []).append(value)
                     candidates.extend(result.get("candidate_urls", []))
                     # Deduplicate candidates while preserving browser discovery order.
-                    candidates = loop_guard.filter_candidates(candidates, visited_urls)
+                    candidates = loop_guard.filter_candidates(rank_research_candidates(self._effective_objective(task_id, objective), candidates), visited_urls)
                     round_findings = [
                         item["claim"][:300] for item in findings[-12:]
                         if source_id in item.get("source_ids", [])
@@ -771,7 +771,7 @@ class TaskManager:
                 except (OllamaUnavailable, ValueError, TypeError) as exc:
                     # A model planning failure must not discard successfully captured
                     # evidence. Deterministically continue with a browser-discovered URL.
-                    available = loop_guard.filter_candidates(candidates, visited_urls)
+                    available = loop_guard.filter_candidates(rank_research_candidates(self._effective_objective(task_id, objective), candidates), visited_urls)
                     if not available:
                         limitations.append(
                             "Research planner failed and no discovered source remained."
