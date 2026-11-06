@@ -6,6 +6,7 @@ import {
   ExternalLink,
   FileSearch,
   LoaderCircle,
+  ListChecks,
   Play,
   Plus,
   RefreshCw,
@@ -13,6 +14,7 @@ import {
   ShieldCheck,
   Square,
   Terminal,
+  X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
@@ -616,6 +618,93 @@ export default function App() {
             )}
 
             {error && <div className="error-banner"><CircleAlert size={15} />{error}</div>}
+          </section>
+        </div>
+
+        <div className={`floating-checklist ${selected && ["queued", "running"].includes(selected.status) ? "is-running" : ""}`}>
+          <button
+            type="button"
+            className="floating-checklist__trigger"
+            aria-label={selected ? `Open checklist for ${selected.objective}` : "Open task checklist"}
+            aria-expanded={undefined}
+            onClick={(event) => {
+              const root = event.currentTarget.parentElement;
+              root?.classList.toggle("is-pinned");
+            }}
+          >
+            <span className="floating-checklist__trigger-icon"><ListChecks size={21} /></span>
+            {selected?.goal_state && (
+              <span className="floating-checklist__trigger-count">
+                {selected.goal_state.completed.length}/{selected.goal_state.criteria.length}
+              </span>
+            )}
+            <span className="floating-checklist__trigger-label">Task checklist</span>
+            {selected && ["queued", "running"].includes(selected.status) && (
+              <span className="floating-checklist__live-dot" aria-label="Model running" />
+            )}
+          </button>
+
+          <section className="floating-checklist__panel" aria-label="Current task checklist">
+            <div className="floating-checklist__header">
+              <div>
+                <span className="section-kicker"><ListChecks size={13} /> CURRENT TASK</span>
+                <strong>{selected ? selected.objective : "No task selected"}</strong>
+              </div>
+              <button
+                type="button"
+                className="floating-checklist__close"
+                aria-label="Close checklist"
+                onClick={(event) => event.currentTarget.closest(".floating-checklist")?.classList.remove("is-pinned")}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            {selected ? (
+              <>
+                <div className="floating-checklist__meta">
+                  <Status value={selected.status} />
+                  <span>{selected.round || 0}/{selected.max_rounds || 30} rounds</span>
+                </div>
+                {selected.goal_state ? (
+                  <>
+                    <div className="floating-checklist__progress">
+                      <span style={{ width: `${selected.goal_state.criteria.length ? (selected.goal_state.completed.length / selected.goal_state.criteria.length) * 100 : 0}%` }} />
+                    </div>
+                    <div className="floating-checklist__summary">
+                      {selected.goal_state.completed.length} of {selected.goal_state.criteria.length} criteria verified
+                    </div>
+                    <ul className="floating-checklist__items">
+                      {selected.goal_state.criteria.map((criterion, index) => {
+                        const proof = selected.goal_state?.evidence_by_criterion?.[criterion];
+                        const done = selected.goal_state?.completed.includes(criterion) ?? false;
+                        return (
+                          <li className={done ? "is-done" : ""} key={criterion + index}>
+                            <span className="floating-checklist__check">
+                              {done ? <Check size={13} /> : null}
+                            </span>
+                            <span className="floating-checklist__criterion">
+                              {criterion}
+                              {proof?.evidence_id && <small>Evidence · {proof.evidence_id}</small>}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </>
+                ) : (
+                  <p className="floating-checklist__empty">Success criteria are being prepared for this task.</p>
+                )}
+                <div className="floating-checklist__footer">
+                  <span>{selected.status === "running" || selected.status === "queued" ? "Updating as work progresses" : "Showing this task's latest checklist"}</span>
+                  <button type="button" onClick={() => {
+                    document.querySelector(".report-details")?.scrollIntoView({ behavior: "smooth", block: "center" });
+                    document.querySelectorAll(".report-details").forEach((node) => node.setAttribute("open", "true"));
+                  }}>View full checklist</button>
+                </div>
+              </>
+            ) : (
+              <p className="floating-checklist__empty">Select a mission to see its goal, verified criteria and remaining work.</p>
+            )}
           </section>
         </div>
 
