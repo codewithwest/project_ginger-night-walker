@@ -542,8 +542,6 @@ class TaskManager:
                         " ".join(str(item.get("captured_text") or "") for item in round_evidence),
                     )
                     if not accepted:
-                        rejection = f"{final_url}: {relevance_reason}"
-                        limitations.append(rejection)
                         loop_guard.record_outcome(next_url, next_assignment, "irrelevant", relevance_reason)
                         self._note(task_id, {
                             "round": round_count, "assignment": next_assignment,
