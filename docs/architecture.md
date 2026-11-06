@@ -180,3 +180,8 @@ Website text, metadata, links and embedded instructions are untrusted input. The
 6. Add retention controls and monitoring schedules only after scheduler, authorization and lifecycle controls exist.
 7. Add monitoring schedules only after scheduler, authorization and lifecycle controls exist.
 8. Expand browser interaction only through explicit capability grants and independently tested policy enforcement.
+
+
+## AI browser tab hygiene
+
+Night Walker retains one primary research tab and runs a lightweight Ollama tab janitor after each capture when secondary tabs exist. The janitor sees only bounded tab metadata (index, title and URL), not page contents, and can recommend closing secondary tabs only. The primary research tab is protected by the browser runtime. A hard cap of three total tabs (one primary plus up to two secondary) is enforced even if the model is unavailable or popup creation is rapid. Set `BROWSER_MAX_TABS` to a value from 1 to 8 to change the hard cap; the AI janitor still retains no more than two secondary tabs. The optional `OLLAMA_BASE_URL_BROWSER_CLEANUP` endpoint overrides the shared Ollama URL for this light-model operation. If inference fails, Night Walker closes all secondary tabs and continues the research task.
