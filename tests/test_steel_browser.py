@@ -116,21 +116,26 @@ async def test_self_hosted_steel_session_connects_without_api_key(monkeypatch):
     assert result is context
     assert captured["api_url"] == "http://steel-browser:3000/v1/sessions"
     assert "steel-api-key" not in captured["headers"]
-    assert captured["websocket_url"] == "ws://steel-browser:3000/"
+    assert captured["websocket_url"] == "ws://127.0.0.1:3000/"
     assert captured["route_pattern"] == "**/*"
 
 
 @pytest.mark.parametrize(
     ("websocket_url", "expected"),
     [
-        ("ws://0.0.0.0:3000/", "ws://steel-browser:3000/"),
-        ("ws://[::]:3000/cdp", "ws://steel-browser:3000/cdp"),
-        ("ws://steel-browser:9223/cdp", "ws://steel-browser:9223/cdp"),
+        ("ws://0.0.0.0:3000/", "ws://10.0.0.12:3000/"),
+        ("ws://[::]:3000/cdp", "ws://10.0.0.12:3000/cdp"),
+        ("ws://steel-browser:9223/cdp", "ws://10.0.0.12:9223/cdp"),
+        ("ws://127.0.0.1:3000/cdp", "ws://127.0.0.1:3000/cdp"),
     ],
 )
-def test_steel_websocket_url_replaces_only_wildcard_hosts(monkeypatch, websocket_url, expected):
+def test_steel_websocket_url_uses_ip_host_header(monkeypatch, websocket_url, expected):
     monkeypatch.setenv("BROWSER_BACKEND", "steel")
     runtime = BrowserRuntime()
+    monkeypatch.setattr(
+        "nightwalker.browser_runtime.socket.getaddrinfo",
+        lambda *args, **kwargs: [(None, None, None, None, ("10.0.0.12", 3000))],
+    )
 
     assert runtime._normalise_steel_websocket_url(
         websocket_url, "http://steel-browser:3000/v1"
