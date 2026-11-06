@@ -38,7 +38,7 @@ class ResearchLoopGuard:
         self.outcomes: list[dict[str, Any]] = []
 
     @classmethod
-    def from_snapshot(cls, snapshot: dict[str, Any] | None) -> "ResearchLoopGuard":
+    def from_snapshot(cls, snapshot: dict[str, Any] | None) -> ResearchLoopGuard:
         snapshot = snapshot or {}
         guard = cls(max_attempts_per_url=int(snapshot.get("max_attempts_per_url", 2)))
         for key, count in (snapshot.get("attempts") or {}).items():
