@@ -213,6 +213,7 @@ class OllamaClient:
                 {"role": "user", "content": json.dumps({"objective": objective})},
             ],
             "options": {
+                "num_ctx": int(os.getenv("OLLAMA_NUM_CTX", "8192")),
                 "temperature": 0.1,
                 "num_predict": int(os.getenv("OLLAMA_MAX_TOKENS", "1200")),
             },
@@ -340,7 +341,8 @@ class OllamaClient:
             "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "0"), "think": False, "format": schema,
             "messages": [{"role": "system", "content": system_prompt},
                          {"role": "user", "content": json.dumps(packet, ensure_ascii=False)}],
-            "options": {"temperature": 0.1, "num_predict": int(os.getenv("OLLAMA_PLAN_MAX_TOKENS", "1800"))}}
+            "options": {
+                "num_ctx": int(os.getenv("OLLAMA_NUM_CTX", "8192")),"temperature": 0.1, "num_predict": int(os.getenv("OLLAMA_PLAN_MAX_TOKENS", "1800"))}}
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(
@@ -365,7 +367,8 @@ class OllamaClient:
             "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "0"), "think": False, "format": GoalCriteriaPlan.model_json_schema(),
             "messages": [{"role": "system", "content": "Extract 1-6 concrete success criteria from the original user objective. Preserve explicit requirements; do not invent requirements. Return JSON only."},
                 {"role": "user", "content": json.dumps({"original_goal": objective[:2000], "planner_steps": proposed_steps[:8]}, ensure_ascii=False)}],
-            "options": {"temperature": 0, "num_predict": 300}}
+            "options": {
+                "num_ctx": int(os.getenv("OLLAMA_NUM_CTX", "8192")),"temperature": 0, "num_predict": 300}}
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(f"{base_url}/api/chat", headers=self._headers(
@@ -390,7 +393,8 @@ class OllamaClient:
             "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "0"), "think": False, "format": GoalProgressProposal.model_json_schema(),
             "messages": [{"role": "system", "content": "Use the goal_progress_checklist and criterion acceptance tests. Only propose completed criteria when current-round evidence directly satisfies the acceptance test. Copy an exact quote and evidence_id. Never infer completion or mark work complete based on a plan, URL visit or prior model claim. Return JSON only."},
                 {"role": "user", "content": json.dumps({"original_goal": goal_state["original_goal"], "criteria": goal_state["criteria"], "already_completed": goal_state["completed"], "remaining": goal_state["remaining"], "goal_progress_checklist": checklist_markdown[:12000], "current_round_evidence": evidence}, ensure_ascii=False)}],
-            "options": {"temperature": 0, "num_predict": 400}}
+            "options": {
+                "num_ctx": int(os.getenv("OLLAMA_NUM_CTX", "8192")),"temperature": 0, "num_predict": 400}}
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(f"{base_url}/api/chat", headers=self._headers(
@@ -572,7 +576,8 @@ class OllamaClient:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": json.dumps(packet, ensure_ascii=False)},
             ],
-            "options": {"temperature": 0.1, "num_predict": 500},
+            "options": {
+                "num_ctx": int(os.getenv("OLLAMA_NUM_CTX", "8192")),"temperature": 0.1, "num_predict": 500},
         }
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -652,7 +657,8 @@ class OllamaClient:
                 },
                 {"role": "user", "content": json.dumps(packet, ensure_ascii=False)},
             ],
-            "options": {"temperature": 0.1, "num_predict": 900},
+            "options": {
+                "num_ctx": int(os.getenv("OLLAMA_NUM_CTX", "8192")),"temperature": 0.1, "num_predict": 900},
         }
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -705,6 +711,7 @@ class OllamaClient:
                 {"role": "user", "content": json.dumps(packet, ensure_ascii=False)},
             ],
             "options": {
+                "num_ctx": int(os.getenv("OLLAMA_NUM_CTX", "8192")),
                 "temperature": 0.1,
                 "num_predict": int(os.getenv("OLLAMA_MAX_TOKENS", "1200")),
             },
