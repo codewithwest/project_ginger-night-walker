@@ -48,3 +48,29 @@ def test_generic_objectives_keep_model_queries():
 
     queries = focused_research_queries("Research cloud hosting providers", ["cloud hosting providers"])
     assert queries == ["cloud hosting providers"]
+
+
+def test_discovery_candidates_prioritise_retailers_and_drop_general_reference_pages():
+    from nightwalker.research_relevance import rank_research_candidates
+
+    candidates = [
+        {"url": "https://dictionary.cambridge.org/dictionary/english/furniture", "label": "Furniture definition"},
+        {"url": "https://www.polokwane.gov.za/", "label": "Polokwane municipality"},
+        {"url": "https://www.weylandts.co.za/", "label": "Weylandts | Furniture and homeware"},
+        {"url": "https://www.example.co.za/furniture-stores", "label": "Furniture stores in South Africa"},
+        {"url": "https://www.example.co.za/about", "label": "About our company"},
+    ]
+
+    ranked = rank_research_candidates(OBJECTIVE, candidates)
+
+    assert [item["url"] for item in ranked] == [
+        "https://www.weylandts.co.za/",
+        "https://www.example.co.za/furniture-stores",
+    ]
+
+
+def test_candidate_ranking_does_not_filter_non_furniture_research():
+    from nightwalker.research_relevance import rank_research_candidates
+
+    candidates = [{"url": "https://dictionary.cambridge.org/", "label": "Reference"}]
+    assert rank_research_candidates("Research South African universities", candidates) == candidates
