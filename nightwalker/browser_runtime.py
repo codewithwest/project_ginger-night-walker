@@ -30,6 +30,7 @@ class BrowserRuntime:
         self._task_sessions: dict[str, dict] = {}
         self._task_contexts: dict[str, BrowserContext] = {}
         self._task_pages: dict[str, Page] = {}
+        self._tab_listener_contexts: set[int] = set()
         self.backend = os.getenv("BROWSER_BACKEND", "local").strip().lower()
         if self.backend not in {"local", "steel"}:
             raise ValueError("BROWSER_BACKEND must be 'local' or 'steel'")
@@ -58,10 +59,93 @@ class BrowserRuntime:
             await self._playwright.stop()
             self._playwright = None
 
+    @staticmethod
+    def _max_browser_tabs() -> int:
+        try:
+            return max(1, min(8, int(os.getenv("BROWSER_MAX_TABS", "4"))))
+        except ValueError:
+            return 4
+
+    async def _enforce_tab_limit(self, task_id: str, opened: Page) -> None:
+        """Hard-stop popup storms before they can exhaust the browser session."""
+        context = self._task_contexts.get(task_id)
+        if context is None:
+            return
+        try:
+            pages = [page for page in context.pages if not page.is_closed()]
+            if len(pages) <= self._max_browser_tabs():
+                return
+            primary = self._task_pages.get(task_id)
+            if opened is not primary and not opened.is_closed():
+                await opened.close()
+                self._browser_event(
+                    task_id, "Closed a new tab immediately because the browser tab limit was reached",
+                    url=getattr(opened, "url", None),
+                )
+        except Exception as exc:  # noqa: BLE001 - popup cleanup must not crash navigation
+            self._browser_event(task_id, f"Tab-limit cleanup warning: {str(exc)[:180]}")
+
+    async def tab_inventory(self, task_id: str) -> list[dict]:
+        """Return bounded metadata for the AI tab janitor; never expose page objects."""
+        context = self._task_contexts.get(task_id)
+        if context is None:
+            return []
+        primary = self._task_pages.get(task_id)
+        pages = [page for page in getattr(context, "pages", []) if not page.is_closed()]
+        pages.sort(key=lambda page: page is not primary)
+        inventory = []
+        for index, page in enumerate(pages[:8]):
+            try:
+                title = (await page.title())[:180]
+            except Exception:  # noqa: BLE001 - inaccessible tabs remain cleanable
+                title = ""
+            inventory.append({
+                "index": index,
+                "primary": page is primary,
+                "url": str(getattr(page, "url", ""))[:500],
+                "title": title,
+            })
+        return inventory
+
+    async def cleanup_task_tabs(
+        self, task_id: str, close_indices: list[int], reason: str = "AI tab cleanup",
+    ) -> dict:
+        """Apply an AI proposal to extra tabs only; the primary research page is immutable."""
+        context = self._task_contexts.get(task_id)
+        if context is None:
+            return {"closed": 0, "remaining": 0, "reason": "No active browser context"}
+        primary = self._task_pages.get(task_id)
+        pages = [page for page in getattr(context, "pages", []) if not page.is_closed()]
+        pages.sort(key=lambda page: page is not primary)
+        selected = {
+            index for index in close_indices
+            if isinstance(index, int) and not isinstance(index, bool) and 0 < index < len(pages)
+        }
+        max_tabs = self._max_browser_tabs()
+        # A model cannot retain an unbounded set of secondary tabs.
+        overflow = set(range(max_tabs, len(pages)))
+        selected.update(overflow)
+        closed = 0
+        for index in sorted(selected, reverse=True):
+            page = pages[index]
+            if page is primary or page.is_closed():
+                continue
+            try:
+                await page.close()
+                closed += 1
+            except Exception as exc:  # noqa: BLE001 - continue cleaning other tabs
+                self._browser_event(task_id, f"Could not close extra tab: {str(exc)[:160]}")
+        remaining = sum(1 for page in getattr(context, "pages", []) if not page.is_closed())
+        message = f"AI tab janitor closed {closed} extra tab(s); {remaining} remain. {reason[:220]}"
+        self._browser_event(task_id, message, status="active")
+        return {"closed": closed, "remaining": remaining, "reason": reason[:300]}
+
     async def close_task_session(self, task_id: str) -> None:
         """Close the single browser context retained across this task's research rounds."""
         context = self._task_contexts.pop(task_id, None)
         self._task_pages.pop(task_id, None)
+        if context is not None:
+            self._tab_listener_contexts.discard(id(context))
         state = self._task_sessions.get(task_id)
         if state:
             self._browser_event(task_id, "Browser session closed after task completion", status="finished")
@@ -393,11 +477,14 @@ class BrowserRuntime:
                     None,
                 ) or await context.new_page()
                 self._task_pages[task_id] = page
-                # Popups and script-opened tabs are never part of the read-only workflow.
-                if hasattr(context, "on"):
-                    context.on("page", lambda opened: asyncio.create_task(opened.close()) if opened != page else None)
-                if hasattr(page, "on"):
-                    page.on("popup", lambda popup: asyncio.create_task(popup.close()))
+                # New tabs are briefly visible to the AI janitor after the page capture.
+                # A hard cap remains active so popup storms cannot grow without bound.
+                if hasattr(context, "on") and id(context) not in self._tab_listener_contexts:
+                    context.on(
+                        "page",
+                        lambda opened: asyncio.create_task(self._enforce_tab_limit(task_id, opened)),
+                    )
+                    self._tab_listener_contexts.add(id(context))
             for extra_page in list(context.pages):
                 if extra_page != page and not extra_page.is_closed():
                     await extra_page.close()
