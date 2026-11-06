@@ -14,7 +14,7 @@ class DecisionStatus(str, Enum):
 
 
 class PlannedStep(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
     step_id: str = Field(min_length=1, max_length=40)
     capability: Capability
     objective: str = Field(min_length=1, max_length=500)
