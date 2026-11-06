@@ -99,7 +99,7 @@ Every model-service request carries explicit `X-Ginger-Agent`, `X-Ginger-Capabil
 | GET | `/health/ollama` | Remote inference connectivity |
 | POST | `/tasks` | Submit natural-language objective (202) |
 | GET | `/tasks` | List restored and in-memory tasks |
-| GET | `/tasks/{task_id}` | Fetch task state |
+| GET | `/tasks/{task_id}` | Fetch task state, execution blueprint, assignments and progress |\n| GET | `/tasks/{task_id}/a2a` | Read task-scoped A2A messages |\n| POST | `/tasks/{task_id}/a2a` | Send a typed A2A message between agents allocated to this task |
 | POST | `/tasks/{task_id}/clarify` | Supply clarification |
 | POST | `/tasks/{task_id}/follow-up` | Add an instruction to an active research task for subsequent rounds |
 | DELETE | `/tasks/{task_id}` | Cancel active, queued or clarification-waiting task; preserve partial report |
@@ -161,7 +161,7 @@ Common diagnoses:
 - Task snapshots and research checkpoints are durable and restart-resumable for the single-process service. This is atomic JSON storage, not a transactional multi-worker queue; do not run multiple Night Walker workers against the same task directory. A crash during a page inspection can retry that one source, bounded by the loop guard. Terminal and clarification-waiting tasks are restored but not auto-resumed.
 - Research runs up to 30 bounded page-inspection rounds, starting from Bing search results or a user-supplied URL; discovered links are the candidate source pool. The Research Loop Guard canonicalises URL comparisons, deduplicates candidates, permits at most two attempts per URL, records bounded recent outcomes in task state/scratchpad, skips repeated or already visited sources, and falls back to another discovered candidate when a selected source is exhausted.
 - Source selection is model-assisted but constrained to URLs actually observed by the browser. Discovery quality depends on search results and page links. Repeat detection is deterministic and task-local; it is not a general-purpose model-action verifier.
-- The Goal State Manager tracks an immutable objective and up to six success criteria. The small model can propose completion only with an exact quote and evidence ID; Python verifies both against the current captured evidence. This is evidence linkage, not proof that the source itself is truthful.
+- The Goal State Manager tracks an immutable objective and up to twelve success criteria. The small model can propose completion only with an exact quote and evidence ID; Python verifies both against the current captured evidence. This is evidence linkage, not proof that the source itself is truthful.
 - An optional Strands Decider can select only among browser-discovered source URLs. If unavailable or misconfigured, the Ollama planner remains the fallback. The integrated Strands adapter has no browser tools.
 - Findings carry source/evidence IDs and visible-text excerpts; synthesis is bounded to those observations and is not yet a full fact-checking or source-authority engine.
 - Active tasks accept follow-up instructions; follow-ups after completion require a new task.
