@@ -63,7 +63,7 @@ class GoalStateManager:
             "about", "after", "based", "clear", "specific", "within", "which",
             "their", "there", "these", "those", "through", "directly", "determine",
             "establish", "identify", "objectives", "objective", "criteria", "rules",
-            "progression", "progress", "unique", "features", "mechanics", "known",
+            "progression", "progress", "unique", "mechanics", "known",
             "other", "game", "games", "trainer", "velocity", "knight",
         }
         def terms(value: str) -> set[str]:
@@ -82,7 +82,7 @@ class GoalStateManager:
             meaningful_words = [word for word in words if word not in boilerplate]
             criterion_terms = terms(claim.criterion)
             overlap = criterion_terms & set(meaningful_words)
-            relevant = len(overlap) >= 2 if len(criterion_terms) >= 3 else bool(overlap)
+            relevant = len(overlap) >= 2 if len(criterion_terms) > 2 else bool(overlap)
             quote_is_informative = len(terms(claim.quote)) >= 3
             already_used = any(
                 value.get("evidence_id") == claim.evidence_id
