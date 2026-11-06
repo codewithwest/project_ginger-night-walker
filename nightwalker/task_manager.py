@@ -15,6 +15,7 @@ from nightwalker.orchestrator import Orchestrator
 from nightwalker.research_guard import ResearchLoopGuard
 from nightwalker.research_relevance import focused_research_queries, source_relevance
 from nightwalker.scratchpad import TaskScratchpad
+from nightwalker.task_checklist import TaskChecklist
 from nightwalker.task_state_store import TaskStateStore
 
 
@@ -24,6 +25,7 @@ class TaskManager:
         self.tasks: dict[str, dict[str, Any]] = {}
         self.running: dict[str, asyncio.Task[None]] = {}
         self.scratchpad = TaskScratchpad()
+        self.checklist = TaskChecklist()
         self.state_store = TaskStateStore()
         self.max_rounds = 30
         self.a2a_bus = A2ABus()
@@ -53,6 +55,7 @@ class TaskManager:
         if record is None:
             return
         try:
+            self.checklist.write(record)
             self.state_store.save(record)
         except (OSError, TypeError, ValueError) as exc:
             if not record.get("persistence_error"):
@@ -111,6 +114,7 @@ class TaskManager:
             record.setdefault("logs", [])
             record.setdefault("progress_events", [])
             record.setdefault("scratchpad", self.scratchpad.read(task_id))
+            record.setdefault("checklist_markdown", self.checklist.read(task_id) or "")
             record.setdefault("follow_up_instructions", [])
             record.setdefault("step_results", [])
             record.setdefault("checkpoint", None)
@@ -236,6 +240,7 @@ class TaskManager:
             "round": 0,
             "max_rounds": self.max_rounds,
             "scratchpad": self.scratchpad.read(task_id),
+            "checklist_markdown": "",
             "follow_up_instructions": [],
             "goal_state": None,
             "checkpoint": None,
@@ -707,6 +712,7 @@ class TaskManager:
                         round_number=round_count,
                         max_rounds=self.max_rounds,
                         scratchpad=self.scratchpad.read(task_id)[-8:],
+                        checklist_markdown=self.checklist.write(record),
                         candidates=candidates,
                         visited_urls=visited_urls,
                         task_id=task_id,
@@ -787,7 +793,9 @@ class TaskManager:
                 })
                 try:
                     synthesis = await self.orchestrator.ollama.synthesise_research(
-                        self._effective_objective(task_id, objective), findings, sources, round_count, self.max_rounds, task_id=task_id
+                        self._effective_objective(task_id, objective), findings, sources, round_count,
+                        self.max_rounds, task_id=task_id,
+                        checklist_markdown=self.checklist.write(record),
                     )
                     answer = synthesis.answer
                     if synthesis.coverage_summary:
