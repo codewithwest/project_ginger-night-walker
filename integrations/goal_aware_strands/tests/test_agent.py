@@ -15,6 +15,7 @@ def test_demo_end_to_end():
     with MockBrowser() as tools:
         result = AgentRunner(GoalStateManager(FakeStateModel()), FakeDecider(), FakeCoder(), tools, Config()).run("Visit python.org and open Downloads")
     assert result["status"] == "completed"
+    assert result["task_id"]
     assert len(result["steps"]) == 3
     assert result["final_state"]["evidence"]
 
