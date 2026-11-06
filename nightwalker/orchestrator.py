@@ -23,35 +23,41 @@ class Orchestrator:
     async def run_agent_task(self, task: AgentTask) -> AgentResult:
         return await self.ollama.run_agent(task)
 
+    async def _cleanup_browser_tabs(self, task_id: str, objective: str) -> dict | None:
+        tabs = await self.browser.tab_inventory(task_id)
+        if len(tabs) <= 1:
+            return None
+        try:
+            proposal = await self.ollama.cleanup_browser_tabs(
+                objective, tabs, task_id=task_id
+            )
+            cleanup = await self.browser.cleanup_task_tabs(
+                task_id, proposal["close_indices"], proposal.get("reason", "AI recommendation")
+            )
+            cleanup["mode"] = "ai"
+        except (OllamaUnavailable, RuntimeError, ValueError, TypeError, KeyError) as cleanup_error:
+            cleanup = await self.browser.cleanup_task_tabs(
+                task_id, list(range(1, len(tabs))),
+                "Safe fallback: AI cleanup unavailable (" + str(cleanup_error)[:160] + ")",
+            )
+            cleanup["mode"] = "fallback"
+        return cleanup
+
     async def run_browser_workflow(self, task_id: str, objective: str, plan: DecisionPlan) -> dict:
         if not plan.target_url:
             raise ValueError("The Decider plan has no target URL")
         steps = [step.model_dump(mode="json") for step in plan.steps]
         try:
+            before_cleanup = await self._cleanup_browser_tabs(task_id, objective)
             result = await self.browser.run_plan(
                 task_id=task_id,
                 url=str(plan.target_url),
                 steps=steps,
                 objective=objective,
             )
-            # AI classifies only secondary tabs. The browser runtime protects the
-            # primary page and enforces the hard tab cap regardless of model output.
-            tabs = await self.browser.tab_inventory(task_id)
-            if len(tabs) > 1:
-                try:
-                    proposal = await self.ollama.cleanup_browser_tabs(
-                        objective, tabs, task_id=task_id
-                    )
-                    cleanup = await self.browser.cleanup_task_tabs(
-                        task_id, proposal["close_indices"], proposal.get("reason", "AI recommendation")
-                    )
-                    cleanup["mode"] = "ai"
-                except (OllamaUnavailable, RuntimeError, ValueError, TypeError, KeyError) as cleanup_error:
-                    cleanup = await self.browser.cleanup_task_tabs(
-                        task_id, list(range(1, len(tabs))),
-                        "Safe fallback: AI cleanup unavailable (" + str(cleanup_error)[:160] + ")",
-                    )
-                    cleanup["mode"] = "fallback"
+            after_cleanup = await self._cleanup_browser_tabs(task_id, objective)
+            cleanup = after_cleanup or before_cleanup
+            if cleanup:
                 result["tab_cleanup"] = cleanup
             return result
         except PermissionError as exc:
