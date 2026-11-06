@@ -13,7 +13,11 @@ from nightwalker.goal_state import GoalStateManager
 from nightwalker.ollama_client import OllamaUnavailable
 from nightwalker.orchestrator import Orchestrator
 from nightwalker.research_guard import ResearchLoopGuard
-from nightwalker.research_relevance import focused_research_queries, rank_research_candidates, source_relevance
+from nightwalker.research_relevance import (
+    focused_research_queries,
+    rank_research_candidates,
+    source_relevance,
+)
 from nightwalker.scratchpad import TaskScratchpad
 from nightwalker.task_checklist import TaskChecklist
 from nightwalker.task_state_store import TaskStateStore
