@@ -1,10 +1,9 @@
 """Deterministic capability allocator; model plans never choose permissions."""
 from __future__ import annotations
 
-from typing import Any
-
 from nightwalker.a2a import A2ABus, A2AMessage, A2AMessageType
 from nightwalker.planning_contracts import ExecutionBlueprint
+from typing import Any
 
 
 CAPABILITY_AGENTS = {
