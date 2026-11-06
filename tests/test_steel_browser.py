@@ -49,8 +49,6 @@ def test_self_hosted_steel_backend_does_not_require_cloud_api_key(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_self_hosted_steel_session_connects_without_api_key(monkeypatch):
-    import httpx
-
     monkeypatch.setenv("BROWSER_BACKEND", "steel")
     monkeypatch.setenv("STEEL_API_BASE_URL", "http://steel-browser:3000/v1")
     monkeypatch.delenv("STEEL_API_KEY", raising=False)
@@ -64,7 +62,8 @@ async def test_self_hosted_steel_session_connects_without_api_key(monkeypatch):
     context = FakeContext()
 
     class FakeBrowser:
-        contexts = [context]
+        def __init__(self):
+            self.contexts = [context]
 
         def is_connected(self):
             return True
