@@ -91,6 +91,7 @@ class TaskChecklist:
                 evidence = evidence_map.get(criterion) or {}
                 suffix = (
                     f" — evidence: {self._safe(evidence.get('evidence_id'), 100)}"
+                    + (f" — quote: {self._safe(evidence.get('quote'), 180)}" if evidence.get("quote") else "")
                     if is_done and evidence.get("evidence_id") else ""
                 )
                 lines.append(f"{index}. {self._checkbox(is_done)} {self._safe(criterion, 400)}{suffix}")
