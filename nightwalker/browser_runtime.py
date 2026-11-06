@@ -50,6 +50,31 @@ class BrowserRuntime:
             await self._playwright.stop()
             self._playwright = None
 
+    @staticmethod
+    def _normalise_steel_websocket_url(websocket_url: str, api_base: str) -> str:
+        """Replace wildcard bind hosts in Steel's advertised CDP URL.
+
+        Steel may advertise 0.0.0.0 or ::, which are listen addresses and cannot
+        be used as a client destination. Resolve those to the hostname used for
+        the Steel API so Docker clients connect over the Compose network.
+        """
+        websocket = urlparse(websocket_url)
+        api = urlparse(api_base)
+        host = (websocket.hostname or "").strip("[]").lower()
+        if host in {"0.0.0.0", "::", ""}:
+            api_host = api.hostname
+            if not api_host:
+                raise RuntimeError("STEEL_API_BASE_URL must include a reachable hostname")
+            netloc = api_host
+            if websocket.port:
+                netloc += f":{websocket.port}"
+            elif api.port:
+                netloc += f":{api.port}"
+            if ":" in api_host and not api_host.startswith("["):
+                netloc = f"[{api_host}]" + (f":{websocket.port or api.port}" if websocket.port or api.port else "")
+            return websocket._replace(netloc=netloc).geturl()
+        return websocket_url
+
     async def _release_steel_session(self, session_id: str) -> None:
         api_base = os.getenv("STEEL_API_BASE_URL", "http://steel-browser:3000/v1").rstrip("/")
         api_key = os.getenv("STEEL_API_KEY", "").strip()
@@ -86,6 +111,8 @@ class BrowserRuntime:
                 session = response.json()
             session_id = str(session.get("id") or session.get("sessionId") or "")
             websocket_url = str(session.get("websocketUrl") or session.get("websocket_url") or "")
+            if websocket_url:
+                websocket_url = self._normalise_steel_websocket_url(websocket_url, api_base)
             if not session_id or not websocket_url:
                 if session_id:
                     await self._release_steel_session(session_id)
