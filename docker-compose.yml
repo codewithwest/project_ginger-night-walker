@@ -10,8 +10,13 @@ services:
       - .env
     environment:
       EVIDENCE_DIR: /app/evidence
+      BROWSER_BACKEND: ${BROWSER_BACKEND:-steel}
+      STEEL_CDP_URL: ${STEEL_CDP_URL:-ws://steel-browser:3000}
     volumes:
       - nightwalker_evidence:/app/evidence
+    depends_on:
+      steel-browser:
+        condition: service_started
     read_only: true
     tmpfs:
       - /tmp:size=256m,noexec,nosuid
@@ -23,5 +28,20 @@ services:
     mem_limit: 2g
     cpus: 2.0
 
+  steel-browser:
+    image: ghcr.io/steel-dev/steel-browser:latest
+    container_name: ginger-steel-browser
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:9223:9223"
+    volumes:
+      - steel_browser_cache:/app/.cache
+    init: true
+    shm_size: 1gb
+    security_opt:
+      - no-new-privileges:true
+
 volumes:
   nightwalker_evidence:
+  steel_browser_cache:
