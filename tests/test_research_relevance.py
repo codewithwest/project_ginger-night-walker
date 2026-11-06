@@ -1,10 +1,3 @@
-from nightwalker.research_relevance import (
-    focused_research_queries,
-    is_furniture_retail_research,
-    source_relevance,
-)
-
-
 OBJECTIVE = (
     "Research the top five furniture retailers in South Africa. Compare product "
     "categories, pricing, target customers and online shopping experiences."
@@ -12,6 +5,8 @@ OBJECTIVE = (
 
 
 def test_furniture_retail_queries_are_category_led_and_specific():
+    from nightwalker.research_relevance import focused_research_queries, is_furniture_retail_research
+
     assert is_furniture_retail_research(OBJECTIVE)
     queries = focused_research_queries(OBJECTIVE, ["top", "dictionary top meaning"])
     assert len(queries) >= 4
@@ -20,6 +15,8 @@ def test_furniture_retail_queries_are_category_led_and_specific():
 
 
 def test_rejects_supermarket_dictionary_and_music_sources():
+    from nightwalker.research_relevance import source_relevance
+
     for url, title, text in [
         ("https://www.topsatspar.co.za/Home", "TOPS at SPAR", "Online shopping wine specials rewards"),
         ("https://dictionary.cambridge.org/dictionary/english/top", "TOP meaning", "Meaning of top in English examples"),
@@ -31,6 +28,8 @@ def test_rejects_supermarket_dictionary_and_music_sources():
 
 
 def test_accepts_substantive_furniture_retail_page():
+    from nightwalker.research_relevance import source_relevance
+
     accepted, reason = source_relevance(
         OBJECTIVE,
         "https://www.example.co.za/furniture",
@@ -42,5 +41,7 @@ def test_accepts_substantive_furniture_retail_page():
 
 
 def test_generic_objectives_keep_model_queries():
+    from nightwalker.research_relevance import focused_research_queries
+
     queries = focused_research_queries("Research cloud hosting providers", ["cloud hosting providers"])
     assert queries == ["cloud hosting providers"]
