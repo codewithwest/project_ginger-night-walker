@@ -300,10 +300,8 @@ class TaskManager:
                 try:
                     blueprint = await self.orchestrator.ollama.create_execution_blueprint(objective, task_id=task_id)
                     record["execution_blueprint"] = blueprint.model_dump(mode="json")
-                    record["agent_assignments"] = self.agent_allocator.assign(task_id, blueprint)
-                    record["a2a_messages"] = self.a2a_bus.history(task_id)
                     criteria = [item.description for item in blueprint.success_criteria]
-                    self._log(task_id, f"Execution blueprint created: {len(criteria)} success criteria, {len(blueprint.subtasks)} subtasks; capability agents assigned")
+                    self._log(task_id, f"Execution blueprint created: {len(criteria)} success criteria and {len(blueprint.subtasks)} subtasks")
                     self._persist(task_id)
                 except (OllamaUnavailable, AttributeError, ValueError) as exc:
                     self._log(task_id, f"Goal-first planning unavailable; using bounded legacy planning fallback: {exc}", "warning")
@@ -319,6 +317,10 @@ class TaskManager:
                         self._log(task_id, f"Goal criteria model unavailable; using planner steps: {exc}", "warning")
                 record["goal_state"] = GoalStateManager.initialise(objective, criteria)
                 self._log(task_id, f"Goal State Manager established {len(criteria)} success criteria")
+                if initial_plan.status == DecisionStatus.READY and blueprint is not None:
+                    record["agent_assignments"] = self.agent_allocator.assign(task_id, blueprint)
+                    record["a2a_messages"] = self.a2a_bus.history(task_id)
+                    self._log(task_id, f"Allocated {len(record['agent_assignments'])} capability agents and dispatched A2A assignments")
                 record["site_name"] = initial_plan.site_name
                 record["target_url"] = str(initial_plan.target_url) if initial_plan.target_url else None
                 if initial_plan.status != DecisionStatus.READY:
