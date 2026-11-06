@@ -37,6 +37,7 @@ class ExecutionBlueprint(BaseModel):
     success_criteria: list[SuccessCriterion] = Field(min_length=1, max_length=12)
     subtasks: list[PlannedSubtask] = Field(min_length=1, max_length=20)
     completion_policy: str = Field(default="all_criteria_verified", max_length=100)
+    research_queries: list[str] = Field(default_factory=list, max_length=8)
 
     @model_validator(mode="after")
     def validate_graph(self):
