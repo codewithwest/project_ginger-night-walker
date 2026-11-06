@@ -55,7 +55,10 @@ class TaskManager:
         if record is None:
             return
         try:
-            self.checklist.write(record)
+            try:
+                self.checklist.write(record)
+            except (OSError, TypeError, ValueError) as checklist_exc:
+                record["checklist_error"] = str(checklist_exc)[:500]
             self.state_store.save(record)
         except (OSError, TypeError, ValueError) as exc:
             if not record.get("persistence_error"):
@@ -579,7 +582,11 @@ class TaskManager:
                     evidence.extend(round_evidence)
                     if record.get("goal_state") and round_evidence:
                         try:
-                            proposal = await self.orchestrator.ollama.evaluate_goal_progress(record["goal_state"], round_evidence, task_id=task_id, round_number=round_count)
+                            proposal = await self.orchestrator.ollama.evaluate_goal_progress(
+                                record["goal_state"], round_evidence, task_id=task_id,
+                                round_number=round_count,
+                                checklist_markdown=self.checklist.write(record),
+                            )
                             GoalStateManager.apply_proposal(record["goal_state"], proposal, round_evidence)
                             self._log(task_id, f"Goal progress: {len(record['goal_state']['completed'])}/{len(record['goal_state']['criteria'])} criteria have verified evidence.")
                         except (OllamaUnavailable, AttributeError) as exc:
