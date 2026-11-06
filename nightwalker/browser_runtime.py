@@ -4,8 +4,9 @@ import asyncio
 import base64
 import os
 import re
-from urllib.parse import parse_qs, unquote, urljoin, urlparse
+from urllib.parse import parse_qs, urlencode, unquote, urljoin, urlparse
 
+import httpx
 from playwright.async_api import Browser, BrowserContext, Page, Route, async_playwright
 
 from nightwalker.evidence import EvidenceStore
@@ -22,14 +23,30 @@ class BrowserRuntime:
     def __init__(self) -> None:
         self._playwright = None
         self._browser: Browser | None = None
+        self._steel_sessions: dict[int, tuple[str, Browser]] = {}
+        self.backend = os.getenv("BROWSER_BACKEND", "local").strip().lower()
+        if self.backend not in {"local", "steel"}:
+            raise ValueError("BROWSER_BACKEND must be 'local' or 'steel'")
         self.policy = PolicyEngine()
         self.evidence = EvidenceStore()
 
     async def start(self) -> None:
         self._playwright = await async_playwright().start()
-        self._browser = await self._playwright.chromium.launch(headless=True)
+        if self.backend == "local":
+            self._browser = await self._playwright.chromium.launch(headless=True)
+        elif not os.getenv("STEEL_API_KEY", "").strip():
+            await self._playwright.stop()
+            self._playwright = None
+            raise RuntimeError("BROWSER_BACKEND=steel requires STEEL_API_KEY")
 
     async def close(self) -> None:
+        for context_id, (session_id, browser) in list(self._steel_sessions.items()):
+            try:
+                if browser.is_connected():
+                    await browser.close()
+            finally:
+                await self._release_steel_session(session_id)
+                self._steel_sessions.pop(context_id, None)
         if self._browser:
             await self._browser.close()
             self._browser = None
@@ -37,14 +54,63 @@ class BrowserRuntime:
             await self._playwright.stop()
             self._playwright = None
 
+    async def _release_steel_session(self, session_id: str) -> None:
+        api_base = os.getenv("STEEL_API_BASE_URL", "https://api.steel.dev/v1").rstrip("/")
+        api_key = os.getenv("STEEL_API_KEY", "").strip()
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.delete(
+                    f"{api_base}/sessions/{session_id}",
+                    headers={"steel-api-key": api_key},
+                )
+                if response.status_code not in {200, 202, 204, 404}:
+                    response.raise_for_status()
+        except httpx.HTTPError:
+            # Session TTL remains the final cleanup guard if the API is unavailable.
+            pass
+
     async def _guarded_context(self) -> BrowserContext:
-        if not self._browser:
+        if not self._playwright:
             raise RuntimeError("Browser runtime is not started")
-        context = await self._browser.new_context(
-            service_workers="block",
-            accept_downloads=False,
-            java_script_enabled=True,
-        )
+        if self.backend == "steel":
+            api_key = os.getenv("STEEL_API_KEY", "").strip()
+            api_base = os.getenv("STEEL_API_BASE_URL", "https://api.steel.dev/v1").rstrip("/")
+            connect_base = os.getenv("STEEL_CONNECT_URL", "wss://connect.steel.dev").rstrip("/")
+            timeout_ms = max(60_000, int(os.getenv("STEEL_SESSION_TIMEOUT_MS", "300000")))
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                response = await client.post(
+                    f"{api_base}/sessions",
+                    headers={"steel-api-key": api_key, "Content-Type": "application/json"},
+                    json={"timeout": timeout_ms},
+                )
+                response.raise_for_status()
+                session = response.json()
+            session_id = str(session.get("id") or session.get("sessionId") or "")
+            if not session_id:
+                raise RuntimeError("Steel created a session without returning an id")
+            browser = None
+            try:
+                browser = await self._playwright.chromium.connect_over_cdp(
+                    connect_base + "?" + urlencode({"apiKey": api_key, "sessionId": session_id}),
+                    timeout=30_000,
+                )
+                if not browser.contexts:
+                    raise RuntimeError("Steel session connected without a browser context")
+                context = browser.contexts[0]
+                self._steel_sessions[id(context)] = (session_id, browser)
+            except Exception:
+                if browser and browser.is_connected():
+                    await browser.close()
+                await self._release_steel_session(session_id)
+                raise
+        else:
+            if not self._browser:
+                raise RuntimeError("Browser runtime is not started")
+            context = await self._browser.new_context(
+                service_workers="block",
+                accept_downloads=False,
+                java_script_enabled=True,
+            )
 
         async def guard_request(route: Route) -> None:
             try:
@@ -359,7 +425,15 @@ class BrowserRuntime:
                 "evidence_id": evidence_id,
             }
         finally:
-            await context.close()
+            steel_session = self._steel_sessions.pop(id(context), None)
+            try:
+                await context.close()
+            finally:
+                if steel_session:
+                    session_id, browser = steel_session
+                    if browser.is_connected():
+                        await browser.close()
+                    await self._release_steel_session(session_id)
 
     async def extract_basic(self, url: str) -> dict:
         """Compatibility endpoint for a deterministic title/H1 extraction."""
