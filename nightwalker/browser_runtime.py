@@ -388,7 +388,10 @@ class BrowserRuntime:
         try:
             page = self._task_pages.get(task_id)
             if page is None or page.is_closed():
-                page = await context.new_page()
+                page = next(
+                    (candidate for candidate in context.pages if not candidate.is_closed()),
+                    None,
+                ) or await context.new_page()
                 self._task_pages[task_id] = page
                 # Popups and script-opened tabs are never part of the read-only workflow.
                 context.on("page", lambda opened: asyncio.create_task(opened.close()) if opened != page else None)
