@@ -130,6 +130,44 @@ class OllamaClient:
             steps=[],
         )
 
+    @staticmethod
+    def _clarification_needs_user_input(question: str) -> bool:
+        """Return true only for a concrete missing scope, not a missing website."""
+        import re
+
+        value = " ".join((question or "").casefold().split())
+        if not value:
+            return False
+        # Generic prompts and website/domain prompts should fall back to discovery.
+        if any(term in value for term in (
+            "website", "web site", "url", "domain", "which site", "what site",
+            "where should i search", "what source",
+        )):
+            return False
+        essential_patterns = (
+            r"\bwhich\s+(?:product|item|model|brand|company|service|city|town|country|region|location|date|year|version|variant|size|colour|color|language|market|audience)\b",
+            r"\bwhat\s+(?:product|item|model|brand|company|service|city|town|country|region|location|date|timeframe|time period|year|version|variant|size|colour|color|budget|price range|market|audience)\b",
+            r"\b(?:how many|how much|what budget|which date|what date|what location|where is|in which city)\b",
+        )
+        return any(re.search(pattern, value) for pattern in essential_patterns)
+
+    @staticmethod
+    def _public_search_plan(objective: str) -> DecisionPlan:
+        """Create a deterministic public-search entry plan when no site is required."""
+        from urllib.parse import quote
+
+        search_url = "https://www.bing.com/search?q=" + quote(objective[:500])
+        return DecisionPlan.model_validate({
+            "status": "ready",
+            "summary": "Research the objective using public web search and browser-discovered sources.",
+            "site_name": "Web search",
+            "target_url": search_url,
+            "steps": [
+                {"step_id": "search", "capability": "navigate", "objective": "Search the web for sources relevant to the objective."},
+                {"step_id": "capture", "capability": "extract", "objective": "Capture source information and links for subsequent research rounds."}
+            ],
+        })
+
     async def decide_task(self, objective: str) -> DecisionPlan:
         """Turn one natural-language request into a bounded, capability-scoped plan."""
         base_url = self._require_base_url()
@@ -240,25 +278,12 @@ class OllamaClient:
                         ],
                     })
                 elif plan.status.value == "needs_clarification" and not explicit_url:
-                    # A general research question is not inherently ambiguous merely
-                    # because the user did not nominate a website.
-                    from urllib.parse import quote
-                    question = (plan.clarification_question or "").lower()
-                    # Empty model questions used to fall through to the generic URL prompt
-                    # added by DecisionPlan.validate_plan. Treat missing destination as a
-                    # search-discovery problem, not a user clarification requirement.
-                    if not question.strip() or any(term in question for term in ("website", "web site", "url", "domain")):
-                        search_url = "https://www.bing.com/search?q=" + quote(objective[:500])
-                        plan = DecisionPlan.model_validate({
-                            "status": "ready",
-                            "summary": "Research the objective using public web search and browser-discovered sources.",
-                            "site_name": "Web search",
-                            "target_url": search_url,
-                            "steps": [
-                                {"step_id": "search", "capability": "navigate", "objective": "Search the web for sources relevant to the objective."},
-                                {"step_id": "capture", "capability": "extract", "objective": "Capture source information and links for subsequent research rounds."}
-                            ],
-                        })
+                    # A missing website is never, by itself, a reason to block general
+                    # research. Preserve clarification only when the question identifies
+                    # a concrete input that materially changes the answer.
+                    question = plan.clarification_question or ""
+                    if not self._clarification_needs_user_input(question):
+                        plan = self._public_search_plan(objective)
                 return DecisionPlan.validate_plan(plan)
         except OllamaUnavailable:
             raise
