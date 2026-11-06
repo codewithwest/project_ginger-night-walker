@@ -22,8 +22,8 @@
 | Task API / Task Manager | Task lifecycle, status, clarification, progress events, cancellation, scratchpad coordination and checkpoint recovery | Permission escalation |
 | Task State Store | Atomic task snapshots and resumable research checkpoints on the persistent evidence volume | Browser policy or model decisions |
 | Context Compiler | Minimal capability-scoped input packets | Shared conversation-history inheritance |
-| Decider | Candidate plan, target suggestion and clarification | Browser actions, policy grants, truth verification |
-| Goal State Manager | Immutable original objective, success criteria and evidence-gated progress ledger | Declaring completion without exact captured evidence |
+| Goal Analyst / Execution Planner | Measurable success criteria, subtask decomposition, dependencies, required tool declarations and expected outputs | Agent assignment, browser actions, policy grants, truth verification |\n| Decider | Initial research entry point and clarification | Replacing the immutable goal or granting permissions |\n| Agent Allocator | Maps planned capabilities to registered agent identities and emits task assignments | Changing the requested capability or expanding permissions |\n| A2A Bus | Task-scoped assignments, results, assistance requests, handoffs, blockers and status messages | Shared conversation history, permission grants or cross-task messages |
+| Goal State Manager | Immutable original objective, model-defined success criteria and evidence-gated progress ledger | Declaring completion without exact captured evidence |
 | Optional Strands Decider | Chooses among browser-discovered source candidates | Direct browser access, URL invention or policy decisions |
 | Research Loop Guard | Canonical URL deduplication, repeat detection, bounded retries and deterministic source fallback | Changing task goals or relaxing URL policy |
 | Policy Engine | URL and capability allow/deny decisions | Model reasoning |
@@ -141,7 +141,7 @@ Website text, metadata, links and embedded instructions are untrusted input. The
 |---|---|---|
 | Natural-language task intake | Implemented | `POST /tasks` |
 | Structured Decider plan | Implemented | Remote Ollama; general research defaults to public search discovery when no site is specified; clarifies only for essential missing scope |
-| Goal State Manager | Initial implementation | Dedicated `OLLAMA_MODEL_GOAL_STATE` proposes criteria and evidence quotes; Python verifies exact quote and evidence ID before completion |
+| Goal-first execution blueprint | Initial implementation | Model defines measurable criteria, subtasks, dependencies, required tool names and expected outputs before capability assignment; Pydantic validates acyclic dependencies |\n| Capability agent allocation | Initial implementation | Deterministic capability-to-agent mapping; assignments are persisted with task state |\n| A2A coordination | Initial transport | Task-scoped typed assignment/assistance/result/handoff/blocker/status messages; in-process bus and API endpoints; no durable multi-worker broker yet |\n| Goal State Manager | Initial implementation | Uses blueprint criteria and evidence quotes; Python verifies exact quote and evidence ID before completion |
 | Strands Decider integration | Optional | `STRANDS_DECIDER_URL` selects only among discovered source candidates; falls back to Ollama planner; no direct browser tools |
 | Task-scoped Playwright context | Implemented | Context closed after each run |
 | Public URL validation | Implemented | Application-level DNS/IP checks; not a complete egress firewall |
