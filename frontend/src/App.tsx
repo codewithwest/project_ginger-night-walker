@@ -20,6 +20,8 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 type Log = {
   at?: string;
@@ -104,6 +106,23 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
+function MarkdownContent({ children, className = "" }: { children: string; className?: string }) {
+  return (
+    <div className={`markdown-content ${className}`}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          a: ({ node: _node, ...props }) => (
+            <a {...props} target="_blank" rel="noreferrer" />
+          ),
+        }}
+      >
+        {children}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
 function Status({ value }: { value: string }) {
   const kind = ["completed", "planned"].includes(value)
     ? "success"
@@ -134,7 +153,7 @@ function ResearchReport({ result }: { result: BrowserResult }) {
       </div>
       <div className="research-report__answer">
         <span className="answer-highlight__label">ANSWER</span>
-        <h2>{result.answer || "The page was captured. Review the findings and source evidence below."}</h2>
+        <MarkdownContent className="markdown-content--answer">{result.answer || "The page was captured. Review the findings and source evidence below."}</MarkdownContent>
       </div>
       {result.goal_state && <div className="research-section">
         <h3>Goal coverage · {result.goal_state.completed.length}/{result.goal_state.criteria.length} verified</h3>
@@ -566,9 +585,21 @@ export default function App() {
                     <div>
                       <strong>Working on it</strong>
                       <p>Round {selected.round || 0} · configured ceiling {selected.max_rounds || 30}. Progress is saved as work resolves.</p>
-                      {(selected.progress_events || []).slice(-4).map((event, index) => (
-                        <p key={(event.at || "") + index}>{event.message}</p>
-                      ))}
+                      {selected.current_step && <div className="current-step"><span className="current-step__label">CURRENT STEP</span><MarkdownContent>{selected.current_step}</MarkdownContent></div>}
+                      <div className="progress-timeline progress-timeline--live">
+                        {(selected.progress_events || []).slice(-5).map((event, index) => (
+                          <article className="progress-event" key={(event.at || "") + index}>
+                            <span className="progress-event__marker" />
+                            <div className="progress-event__body">
+                              <div className="progress-event__meta">
+                                <span>{(event.event_type || event.status || "UPDATE").replaceAll("_", " ")}</span>
+                                <time>{formatTime(event.at)}</time>
+                              </div>
+                              <MarkdownContent>{event.message || "Progress updated."}</MarkdownContent>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
                     </div>
                     <form onSubmit={sendFollowUp} className="clarification">
                       <label htmlFor="follow-up-message">Add an instruction for the next research rounds</label>
@@ -595,7 +626,7 @@ export default function App() {
                       <ArrowDownRight size={15} />
                     </summary>
                     <div className="report-details__body">
-                      <pre className="structured-data">{selected.checklist_markdown}</pre>
+                      <MarkdownContent className="checklist-markdown">{selected.checklist_markdown}</MarkdownContent>
                     </div>
                   </details>
                 )}
@@ -626,13 +657,32 @@ export default function App() {
                         <span>{selected.round} / {selected.max_rounds || 30}</span>
                       </div>
                     )}
+                    {selected.progress_events?.length ? (
+                      <section className="progress-history">
+                        <div className="progress-history__heading">Progress history <span>{selected.progress_events.length} updates</span></div>
+                        <div className="progress-timeline">
+                          {selected.progress_events.map((event, index) => (
+                            <article className="progress-event" key={(event.at || "") + index}>
+                              <span className="progress-event__marker" />
+                              <div className="progress-event__body">
+                                <div className="progress-event__meta">
+                                  <span>{(event.event_type || event.status || "UPDATE").replaceAll("_", " ")}</span>
+                                  <time>{event.at ? new Date(event.at).toLocaleString() : "—"}</time>
+                                </div>
+                                <MarkdownContent>{event.message || "Progress updated."}</MarkdownContent>
+                              </div>
+                            </article>
+                          ))}
+                        </div>
+                      </section>
+                    ) : null}
                     {selected.scratchpad?.length ? (
                       <div className="log-list">
                         {selected.scratchpad.map((note, index) => (
                           <div className="log-entry" key={"scratch-" + index}>
                             <time>R{note.round ?? "—"}</time>
                             <span className="log-entry__level">scratchpad</span>
-                            <p>{note.assignment} · {note.status}</p>
+                            <div className="log-entry__content"><MarkdownContent>{note.assignment || "Research note"}</MarkdownContent><span className="log-entry__status">{note.status}</span></div>
                           </div>
                         ))}
                       </div>
@@ -645,7 +695,7 @@ export default function App() {
                             <span className={`log-entry__level log-entry__level--${log.level || "info"}`}>
                               {log.level || "info"}
                             </span>
-                            <p>{log.message}</p>
+                            <div className="log-entry__content"><MarkdownContent>{log.message || ""}</MarkdownContent></div>
                           </div>
                         ))}
                       </div>
