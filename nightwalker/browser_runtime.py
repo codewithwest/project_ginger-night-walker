@@ -26,6 +26,7 @@ class BrowserRuntime:
         self._playwright = None
         self._browser: Browser | None = None
         self._steel_sessions: dict[int, tuple[str, Browser]] = {}
+        self._task_sessions: dict[str, dict] = {}
         self.backend = os.getenv("BROWSER_BACKEND", "local").strip().lower()
         if self.backend not in {"local", "steel"}:
             raise ValueError("BROWSER_BACKEND must be 'local' or 'steel'")
@@ -105,7 +106,48 @@ class BrowserRuntime:
             # Session TTL remains the final cleanup guard if the API is unavailable.
             pass
 
-    async def _guarded_context(self) -> BrowserContext:
+    @staticmethod
+    def _normalise_steel_debug_url(debug_url: str) -> str:
+        """Make a container-advertised Steel viewer URL reachable from the host UI."""
+        parsed = urlparse(debug_url)
+        host = (parsed.hostname or "").strip("[]").lower()
+        if host in {"steel-browser", "ginger-steel-browser", "0.0.0.0", "::"}:
+            netloc = "localhost"
+            if parsed.port:
+                netloc += f":{parsed.port}"
+            return parsed._replace(netloc=netloc).geturl()
+        return debug_url
+
+    def _browser_event(
+        self, task_id: str, message: str, *, url: str | None = None,
+        title: str | None = None, status: str | None = None,
+    ) -> None:
+        state = self._task_sessions.setdefault(task_id, {
+            "backend": self.backend, "status": "connecting", "active": True,
+            "activity": [], "started_at": datetime.now(UTC).isoformat(),
+        })
+        if url:
+            state["current_url"] = url
+        if title:
+            state["page_title"] = title
+        if status:
+            state["status"] = status
+            state["active"] = status in {"connecting", "active"}
+        state.setdefault("activity", []).append({
+            "at": datetime.now(UTC).isoformat(),
+            "message": message[:500],
+            "url": url,
+        })
+        state["activity"] = state["activity"][-30:]
+
+    def task_session(self, task_id: str) -> dict | None:
+        """Return safe, task-scoped live browser observability for the UI."""
+        state = self._task_sessions.get(task_id)
+        if not state:
+            return None
+        return {key: value for key, value in state.items() if key != "session_id"}
+
+    async def _guarded_context(self, task_id: str | None = None) -> BrowserContext:
         if not self._playwright:
             raise RuntimeError("Browser runtime is not started")
         if self.backend == "steel":
@@ -124,6 +166,15 @@ class BrowserRuntime:
                 response.raise_for_status()
                 session = response.json()
             session_id = str(session.get("id") or session.get("sessionId") or "")
+            debug_url = str(session.get("debugUrl") or session.get("debug_url") or "")
+            if task_id:
+                self._task_sessions[task_id] = {
+                    "backend": "steel", "status": "connecting", "active": True,
+                    "session_id": session_id,
+                    "debug_url": self._normalise_steel_debug_url(debug_url) if debug_url else None,
+                    "activity": [],
+                    "started_at": datetime.now(UTC).isoformat(),
+                }
             websocket_url = str(session.get("websocketUrl") or session.get("websocket_url") or "")
             if websocket_url:
                 websocket_url = self._normalise_steel_websocket_url(websocket_url, api_base)
@@ -145,6 +196,8 @@ class BrowserRuntime:
                     raise RuntimeError("Steel session connected without a browser context")
                 context = browser.contexts[0]
                 self._steel_sessions[id(context)] = (session_id, browser)
+                if task_id:
+                    self._browser_event(task_id, "Connected to Steel browser session", status="active")
             except Exception:
                 if browser and browser.is_connected():
                     await browser.close()
@@ -290,7 +343,17 @@ class BrowserRuntime:
     async def run_plan(self, task_id: str, url: str, steps: list[dict], objective: str) -> dict:
         """Execute only public-site navigation, same-origin link following and extraction."""
         self.policy.validate_url(url, allow_private_networks=False)
-        context = await self._guarded_context()
+        self._task_sessions[task_id] = {
+            "backend": self.backend, "status": "connecting", "active": True,
+            "activity": [], "started_at": datetime.now(UTC).isoformat(),
+        }
+        self._browser_event(task_id, "Starting browser session")
+        try:
+            context = await self._guarded_context(task_id)
+        except Exception as exc:
+            self._browser_event(task_id, f"Browser session failed: {str(exc)[:350]}", status="failed")
+            self._task_sessions[task_id]["last_error"] = str(exc)[:500]
+            raise
         try:
             page = await context.new_page()
             response = await page.goto(
@@ -298,6 +361,7 @@ class BrowserRuntime:
                 wait_until="domcontentloaded",
                 timeout=int(os.getenv("NAVIGATION_TIMEOUT_MS", "20000")),
             )
+            self._browser_event(task_id, "Navigated to target page", url=page.url, title=(await page.title())[:500])
             if response and response.status >= 400:
                 return {
                     "status": "failed",
@@ -316,6 +380,7 @@ class BrowserRuntime:
                     destination = await self._follow_relevant_link(page, step_objective)
                     if destination:
                         visited.append(destination)
+                        self._browser_event(task_id, "Followed a relevant same-site link", url=page.url, title=(await page.title())[:500])
                     else:
                         issues.append(
                             f"No sufficiently relevant same-site link found for: {step_objective}"
@@ -326,10 +391,12 @@ class BrowserRuntime:
                         timeout=int(os.getenv("NAVIGATION_TIMEOUT_MS", "20000")),
                     )
                     visited.append(page.url)
+                    self._browser_event(task_id, "Reloaded the current page for recovery", url=page.url, title=(await page.title())[:500])
                 elif capability == "extract":
                     continue
 
             title = (await page.title())[:500]
+            self._browser_event(task_id, "Captured page title, headings and visible text", url=page.url, title=title)
             candidate_links = await page.locator("a[href]").evaluate_all(
                 """nodes => nodes.slice(0, 500).map(a => ({
                     label: (a.innerText || a.getAttribute('aria-label') || '').trim().slice(0, 240),
@@ -472,6 +539,8 @@ class BrowserRuntime:
                 "evidence_id": evidence_id,
             }
         finally:
+            self._browser_event(task_id, "Browser session finished", status="finished")
+            self._task_sessions[task_id]["finished_at"] = datetime.now(UTC).isoformat()
             steel_session = self._steel_sessions.pop(id(context), None)
             try:
                 await context.close()
