@@ -291,8 +291,14 @@ class TaskManager:
             research_complete = bool(checkpoint.get("research_complete", False))
             resume_in_flight = bool(checkpoint.get("round_in_progress", False))
             record["low_information_rounds"] = int(record.get("low_information_rounds", 0))
+            effective_objective = self._effective_objective(task_id, objective)
+            if next_url and not rank_research_candidates(
+                effective_objective, [{"url": next_url, "label": next_assignment}]
+            ):
+                self._log(task_id, "Checkpoint recovery skipped the previously selected off-topic URL", "warning")
+                next_url = ""
+                resume_in_flight = False
             if not next_url and not research_complete:
-                effective_objective = self._effective_objective(task_id, objective)
                 available = loop_guard.filter_candidates(
                     rank_research_candidates(effective_objective, candidates), visited_urls
                 )
