@@ -473,7 +473,7 @@ class BrowserRuntime:
             page = self._task_pages.get(task_id)
             if page is None or page.is_closed():
                 page = next(
-                    (candidate for candidate in context.pages if not candidate.is_closed()),
+                    (candidate for candidate in getattr(context, "pages", []) if not candidate.is_closed()),
                     None,
                 ) or await context.new_page()
                 self._task_pages[task_id] = page
