@@ -2,8 +2,7 @@ name: Python CI
 
 on:
   push:
-    # branches:
-      # - main
+    branches: [main]
   # Run checks for every PR, regardless of its target branch.
   pull_request:
   workflow_dispatch:
