@@ -28,6 +28,8 @@ class BrowserRuntime:
         self._browser: Browser | None = None
         self._steel_sessions: dict[int, tuple[str, Browser]] = {}
         self._task_sessions: dict[str, dict] = {}
+        self._task_contexts: dict[str, BrowserContext] = {}
+        self._task_pages: dict[str, Page] = {}
         self.backend = os.getenv("BROWSER_BACKEND", "local").strip().lower()
         if self.backend not in {"local", "steel"}:
             raise ValueError("BROWSER_BACKEND must be 'local' or 'steel'")
@@ -40,6 +42,8 @@ class BrowserRuntime:
             self._browser = await self._playwright.chromium.launch(headless=True)
 
     async def close(self) -> None:
+        for task_id in list(self._task_contexts):
+            await self.close_task_session(task_id)
         for context_id, (session_id, browser) in list(self._steel_sessions.items()):
             try:
                 if browser.is_connected():
@@ -53,6 +57,26 @@ class BrowserRuntime:
         if self._playwright:
             await self._playwright.stop()
             self._playwright = None
+
+    async def close_task_session(self, task_id: str) -> None:
+        """Close the single browser context retained across this task's research rounds."""
+        context = self._task_contexts.pop(task_id, None)
+        self._task_pages.pop(task_id, None)
+        state = self._task_sessions.get(task_id)
+        if state:
+            self._browser_event(task_id, "Browser session closed after task completion", status="finished")
+            state["finished_at"] = datetime.now(UTC).isoformat()
+        if context is None:
+            return
+        steel_session = self._steel_sessions.pop(id(context), None)
+        try:
+            await context.close()
+        finally:
+            if steel_session:
+                session_id, browser = steel_session
+                if browser.is_connected():
+                    await browser.close()
+                await self._release_steel_session(session_id)
 
     @staticmethod
     def _normalise_steel_websocket_url(websocket_url: str, api_base: str) -> str:
@@ -151,6 +175,8 @@ class BrowserRuntime:
     async def _guarded_context(self, task_id: str | None = None) -> BrowserContext:
         if not self._playwright:
             raise RuntimeError("Browser runtime is not started")
+        if task_id and task_id in self._task_contexts:
+            return self._task_contexts[task_id]
         if self.backend == "steel":
             api_key = os.getenv("STEEL_API_KEY", "").strip()
             api_base = os.getenv("STEEL_API_BASE_URL", "http://steel-browser:3000/v1").rstrip("/")
@@ -224,6 +250,8 @@ class BrowserRuntime:
             await route.continue_()
 
         await context.route("**/*", guard_request)
+        if task_id:
+            self._task_contexts[task_id] = context
         return context
 
     @staticmethod
@@ -356,7 +384,16 @@ class BrowserRuntime:
             self._task_sessions[task_id]["last_error"] = str(exc)[:500]
             raise
         try:
-            page = await context.new_page()
+            page = self._task_pages.get(task_id)
+            if page is None or page.is_closed():
+                page = await context.new_page()
+                self._task_pages[task_id] = page
+                # Popups and script-opened tabs are never part of the read-only workflow.
+                context.on("page", lambda opened: asyncio.create_task(opened.close()) if opened != page else None)
+                page.on("popup", lambda popup: asyncio.create_task(popup.close()))
+            for extra_page in list(context.pages):
+                if extra_page != page and not extra_page.is_closed():
+                    await extra_page.close()
             response = await page.goto(
                 url,
                 wait_until="domcontentloaded",
@@ -540,17 +577,9 @@ class BrowserRuntime:
                 "evidence_id": evidence_id,
             }
         finally:
-            self._browser_event(task_id, "Browser session finished", status="finished")
-            self._task_sessions[task_id]["finished_at"] = datetime.now(UTC).isoformat()
-            steel_session = self._steel_sessions.pop(id(context), None)
-            try:
-                await context.close()
-            finally:
-                if steel_session:
-                    session_id, browser = steel_session
-                    if browser.is_connected():
-                        await browser.close()
-                    await self._release_steel_session(session_id)
+            # Keep one context and one page alive for the entire research task.
+            # TaskManager closes the session once the task reaches a terminal state.
+            self._browser_event(task_id, "Research round captured; reusing the same browser tab", status="active")
 
     async def extract_basic(self, url: str) -> dict:
         """Compatibility endpoint for a deterministic title/H1 extraction."""
