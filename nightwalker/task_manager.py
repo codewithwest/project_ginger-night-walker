@@ -500,8 +500,36 @@ class TaskManager:
                         "sources": [{"url": next_url}],
                         "remaining_work": [issue_text],
                         "loop_guard": loop_guard.snapshot(),
-                        "seed_for_next_round": ["Retry once if useful, otherwise choose a different discovered source"],
+                        "seed_for_next_round": ["Restore browser connectivity before resuming research"],
                     })
+                    infrastructure_error = any(
+                        marker in issue_text.casefold()
+                        for marker in (
+                            "econnrefused", "connect_over_cdp", "browser runtime is not started",
+                            "steel session", "websocket error",
+                        )
+                    )
+                    if infrastructure_error:
+                        blocker = (
+                            "Browser infrastructure is unavailable; research paused to avoid "
+                            "repeating the same connection failure across rounds. " + issue_text[:500]
+                        )
+                        limitations.append(blocker)
+                        self._log(task_id, blocker, "error")
+                        record["progress_events"].append({
+                            "at": self._now(), "event_type": "infrastructure_blocked",
+                            "status": "blocked", "round": round_count, "message": blocker,
+                        })
+                        next_url = ""
+                        research_complete = True
+                        self._save_checkpoint(
+                            task_id, initial_plan, sources=sources, findings=findings,
+                            evidence=evidence, visited_urls=visited_urls, candidates=candidates,
+                            structured_data=structured_data, limitations=limitations,
+                            loop_guard=loop_guard, round_count=round_count,
+                            next_url="", next_assignment="Restore browser connectivity", research_complete=True,
+                        )
+                        break
                     candidates.extend(result.get("candidate_urls", []))
                     candidates = loop_guard.filter_candidates(candidates, visited_urls)
                     next_url = ""
