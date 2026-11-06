@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 from pydantic import ValidationError
 
+from nightwalker.agent_headers import agent_headers
 from nightwalker.context_compiler import ContextCompiler
 from nightwalker.contracts import AgentResult, AgentTask
 from nightwalker.decision_contracts import DecisionPlan
@@ -45,11 +46,19 @@ class OllamaClient:
         self.registry = ModelRegistry()
         self.compiler = ContextCompiler()
 
-    def _headers(self) -> dict[str, str]:
+    def _headers(
+        self, *, agent: str = "night-walker", capability: str = "general",
+        operation: str = "inference", model: str | None = None,
+        task_id: str | None = None, round_number: int | None = None,
+    ) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
         api_key = os.getenv("OLLAMA_API_KEY")
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
+        headers.update(agent_headers(
+            agent=agent, capability=capability, operation=operation, model=model,
+            task_id=task_id, round_number=round_number,
+        ))
         return headers
 
     def _require_base_url(self, role: str = "DEFAULT") -> str:
@@ -173,7 +182,7 @@ class OllamaClient:
             ],
         })
 
-    async def decide_task(self, objective: str) -> DecisionPlan:
+    async def decide_task(self, objective: str, task_id: str | None = None) -> DecisionPlan:
         """Turn one natural-language request into a bounded, capability-scoped plan."""
         base_url = self._require_base_url("DECIDER")
         model = os.getenv("OLLAMA_MODEL_DECIDER") or os.getenv(
@@ -211,7 +220,10 @@ class OllamaClient:
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(
-                    f"{base_url}/api/chat", headers=self._headers(), json=body
+                    f"{base_url}/api/chat", headers=self._headers(
+                        agent="decider", capability="planning", operation="decide-task",
+                        model=model, task_id=task_id,
+                    ), json=body
                 )
                 response.raise_for_status()
                 envelope = response.json()
@@ -298,7 +310,7 @@ class OllamaClient:
             ) from exc
 
 
-    async def initialise_goal_criteria(self, objective: str, proposed_steps: list[str]) -> list[str]:
+    async def initialise_goal_criteria(self, objective: str, proposed_steps: list[str], task_id: str | None = None) -> list[str]:
         base_url = self._require_base_url("GOAL_STATE")
         model = os.getenv("OLLAMA_MODEL_GOAL_STATE", "qwen3.5:0.8b")
         body = {"model": model, "stream": False, "think": False, "format": GoalCriteriaPlan.model_json_schema(),
@@ -307,14 +319,17 @@ class OllamaClient:
             "options": {"temperature": 0, "num_predict": 300}}
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(f"{base_url}/api/chat", headers=self._headers(), json=body)
+                response = await client.post(f"{base_url}/api/chat", headers=self._headers(
+                    agent="goal-state", capability="goal-tracking", operation="initialise-criteria",
+                    model=model, task_id=task_id,
+                ), json=body)
                 response.raise_for_status()
                 raw = self._chat_content(response.json(), model=model, operation="Goal criteria")
                 return GoalCriteriaPlan.model_validate_json(raw).criteria
         except (httpx.HTTPError, ValueError, ValidationError, KeyError) as exc:
             raise OllamaUnavailable(f"Goal criteria inference failed: {exc}") from exc
 
-    async def evaluate_goal_progress(self, goal_state: dict[str, Any], round_evidence: list[dict[str, Any]]) -> GoalProgressProposal:
+    async def evaluate_goal_progress(self, goal_state: dict[str, Any], round_evidence: list[dict[str, Any]], task_id: str | None = None, round_number: int | None = None) -> GoalProgressProposal:
         base_url = self._require_base_url("GOAL_STATE")
         model = os.getenv("OLLAMA_MODEL_GOAL_STATE", "qwen3.5:0.8b")
         evidence = [{"evidence_id": item.get("evidence_id"), "captured_text": str(item.get("captured_text") or "")[:1800]} for item in round_evidence[:8]]
@@ -324,7 +339,10 @@ class OllamaClient:
             "options": {"temperature": 0, "num_predict": 400}}
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(f"{base_url}/api/chat", headers=self._headers(), json=body)
+                response = await client.post(f"{base_url}/api/chat", headers=self._headers(
+                    agent="goal-state", capability="goal-tracking", operation="evaluate-progress",
+                    model=model, task_id=task_id, round_number=round_number,
+                ), json=body)
                 response.raise_for_status()
                 raw = self._chat_content(response.json(), model=model, operation="Goal progress")
                 return GoalProgressProposal.model_validate_json(raw)
@@ -333,6 +351,7 @@ class OllamaClient:
     async def _strands_research_round(
         self, objective: str, round_number: int, allowed: list[dict[str, str]],
         scratchpad: list[dict[str, Any]], minimum_rounds: int,
+        task_id: str | None = None,
     ) -> ResearchRoundPlan | None:
         """Optional Strands semantic source selector; never receives browser tools."""
         base = os.getenv("STRANDS_DECIDER_URL", "").rstrip("/")
@@ -369,6 +388,11 @@ class OllamaClient:
         try:
             async with httpx.AsyncClient(timeout=min(self.timeout, 45)) as client:
                 strands_headers = {"Content-Type": "application/json"}
+                strands_headers.update(agent_headers(
+                    agent="strands-decider", capability="research-planning",
+                    operation="select-research-source", task_id=task_id,
+                    round_number=round_number, integration="goal-aware-strands",
+                ))
                 strands_key = os.getenv("STRANDS_DECIDER_API_KEY")
                 if strands_key:
                     strands_headers["Authorization"] = "Bearer " + strands_key
@@ -416,6 +440,7 @@ class OllamaClient:
         scratchpad: list[dict[str, Any]],
         candidates: list[dict[str, str]],
         visited_urls: list[str],
+        task_id: str | None = None,
     ) -> ResearchRoundPlan:
         """Choose only from browser-discovered URLs; context is a compact task packet."""
         base_url = self._require_base_url("DECIDER")
@@ -439,7 +464,7 @@ class OllamaClient:
         ))
         minimum_rounds = 3 if multi_source_objective else 1
         strands_plan = await self._strands_research_round(
-            objective, round_number, allowed, scratchpad, minimum_rounds
+            objective, round_number, allowed, scratchpad, minimum_rounds, task_id
         )
         if strands_plan is not None:
             return ResearchRoundPlan.validate_plan(
@@ -484,7 +509,10 @@ class OllamaClient:
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(
-                    f"{base_url}/api/chat", headers=self._headers(), json=body
+                    f"{base_url}/api/chat", headers=self._headers(
+                        agent="decider", capability="research-planning", operation="plan-research-round",
+                        model=model, task_id=task_id, round_number=round_number,
+                    ), json=body
                 )
                 response.raise_for_status()
                 envelope = response.json()
@@ -511,7 +539,7 @@ class OllamaClient:
 
     async def synthesise_research(
         self, objective: str, findings: list[dict[str, Any]], sources: list[dict[str, Any]],
-        round_count: int, max_rounds: int,
+        round_count: int, max_rounds: int, task_id: str | None = None,
     ) -> ResearchSynthesis:
         """Produce a concise synthesis from captured observations, not raw conversation history."""
         base_url = self._require_base_url("SYNTHESIS")
@@ -556,7 +584,10 @@ class OllamaClient:
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(
-                    f"{base_url}/api/chat", headers=self._headers(), json=body
+                    f"{base_url}/api/chat", headers=self._headers(
+                        agent="synthesis", capability="research-synthesis", operation="synthesise-report",
+                        model=model, task_id=task_id, round_number=round_count,
+                    ), json=body
                 )
                 response.raise_for_status()
                 envelope = response.json()
@@ -607,7 +638,10 @@ class OllamaClient:
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(
-                    f"{base_url}/api/chat", headers=self._headers(), json=body
+                    f"{base_url}/api/chat", headers=self._headers(
+                        agent=f"{task.capability.value}-agent", capability=task.capability.value,
+                        operation="capability-proposal", model=model, task_id=task.task_id,
+                    ), json=body
                 )
                 response.raise_for_status()
                 envelope = response.json()
