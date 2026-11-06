@@ -62,7 +62,7 @@ class GoalStateManager:
         stopwords = {
             "about", "after", "based", "clear", "specific", "within", "which",
             "their", "there", "these", "those", "through", "directly", "determine",
-            "establish", "identify", "objectives", "objective", "criteria", "rules",
+            "establish", "identify", "objectives", "objective", "criteria",
             "progress", "unique", "mechanics", "known",
             "other", "game", "games", "trainer", "velocity", "knight",
         }
