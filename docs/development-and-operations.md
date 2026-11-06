@@ -167,16 +167,17 @@ Common diagnoses:
 - The application is not authenticated or hardened for multi-user hostile workloads.
 
 
-## 7. Steel cloud browser backend
+## 7. Self-hosted Steel browser backend
 
-Night Walker can connect Playwright to a Steel-managed browser without changing its research planner, evidence schema, or task API. Set these values in the untracked `.env` file:
+The Compose stack runs the official single-image Steel Browser service. Night Walker creates a session through the self-hosted Sessions API at `http://steel-browser:3000/v1`, connects to the returned CDP WebSocket URL, and releases the session after the workflow. A Steel API key is not required for the default local service; set `STEEL_API_KEY` only if you deliberately add authentication or point at a protected endpoint. The API and CDP ports are bound to loopback on the host; do not expose CDP port 9223 publicly.
 
 ```dotenv
 BROWSER_BACKEND=steel
-STEEL_API_KEY=your-steel-api-key
+STEEL_API_BASE_URL=http://steel-browser:3000/v1
+STEEL_API_KEY=
 STEEL_SESSION_TIMEOUT_MS=300000
 ```
 
-Rebuild and restart the service after changing backend configuration. Steel sessions are created per browser workflow, connected using the session's returned WebSocket URL, and released after the workflow. If release fails, Steel's session timeout is the fallback cleanup mechanism. The API key is sent only to Steel and is not included in evidence records.
+Rebuild and restart after changing backend configuration. If session release fails, Steel's session timeout is the fallback cleanup mechanism. Steel's self-hosting guide recommends at least 4 GB RAM and 10 GB free disk; the browser container is separate from Night Walker's 2 GB container limit. If the host cannot sustain that, use `BROWSER_BACKEND=local` to run Playwright in Night Walker instead, accepting the local-browser trade-offs.
 
-The existing Night Walker URL policy and request guard remain in place, but Steel is a remote browser provider—not a replacement for outbound network egress controls. Keep the container/network firewall or trusted egress proxy as the final control against SSRF and internal-network access. Validate the Steel backend with a real key in a non-production environment before switching a live deployment.
+The existing Night Walker URL policy and request guard remain in place, but they are not a complete SSRF boundary: browser redirect handling can bypass per-request route checks. Steel is not a replacement for outbound network egress controls. Keep a host/container firewall or trusted egress proxy as the final control against internal-network access. Do not treat this deployment as hardened against hostile websites until egress enforcement is implemented and tested.
