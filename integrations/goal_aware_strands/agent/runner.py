@@ -2,6 +2,7 @@
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from uuid import uuid4
 from .config import ACTIONS
 from .validation import ValidationError
 
@@ -10,6 +11,10 @@ class AgentRunner:
         self.manager, self.decider, self.coder, self.tools, self.config = manager, decider, coder, tools, config
 
     def run(self, goal, trace_path=None):
+        task_id = str(uuid4())
+        for model in (getattr(self.manager, "model", None), getattr(self.coder, "model", None), self.decider):
+            if hasattr(model, "set_context"):
+                model.set_context(task_id=task_id, step=0)
         state = self.manager.initialize(goal)
         events = []
         snapshot = ""
@@ -18,6 +23,9 @@ class AgentRunner:
         status = "step_limit"
         stage = "initialization"
         for step in range(1, self.config.max_steps + 1):
+            for model in (getattr(self.manager, "model", None), getattr(self.coder, "model", None), self.decider):
+                if hasattr(model, "set_context"):
+                    model.set_context(task_id=task_id, step=step)
             record = {"step":step,"time":datetime.now(timezone.utc).isoformat(),
                       "state_before":state.snapshot()}
             try:
@@ -75,7 +83,7 @@ class AgentRunner:
                 # Decider/model/MCP connectivity failures should be visible, not silently looped.
                 status = "error"
                 break
-        report = {"status":status, "goal":goal, "final_state":state.snapshot(), "steps":events,
+        report = {"status":status, "task_id":task_id, "goal":goal, "final_state":state.snapshot(), "steps":events,
                   "note":"Model-proposed criteria/evidence are heuristic; verify externally before high-stakes reliance."}
         if trace_path:
             p = Path(trace_path); p.parent.mkdir(parents=True, exist_ok=True)
