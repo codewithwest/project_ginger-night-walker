@@ -394,8 +394,10 @@ class BrowserRuntime:
                 ) or await context.new_page()
                 self._task_pages[task_id] = page
                 # Popups and script-opened tabs are never part of the read-only workflow.
-                context.on("page", lambda opened: asyncio.create_task(opened.close()) if opened != page else None)
-                page.on("popup", lambda popup: asyncio.create_task(popup.close()))
+                if hasattr(context, "on"):
+                    context.on("page", lambda opened: asyncio.create_task(opened.close()) if opened != page else None)
+                if hasattr(page, "on"):
+                    page.on("popup", lambda popup: asyncio.create_task(popup.close()))
             for extra_page in list(context.pages):
                 if extra_page != page and not extra_page.is_closed():
                     await extra_page.close()
