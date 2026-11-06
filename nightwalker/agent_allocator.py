@@ -6,7 +6,6 @@ from typing import Any
 from nightwalker.a2a import A2ABus, A2AMessage, A2AMessageType
 from nightwalker.planning_contracts import ExecutionBlueprint
 
-
 CAPABILITY_AGENTS = {
     "navigate": "night-walker-navigator",
     "interact": "night-walker-interactor",
