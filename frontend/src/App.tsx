@@ -211,6 +211,8 @@ export default function App() {
     [tasks, selectedId],
   );
 
+  // The workspace list is loaded on entry and refreshed only on explicit user
+  // actions. Background polling is scoped to the one task currently opened.
   const refresh = useCallback(async () => {
     try {
       await api("/health");
@@ -227,11 +229,41 @@ export default function App() {
     }
   }, []);
 
+  const refreshSelected = useCallback(async (taskId: string) => {
+    try {
+      const task = await api<Task>(`/tasks/${encodeURIComponent(taskId)}`);
+      setTasks((current) => current.map((item) => item.task_id === taskId ? task : item));
+      setOnline(true);
+    } catch {
+      setOnline(false);
+    }
+  }, []);
+
   useEffect(() => {
     void refresh();
-    const intervalId = window.setInterval(() => void refresh(), 2500);
-    return () => window.clearInterval(intervalId);
   }, [refresh]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    let active = true;
+    const poll = async () => {
+      try {
+        const task = await api<Task>(`/tasks/${encodeURIComponent(selectedId)}`);
+        if (active) {
+          setTasks((current) => current.map((item) => item.task_id === selectedId ? task : item));
+          setOnline(true);
+        }
+      } catch {
+        if (active) setOnline(false);
+      }
+    };
+    void poll();
+    const intervalId = window.setInterval(() => void poll(), 2500);
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
+  }, [selectedId]);
 
   useEffect(() => {
     setAnswer("");
