@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import ipaddress
 import os
 import re
 import socket
-import ipaddress
 from urllib.parse import parse_qs, unquote, urlencode, urljoin, urlparse
 
 import httpx
