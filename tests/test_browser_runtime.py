@@ -32,6 +32,15 @@ class FakeLocator:
 class FakePage:
     url = "https://example.com/"
 
+    def __init__(self):
+        self.closed = False
+
+    def is_closed(self):
+        return self.closed
+
+    async def close(self):
+        self.closed = True
+
     async def goto(self, url, **kwargs):
         self.url = url
         return FakeResponse()
@@ -48,6 +57,7 @@ class FakePage:
 class FakeContext:
     def __init__(self):
         self.page = FakePage()
+        self.pages = [self.page]
         self.closed = False
 
     async def new_page(self):
@@ -88,6 +98,8 @@ async def test_run_plan_uses_task_context_and_persists_evidence(tmp_path, monkey
     assert result["findings"][0]["source_ids"] == ["s-001"]
     assert result["findings"][0]["evidence_ids"] == [result["evidence_id"]]
     assert result["evidence"][0]["evidence_id"] == result["evidence_id"]
+    assert not context.closed  # The task owns the browser context across research rounds.
+    await runtime.close_task_session("task-1")
     assert context.closed
     assert (tmp_path / f"{result['evidence_id']}.json").exists()
 
