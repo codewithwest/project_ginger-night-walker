@@ -3,8 +3,8 @@ from __future__ import annotations
 import asyncio
 import os
 import re
-from urllib.parse import parse_qs, unquote, urljoin, urlparse
 import base64
+from urllib.parse import parse_qs, unquote, urljoin, urlparse
 
 from playwright.async_api import Browser, BrowserContext, Page, Route, async_playwright
 
