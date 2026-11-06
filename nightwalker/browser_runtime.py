@@ -588,12 +588,16 @@ class BrowserRuntime:
 
     async def extract_basic(self, url: str) -> dict:
         """Compatibility endpoint for a deterministic title/H1 extraction."""
-        result = await self.run_plan(
-            task_id="direct-browser-extract",
-            url=url,
-            steps=[{"capability": "navigate"}, {"capability": "extract"}],
-            objective="Extract page title, headings and visible text",
-        )
+        task_id = "direct-browser-extract"
+        try:
+            result = await self.run_plan(
+                task_id=task_id,
+                url=url,
+                steps=[{"capability": "navigate"}, {"capability": "extract"}],
+                objective="Extract page title, headings and visible text",
+            )
+        finally:
+            await self.close_task_session(task_id)
         if result["status"] != "completed":
             raise RuntimeError("; ".join(result.get("issues", [])) or "Page extraction failed")
         return {
