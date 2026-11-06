@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Sun,
   Moon,
+  MonitorPlay,
   Square,
   Terminal,
   X,
@@ -53,6 +54,19 @@ type BrowserResult = {
   goal_state?: { original_goal: string; criteria: string[]; completed: string[]; remaining: string[]; evidence_by_criterion: Record<string, { evidence_id: string; quote: string }> };
 };
 
+type BrowserSession = {
+  backend: string;
+  status: string;
+  active: boolean;
+  debug_url?: string | null;
+  current_url?: string;
+  page_title?: string;
+  activity?: { at?: string; message: string; url?: string | null }[];
+  started_at?: string;
+  finished_at?: string;
+  last_error?: string;
+};
+
 type Task = {
   task_id: string;
   objective: string;
@@ -74,6 +88,7 @@ type Task = {
   scratchpad?: { round?: number; assignment?: string; status?: string; findings?: unknown[]; evidence_ids?: string[] }[];
   goal_state?: { original_goal: string; criteria: string[]; completed: string[]; remaining: string[]; evidence_by_criterion: Record<string, { evidence_id: string; quote: string }> } | null;
   checklist_markdown?: string;
+  browser?: BrowserSession | null;
 };
 
 const isTerminal = (status: string) =>
@@ -226,6 +241,8 @@ export default function App() {
   const [online, setOnline] = useState(false);
   const [checklistPinned, setChecklistPinned] = useState(false);
   const [checklistDismissed, setChecklistDismissed] = useState(false);
+  const [browserPinned, setBrowserPinned] = useState(false);
+  const [browserDismissed, setBrowserDismissed] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     try { return localStorage.getItem("night-walker-theme") === "light" ? "light" : "dark"; }
     catch { return "dark"; }
@@ -717,6 +734,94 @@ export default function App() {
             )}
 
             {error && <div className="error-banner"><CircleAlert size={15} />{error}</div>}
+          </section>
+        </div>
+
+        <div className={`floating-browser ${selected?.browser?.active ? "is-running" : ""} ${browserPinned ? "is-pinned" : ""} ${browserDismissed ? "is-dismissed" : ""}`}>
+          <button
+            type="button"
+            className="floating-browser__trigger"
+            aria-label="Open live browser monitor"
+            aria-expanded={browserPinned}
+            onClick={() => {
+              setBrowserDismissed(false);
+              setBrowserPinned((current) => !current);
+            }}
+          >
+            <span className="floating-browser__trigger-icon"><MonitorPlay size={19} /></span>
+            <span className="floating-browser__trigger-label">Live browser</span>
+            {selected?.browser?.active && <span className="floating-browser__live-dot" aria-label="Browser active" />}
+          </button>
+
+          <section className="floating-browser__panel" aria-label="Live browser monitor">
+            <div className="floating-browser__header">
+              <div>
+                <span className="section-kicker"><MonitorPlay size={13} /> BROWSER OBSERVABILITY</span>
+                <strong>{selected?.browser?.page_title || "Waiting for browser activity"}</strong>
+              </div>
+              <button
+                type="button"
+                className="floating-browser__close"
+                aria-label="Close browser monitor"
+                onClick={() => {
+                  setBrowserPinned(false);
+                  setBrowserDismissed(true);
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="floating-browser__meta">
+              <span className={selected?.browser?.active ? "is-live" : ""}>
+                <i /> {selected?.browser?.status || "idle"}
+              </span>
+              <span>{selected?.browser?.backend || "browser"} backend</span>
+            </div>
+            {selected?.browser?.current_url && (
+              <a className="floating-browser__url" href={selected.browser.current_url} target="_blank" rel="noreferrer">
+                {selected.browser.current_url}
+                <ExternalLink size={12} />
+              </a>
+            )}
+            {selected?.browser?.debug_url && selected.browser.active ? (
+              <div className="floating-browser__viewer">
+                <iframe
+                  title="Read-only live Steel browser session"
+                  src={`${selected.browser.debug_url}${selected.browser.debug_url.includes("?") ? "&" : "?"}interactive=false`}
+                  allow="autoplay; fullscreen"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+            ) : (
+              <div className="floating-browser__viewer-empty">
+                {selected?.browser?.active
+                  ? "The browser is active. A live video URL was not provided by this Steel session; activity is still shown below."
+                  : selected?.browser?.finished_at
+                    ? "This browser session has finished. The activity timeline below remains available."
+                    : "Start a mission to see its live browser session here."}
+              </div>
+            )}
+            {selected?.browser?.last_error && <div className="floating-browser__error">{selected.browser.last_error}</div>}
+            <div className="floating-browser__activity-heading">
+              <span>SESSION ACTIVITY</span>
+              <span>{selected?.browser?.activity?.length || 0} events</span>
+            </div>
+            <div className="floating-browser__activity">
+              {(selected?.browser?.activity || []).slice().reverse().slice(0, 8).map((event, index) => (
+                <article key={(event.at || "") + index}>
+                  <span className="floating-browser__activity-dot" />
+                  <div>
+                    <p>{event.message}</p>
+                    <time>{formatTime(event.at)}</time>
+                  </div>
+                </article>
+              ))}
+              {!selected?.browser?.activity?.length && <p className="floating-browser__empty">No browser events recorded for this mission yet.</p>}
+            </div>
+            <div className="floating-browser__footer">
+              <span>Live view is read-only</span>
+              <a href="http://localhost:3000/ui" target="_blank" rel="noreferrer">Open Steel UI <ExternalLink size={11} /></a>
+            </div>
           </section>
         </div>
 
