@@ -21,7 +21,7 @@ class PlannedStep(BaseModel):
 
 
 class DecisionPlan(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
     status: DecisionStatus
     summary: str = Field(min_length=1, max_length=500)
     site_name: str | None = Field(default=None, max_length=200)
@@ -53,3 +53,45 @@ class DecisionPlan(BaseModel):
         if value.status != DecisionStatus.READY and value.steps:
             raise ValueError("Only ready plans may contain execution steps")
         return value
+
+
+
+def normalise_decision_plan(value: DecisionPlan | dict) -> DecisionPlan:
+    """Rebuild a plan from plain field values before validation or serialization.
+
+    Older snapshots and some model/tool adapters can leave nested Pydantic fields
+    as dictionaries or URLs as strings. Never call model_dump on that malformed
+    instance: extract raw fields and let Pydantic construct fresh typed objects.
+    """
+    if isinstance(value, dict):
+        raw = value
+    else:
+        raw = {
+            "status": getattr(value, "status", None),
+            "summary": getattr(value, "summary", ""),
+            "site_name": getattr(value, "site_name", None),
+            "target_url": getattr(value, "target_url", None),
+            "clarification_question": getattr(value, "clarification_question", None),
+            "steps": getattr(value, "steps", []) or [],
+        }
+
+    steps = []
+    for step in raw.get("steps") or []:
+        if isinstance(step, PlannedStep):
+            steps.append({
+                "step_id": step.step_id,
+                "capability": step.capability,
+                "objective": step.objective,
+            })
+        else:
+            steps.append(step)
+
+    target_url = raw.get("target_url")
+    return DecisionPlan.model_validate({
+        "status": raw.get("status"),
+        "summary": raw.get("summary", ""),
+        "site_name": raw.get("site_name"),
+        "target_url": str(target_url) if target_url is not None else None,
+        "clarification_question": raw.get("clarification_question"),
+        "steps": steps,
+    })
