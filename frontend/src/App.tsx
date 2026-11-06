@@ -372,6 +372,10 @@ export default function App() {
         </a>
 
         <div className="topbar__right">
+          <button className="theme-toggle" type="button" onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`} title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}>
+            {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+            <span>{theme === "dark" ? "LIGHT" : "DARK"}</span>
+          </button>
           <span className={`connection ${online ? "is-online" : ""}`}>
             <span />
             {online ? "SYSTEM ONLINE" : "CONNECTING"}
