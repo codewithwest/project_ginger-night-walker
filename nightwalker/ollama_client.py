@@ -177,7 +177,7 @@ class OllamaClient:
         """Turn one natural-language request into a bounded, capability-scoped plan."""
         base_url = self._require_base_url("DECIDER")
         model = os.getenv("OLLAMA_MODEL_DECIDER") or os.getenv(
-            "OLLAMA_MODEL_DEFAULT", "qwen2.5:7b"
+            "OLLAMA_MODEL_DEFAULT", "qwen3.5:9b"
         )
         schema = DecisionPlan.model_json_schema()
         system_prompt = (
@@ -300,7 +300,7 @@ class OllamaClient:
 
     async def initialise_goal_criteria(self, objective: str, proposed_steps: list[str]) -> list[str]:
         base_url = self._require_base_url("GOAL_STATE")
-        model = os.getenv("OLLAMA_MODEL_GOAL_STATE", "qwen3:0.6b")
+        model = os.getenv("OLLAMA_MODEL_GOAL_STATE", "qwen3.5:0.8b")
         body = {"model": model, "stream": False, "think": False, "format": GoalCriteriaPlan.model_json_schema(),
             "messages": [{"role": "system", "content": "Extract 1-6 concrete success criteria from the original user objective. Preserve explicit requirements; do not invent requirements. Return JSON only."},
                 {"role": "user", "content": json.dumps({"original_goal": objective[:2000], "planner_steps": proposed_steps[:8]}, ensure_ascii=False)}],
@@ -316,7 +316,7 @@ class OllamaClient:
 
     async def evaluate_goal_progress(self, goal_state: dict[str, Any], round_evidence: list[dict[str, Any]]) -> GoalProgressProposal:
         base_url = self._require_base_url("GOAL_STATE")
-        model = os.getenv("OLLAMA_MODEL_GOAL_STATE", "qwen3:0.6b")
+        model = os.getenv("OLLAMA_MODEL_GOAL_STATE", "qwen3.5:0.8b")
         evidence = [{"evidence_id": item.get("evidence_id"), "captured_text": str(item.get("captured_text") or "")[:1800]} for item in round_evidence[:8]]
         body = {"model": model, "stream": False, "think": False, "format": GoalProgressProposal.model_json_schema(),
             "messages": [{"role": "system", "content": "Only propose completed criteria when supplied evidence directly supports them. Copy an exact quote of at least 8 characters and the evidence_id. Never infer completion. Return JSON only."},
@@ -420,7 +420,7 @@ class OllamaClient:
         """Choose only from browser-discovered URLs; context is a compact task packet."""
         base_url = self._require_base_url("DECIDER")
         model = os.getenv("OLLAMA_MODEL_DECIDER") or os.getenv(
-            "OLLAMA_MODEL_DEFAULT", "qwen2.5:7b"
+            "OLLAMA_MODEL_DEFAULT", "qwen3.5:9b"
         )
         allowed = [
             item for item in candidates
@@ -516,7 +516,7 @@ class OllamaClient:
         """Produce a concise synthesis from captured observations, not raw conversation history."""
         base_url = self._require_base_url("SYNTHESIS")
         model = os.getenv("OLLAMA_MODEL_SYNTHESIS") or os.getenv("OLLAMA_MODEL_DECIDER") or os.getenv(
-            "OLLAMA_MODEL_DEFAULT", "qwen2.5:7b"
+            "OLLAMA_MODEL_DEFAULT", "qwen3.5:9b"
         )
         compact_findings = [
             {
