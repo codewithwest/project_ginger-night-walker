@@ -14,6 +14,10 @@
 7. **Fail visibly:** blocked actions, access failures, ambiguity and uncertainty belong in the report.
 8. **Composable output:** structured data is task-specific; the report envelope remains stable.
 
+## 2. Model budget and routing
+
+Night Walker uses two configured model names, not one model per agent role. `OLLAMA_MODEL_DEFAULT` is the main model (default `qwen3.5:9b`) for goal/task planning, research source selection, navigation and interaction proposals, and final synthesis. `OLLAMA_MODEL_LIGHT` is the smaller model (default `qwen3.5:4b`) for extraction, bounded recovery proposals, and goal-progress proposals. Both may be served by one remote Ollama instance. Capability workers do not load independent models. Python validates structured outputs and exact evidence quotes; the light model cannot independently mark criteria complete. Operators can point role endpoints at different trusted services, but the runtime model policy remains two-tier.
+
 ## 2. Responsibility boundaries
 
 | Component | Owns | Must not own |
@@ -92,7 +96,7 @@ sequenceDiagram
     API->>TM: create task
     TM->>TS: persist task and latest checkpoint
     TM->>D: decide objective / initial search URL
-    TM->>LLM: extract immutable success criteria (Qwen3 0.6B)
+    TM->>LLM: extract immutable success criteria (the configured light model)
     LLM-->>TM: criteria proposal; Python stores original goal
     D->>LLM: bounded structured request
     LLM-->>D: candidate DecisionPlan
