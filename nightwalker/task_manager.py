@@ -13,6 +13,7 @@ from nightwalker.goal_state import GoalStateManager
 from nightwalker.ollama_client import OllamaUnavailable
 from nightwalker.orchestrator import Orchestrator
 from nightwalker.research_guard import ResearchLoopGuard
+from nightwalker.research_relevance import focused_research_queries, source_relevance
 from nightwalker.scratchpad import TaskScratchpad
 from nightwalker.task_state_store import TaskStateStore
 
@@ -314,11 +315,10 @@ class TaskManager:
                 except TypeError:
                     initial_plan = await self.orchestrator.ollama.decide_task(objective)
                 # Use concise goal-derived search queries, never the entire instruction-heavy brief.
-                research_queries = list(dict.fromkeys(
-                    " ".join(query.split()).strip()
-                    for query in (getattr(blueprint, "research_queries", []) if blueprint else [])
-                    if isinstance(query, str) and len(query.strip()) >= 8
-                ))[:8]
+                proposed_queries = (
+                    getattr(blueprint, "research_queries", []) if blueprint else []
+                )
+                research_queries = focused_research_queries(objective, proposed_queries)
                 explicit_target = (
                     self.orchestrator.ollama._explicit_target_url(objective)
                     if hasattr(self.orchestrator.ollama, "_explicit_target_url") else None
@@ -521,23 +521,58 @@ class TaskManager:
                             research_complete=not bool(next_url),
                         )
                         continue
-                    source_id = f"s-{len(sources) + 1:03d}"
                     source_records = result.get("sources", [])
                     source = dict(source_records[0]) if source_records else {
                         "url": final_url, "title": result.get("title", ""),
                         "retrieved_at": self._now(),
                     }
-                    source["source_id"] = source_id
-                    sources.append(source)
                     round_evidence = []
                     for item in result.get("evidence", []):
                         captured = dict(item)
-                        captured["source_id"] = source_id
                         captured["evidence_id"] = result.get("evidence_id") or captured.get("evidence_id")
                         # Full immutable captures stay in EvidenceStore; task polling returns
                         # only a compact excerpt to keep payload and context bounded.
                         captured["captured_text"] = str(captured.get("captured_text", ""))[:1500]
                         round_evidence.append(captured)
+
+                    accepted, relevance_reason = source_relevance(
+                        effective_objective,
+                        str(source.get("url") or final_url),
+                        str(source.get("title") or result.get("title") or ""),
+                        " ".join(str(item.get("captured_text") or "") for item in round_evidence),
+                    )
+                    if not accepted:
+                        rejection = f"{final_url}: {relevance_reason}"
+                        limitations.append(rejection)
+                        loop_guard.record_outcome(next_url, next_assignment, "irrelevant", relevance_reason)
+                        self._note(task_id, {
+                            "round": round_count, "assignment": next_assignment,
+                            "status": "rejected_irrelevant_source", "actions": [final_url],
+                            "findings": [], "sources": [],
+                            "remaining_work": [relevance_reason],
+                            "seed_for_next_round": ["Discard this page and inspect a category-relevant furniture retailer source"],
+                        })
+                        self._log(task_id, f"Rejected irrelevant source before evidence admission: {final_url}", "warning")
+                        candidates.extend(result.get("candidate_urls", []))
+                        candidates = loop_guard.filter_candidates(candidates, visited_urls)
+                        available = loop_guard.filter_candidates(candidates, visited_urls)
+                        next_url = available[0]["url"] if available else ""
+                        next_assignment = "Find a relevant furniture retailer source"
+                        self._save_checkpoint(
+                            task_id, initial_plan, sources=sources, findings=findings,
+                            evidence=evidence, visited_urls=visited_urls, candidates=candidates,
+                            structured_data=structured_data, limitations=limitations,
+                            loop_guard=loop_guard, round_count=round_count,
+                            next_url=next_url, next_assignment=next_assignment,
+                            research_complete=not bool(next_url),
+                        )
+                        continue
+
+                    source_id = f"s-{len(sources) + 1:03d}"
+                    source["source_id"] = source_id
+                    sources.append(source)
+                    for captured in round_evidence:
+                        captured["source_id"] = source_id
                     evidence.extend(round_evidence)
                     if record.get("goal_state") and round_evidence:
                         try:
