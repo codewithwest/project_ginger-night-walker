@@ -4,6 +4,8 @@ import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
+from nightwalker.a2a import A2ABus
+from nightwalker.agent_allocator import AgentAllocator
 from nightwalker.contracts import AgentTask
 from nightwalker.decision_contracts import DecisionPlan, DecisionStatus
 from nightwalker.goal_state import GoalStateManager
@@ -22,6 +24,8 @@ class TaskManager:
         self.scratchpad = TaskScratchpad()
         self.state_store = TaskStateStore()
         self.max_rounds = 30
+        self.a2a_bus = A2ABus()
+        self.agent_allocator = AgentAllocator(self.a2a_bus)
         self.shutting_down = False
 
     @staticmethod
@@ -108,6 +112,10 @@ class TaskManager:
             record.setdefault("follow_up_instructions", [])
             record.setdefault("step_results", [])
             record.setdefault("checkpoint", None)
+            record.setdefault("execution_blueprint", None)
+            record.setdefault("agent_assignments", [])
+            record.setdefault("a2a_messages", [])
+            self.a2a_bus.restore(task_id, record.get("a2a_messages", []))
             self.tasks[task_id] = record
             checkpoint = record.get("checkpoint")
             status = record.get("status")
@@ -201,6 +209,9 @@ class TaskManager:
             "follow_up_instructions": [],
             "goal_state": None,
             "checkpoint": None,
+            "execution_blueprint": None,
+            "agent_assignments": [],
+            "a2a_messages": [],
         }
         self._persist(task_id)
         self._log(task_id, "Natural-language task accepted; starting Decider")
@@ -256,15 +267,28 @@ class TaskManager:
             resume_in_flight = False
         try:
             if not checkpoint:
-                self._log(task_id, "Decider analysing objective and identifying the starting point")
+                self._log(task_id, "Goal analyst defining success criteria, subtasks, dependencies and tool requirements")
+                blueprint = None
+                try:
+                    blueprint = await self.orchestrator.ollama.create_execution_blueprint(objective, task_id=task_id)
+                    record["execution_blueprint"] = blueprint.model_dump(mode="json")
+                    record["agent_assignments"] = self.agent_allocator.assign(task_id, blueprint)
+                    record["a2a_messages"] = self.a2a_bus.history(task_id)
+                    criteria = [item.description for item in blueprint.success_criteria]
+                    self._log(task_id, f"Execution blueprint created: {len(criteria)} success criteria, {len(blueprint.subtasks)} subtasks; capability agents assigned")
+                    self._persist(task_id)
+                except (OllamaUnavailable, AttributeError, ValueError) as exc:
+                    self._log(task_id, f"Goal-first planning unavailable; using bounded legacy planning fallback: {exc}", "warning")
+                self._log(task_id, "Decider resolving the initial public research entry point")
                 initial_plan = await self.orchestrator.ollama.decide_task(objective, task_id=task_id)
                 record["plan"] = initial_plan.model_dump(mode="json")
-                proposed_steps = [step.objective for step in initial_plan.steps]
-                try:
-                    criteria = await self.orchestrator.ollama.initialise_goal_criteria(objective, proposed_steps, task_id=task_id)
-                except (OllamaUnavailable, AttributeError) as exc:
-                    criteria = proposed_steps or [initial_plan.summary or objective]
-                    self._log(task_id, f"Goal criteria model unavailable; using planner steps: {exc}", "warning")
+                if blueprint is None:
+                    proposed_steps = [step.objective for step in initial_plan.steps]
+                    try:
+                        criteria = await self.orchestrator.ollama.initialise_goal_criteria(objective, proposed_steps, task_id=task_id)
+                    except (OllamaUnavailable, AttributeError) as exc:
+                        criteria = proposed_steps or [initial_plan.summary or objective]
+                        self._log(task_id, f"Goal criteria model unavailable; using planner steps: {exc}", "warning")
                 record["goal_state"] = GoalStateManager.initialise(objective, criteria)
                 self._log(task_id, f"Goal State Manager established {len(criteria)} success criteria")
                 record["site_name"] = initial_plan.site_name
