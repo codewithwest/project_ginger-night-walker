@@ -87,6 +87,9 @@ def rank_research_candidates(objective: str, candidates: list[dict]) -> list[dic
         "dialabed", "dial-a-bed", "rochester", "blockandchisel",
         "block-and-chisel", "furniturewarehouse", "furniture-warehouse",
         "mattresswarehouse", "mattress-warehouse", "@home", "at home",
+        "mrpricehome", "mr-price-home", "mr price home", "houseandhome",
+        "house-and-home", "house and home", "leroymerlin", "leroy-merlin",
+        "homecentre", "home-centre", "home centre",
     )
     deny_hosts = (
         "dictionary.cambridge.org", "britannica.com", "southafricafacts.co.za",
