@@ -205,6 +205,7 @@ class OllamaClient:
         body = {
             "model": model,
             "stream": False,
+            "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "0"),
             "think": False,
             "format": schema,
             "messages": [
@@ -335,7 +336,8 @@ class OllamaClient:
         packet = {"original_objective": objective[:2000], "available_capabilities": [
             "navigate", "interact", "extract", "recover"
         ]}
-        body = {"model": model, "stream": False, "think": False, "format": schema,
+        body = {"model": model, "stream": False,
+            "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "0"), "think": False, "format": schema,
             "messages": [{"role": "system", "content": system_prompt},
                          {"role": "user", "content": json.dumps(packet, ensure_ascii=False)}],
             "options": {"temperature": 0.1, "num_predict": int(os.getenv("OLLAMA_PLAN_MAX_TOKENS", "1800"))}}
@@ -359,7 +361,8 @@ class OllamaClient:
     async def initialise_goal_criteria(self, objective: str, proposed_steps: list[str], task_id: str | None = None) -> list[str]:
         base_url = self._require_base_url("GOAL_STATE")
         model = os.getenv("OLLAMA_MODEL_LIGHT", "qwen3.5:4b")
-        body = {"model": model, "stream": False, "think": False, "format": GoalCriteriaPlan.model_json_schema(),
+        body = {"model": model, "stream": False,
+            "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "0"), "think": False, "format": GoalCriteriaPlan.model_json_schema(),
             "messages": [{"role": "system", "content": "Extract 1-6 concrete success criteria from the original user objective. Preserve explicit requirements; do not invent requirements. Return JSON only."},
                 {"role": "user", "content": json.dumps({"original_goal": objective[:2000], "planner_steps": proposed_steps[:8]}, ensure_ascii=False)}],
             "options": {"temperature": 0, "num_predict": 300}}
@@ -383,7 +386,8 @@ class OllamaClient:
         base_url = self._require_base_url("GOAL_STATE")
         model = os.getenv("OLLAMA_MODEL_LIGHT", "qwen3.5:4b")
         evidence = [{"evidence_id": item.get("evidence_id"), "captured_text": str(item.get("captured_text") or "")[:1800]} for item in round_evidence[:8]]
-        body = {"model": model, "stream": False, "think": False, "format": GoalProgressProposal.model_json_schema(),
+        body = {"model": model, "stream": False,
+            "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "0"), "think": False, "format": GoalProgressProposal.model_json_schema(),
             "messages": [{"role": "system", "content": "Use the goal_progress_checklist and criterion acceptance tests. Only propose completed criteria when current-round evidence directly satisfies the acceptance test. Copy an exact quote and evidence_id. Never infer completion or mark work complete based on a plan, URL visit or prior model claim. Return JSON only."},
                 {"role": "user", "content": json.dumps({"original_goal": goal_state["original_goal"], "criteria": goal_state["criteria"], "already_completed": goal_state["completed"], "remaining": goal_state["remaining"], "goal_progress_checklist": checklist_markdown[:12000], "current_round_evidence": evidence}, ensure_ascii=False)}],
             "options": {"temperature": 0, "num_predict": 400}}
@@ -562,7 +566,8 @@ class OllamaClient:
             "Do not browse or claim findings. Return only JSON."
         )
         body = {
-            "model": model, "stream": False, "think": False, "format": schema,
+            "model": model, "stream": False,
+            "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "0"), "think": False, "format": schema,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": json.dumps(packet, ensure_ascii=False)},
@@ -628,7 +633,8 @@ class OllamaClient:
             ],
         }
         body = {
-            "model": model, "stream": False, "think": False,
+            "model": model, "stream": False,
+            "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "0"), "think": False,
             "format": ResearchSynthesis.model_json_schema(),
             "messages": [
                 {
@@ -691,6 +697,7 @@ class OllamaClient:
         body = {
             "model": model,
             "stream": False,
+            "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "0"),
             "think": False,
             "format": schema,
             "messages": [
