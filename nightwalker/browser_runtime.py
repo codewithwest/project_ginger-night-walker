@@ -3,7 +3,8 @@ from __future__ import annotations
 import asyncio
 import os
 import re
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qs, unquote, urljoin, urlparse
+import base64
 
 from playwright.async_api import Browser, BrowserContext, Page, Route, async_playwright
 
@@ -57,6 +58,25 @@ class BrowserRuntime:
 
         await context.route("**/*", guard_request)
         return context
+
+    @staticmethod
+    def _resolve_search_result_url(value: str) -> str:
+        """Unwrap common search-engine redirect URLs to their actual destination."""
+        parsed = urlparse(value)
+        host = (parsed.hostname or "").lower()
+        if host.endswith("bing.com") and parsed.path.startswith("/ck/a"):
+            encoded = parse_qs(parsed.query).get("u", [""])[0]
+            if encoded.startswith("a1"):
+                try:
+                    decoded = base64.urlsafe_b64decode(encoded[2:] + "==").decode("utf-8", "ignore")
+                    if decoded.startswith(("http://", "https://")):
+                        return decoded
+                except (ValueError, UnicodeError):
+                    pass
+            decoded = unquote(encoded)
+            if decoded.startswith(("http://", "https://")):
+                return decoded
+        return value
 
     @staticmethod
     def _link_score(text: str, objective: str) -> float:
@@ -206,8 +226,13 @@ class BrowserRuntime:
             candidates = []
             seen_candidates = set()
             for item in candidate_links:
-                candidate_url = str(item.get("url", "")).split("#", 1)[0]
-                if candidate_url and candidate_url not in seen_candidates and candidate_url != page.url:
+                candidate_url = self._resolve_search_result_url(str(item.get("url", ""))).split("#", 1)[0]
+                candidate_host = (urlparse(candidate_url).hostname or "").lower()
+                if (
+                    candidate_url and candidate_url not in seen_candidates
+                    and candidate_url != page.url
+                    and not candidate_host.endswith(("bing.com", "microsoft.com"))
+                ):
                     seen_candidates.add(candidate_url)
                     candidates.append({
                         "url": candidate_url,
