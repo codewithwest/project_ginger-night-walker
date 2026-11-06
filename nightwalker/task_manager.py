@@ -292,7 +292,7 @@ class TaskManager:
             resume_in_flight = bool(checkpoint.get("round_in_progress", False))
             record["low_information_rounds"] = int(record.get("low_information_rounds", 0))
             if not next_url and not research_complete:
-                available = loop_guard.filter_candidates(rank_research_candidates(effective_objective, candidates), visited_urls)
+                available = loop_guard.filter_candidates(rank_research_candidates(self._effective_objective(task_id, objective), candidates), visited_urls)
                 if available:
                     next_url = available[0]["url"]
                     next_assignment = "Resume: inspect the next available discovered source"
