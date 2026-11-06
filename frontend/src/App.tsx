@@ -237,6 +237,7 @@ export default function App() {
   const [answer, setAnswer] = useState("");
   const [followUp, setFollowUp] = useState("");
   const [sendingFollowUp, setSendingFollowUp] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const [busy, setBusy] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
@@ -383,6 +384,23 @@ export default function App() {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Follow-up failed");
     } finally { setSendingFollowUp(false); }
+  }
+
+  async function retryTask() {
+    if (!selected || selected.status !== "failed" || retrying) return;
+    setRetrying(true);
+    setError("");
+    try {
+      const task = await api<Task>(`/tasks/${encodeURIComponent(selected.task_id)}/retry`, {
+        method: "POST",
+      });
+      setTasks((current) => current.map((item) => item.task_id === task.task_id ? task : item));
+      await refreshSelected(selected.task_id);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Task retry failed");
+    } finally {
+      setRetrying(false);
+    }
   }
 
   async function stop() {
@@ -564,6 +582,12 @@ export default function App() {
                   </div>
                   <div className="result-header__actions">
                     <Status value={selected.status} />
+                    {selected.status === "failed" && (
+                      <button className="stop-button" onClick={() => void retryTask()} disabled={retrying}>
+                        {retrying ? <LoaderCircle size={13} /> : <RefreshCw size={13} />}
+                        {retrying ? "Retrying…" : "Retry task"}
+                      </button>
+                    )}
                     {!isTerminal(selected.status) && (
                       <button className="stop-button" onClick={() => void stop()}>
                         <Square size={12} /> Stop
