@@ -63,14 +63,21 @@ class GoalStateManager:
             "about", "after", "based", "clear", "specific", "within", "which",
             "their", "there", "these", "those", "through", "directly", "determine",
             "establish", "identify", "objectives", "objective", "criteria", "rules",
-            "progression", "progress", "unique", "mechanics", "known",
+            "progress", "unique", "mechanics", "known",
             "other", "game", "games", "trainer", "velocity", "knight",
         }
         def terms(value: str) -> set[str]:
             return {
-                token for token in re.findall(r"[a-z0-9]{3,}", value.casefold())
+                token[:-1] if len(token) > 4 and token.endswith("s") else token
+                for token in re.findall(r"[a-z0-9]{3,}", value.casefold())
                 if token not in stopwords
             }
+        synonyms = {
+            "technical": {"weapon", "stamina", "armour", "crafting", "combat", "skill"},
+            "features": {"weapon", "upgrade", "skill", "mechanic", "crafting"},
+            "progression": {"unlock", "experience", "quest", "level", "boss", "ability"},
+            "rules": {"unlock", "earn", "gain", "level"},
+        }
         for claim in proposal.completed_with_evidence:
             if claim.criterion not in state["criteria"]:
                 continue
@@ -81,6 +88,9 @@ class GoalStateManager:
             boilerplate = {"images", "videos", "shopping", "maps", "news", "all", "search"}
             meaningful_words = [word for word in words if word not in boilerplate]
             criterion_terms = terms(claim.criterion)
+            criterion_terms.update(
+                alias for term in criterion_terms for alias in synonyms.get(term, set())
+            )
             overlap = criterion_terms & set(meaningful_words)
             relevant = len(overlap) >= 2 if len(criterion_terms) > 2 else bool(overlap)
             quote_is_informative = len(terms(claim.quote)) >= 3
