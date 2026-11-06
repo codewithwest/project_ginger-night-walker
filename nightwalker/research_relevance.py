@@ -24,13 +24,18 @@ def is_furniture_retail_research(objective: str) -> bool:
 def focused_research_queries(objective: str, proposed: list[str] | None = None) -> list[str]:
     """Return focused queries; use a deterministic category plan for furniture retail."""
     if is_furniture_retail_research(objective):
-        return [
-            "South Africa furniture retailers leading furniture stores",
-            "South Africa furniture retailers product ranges categories",
-            "South Africa furniture stores pricing price positioning",
-            "South Africa furniture retailers online shopping experience",
-            "Weylandts competitors furniture retailers South Africa",
+        geography = "South Africa " if "south africa" in objective.casefold() else ""
+        queries = [
+            f"{geography}furniture retailers leading furniture stores".strip(),
+            f"{geography}furniture retailers product ranges categories".strip(),
+            f"{geography}furniture stores pricing price positioning".strip(),
+            f"{geography}furniture retailers online shopping experience".strip(),
         ]
+        if "weylandts" in objective.casefold():
+            queries.append(f"{geography}Weylandts competitors furniture retailers".strip())
+        else:
+            queries.append(f"{geography}furniture retail market leading brands".strip())
+        return queries
     cleaned = list(dict.fromkeys(
         " ".join(item.split()).strip()
         for item in (proposed or [])
