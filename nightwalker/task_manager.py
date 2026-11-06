@@ -182,9 +182,17 @@ class TaskManager:
             raise ValueError("A2A message parent task does not match the route")
         if message.sender_agent_id not in allowed_agents or message.recipient_agent_id not in allowed_agents:
             raise ValueError("A2A sender and recipient must be allocated agents for this task")
+        by_agent = {item.get("agent_id"): item for item in assignments}
         known_subtasks = {item.get("subtask_id") for item in assignments}
         if message.subtask_id not in known_subtasks:
             raise ValueError("A2A message references an unknown subtask")
+        expected_capability = (
+            by_agent[message.sender_agent_id].get("capability")
+            if message.recipient_agent_id == "night-walker-orchestrator"
+            else by_agent[message.recipient_agent_id].get("capability")
+        )
+        if expected_capability and message.capability.value != expected_capability:
+            raise ValueError("A2A message capability does not match the allocated recipient")
         self.a2a_bus.send(message)
         record["a2a_messages"] = self.a2a_bus.history(task_id)
         self._log(task_id, f"A2A {message.message_type.value}: {message.sender_agent_id} → {message.recipient_agent_id} ({message.subtask_id})")
