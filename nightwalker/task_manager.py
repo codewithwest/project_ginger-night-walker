@@ -1065,6 +1065,55 @@ class TaskManager:
         )
         return self.snapshot(task_id)
 
+    def retry(self, task_id: str) -> dict[str, Any] | None:
+        """Retry a failed natural-language task from its latest durable checkpoint."""
+        record = self.tasks.get(task_id)
+        if record is None:
+            return None
+        if record.get("status") != "failed":
+            raise ValueError("Only failed tasks can be retried")
+        active = self.running.get(task_id)
+        if active and not active.done():
+            raise ValueError("This task is already running")
+
+        objective = str(
+            record.get("execution_objective") or record.get("objective") or ""
+        ).strip()
+        if not objective:
+            raise ValueError("Task has no saved objective to retry")
+
+        checkpoint = record.get("checkpoint")
+        if checkpoint and checkpoint.get("round_in_progress"):
+            self._log(
+                task_id,
+                "Retry requested; resuming the interrupted research round from its saved checkpoint",
+                "warning",
+            )
+        else:
+            self._log(
+                task_id,
+                "Retry requested; resuming from the latest durable research checkpoint",
+                "warning",
+            )
+        record["retry_count"] = int(record.get("retry_count", 0)) + 1
+        record["error"] = None
+        record["status"] = "queued"
+        record["current_step"] = None
+        record["progress_events"].append({
+            "at": self._now(),
+            "event_type": "task_retry",
+            "status": "queued",
+            "message": (
+                f"Manual retry #{record['retry_count']} accepted. "
+                "Existing evidence and completed research rounds are preserved."
+            ),
+        })
+        self._persist(task_id)
+        self.running[task_id] = asyncio.create_task(
+            self._execute_decided(task_id, objective, resume=True)
+        )
+        return self.snapshot(task_id)
+
     async def stop(self, task_id: str) -> dict[str, Any] | None:
         if task_id not in self.tasks:
             return None
