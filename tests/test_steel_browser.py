@@ -45,3 +45,77 @@ def test_self_hosted_steel_backend_does_not_require_cloud_api_key(monkeypatch):
     assert runtime._playwright is fake
     asyncio.run(runtime.close())
     assert fake.stopped
+
+
+@pytest.mark.asyncio
+async def test_self_hosted_steel_session_connects_without_api_key(monkeypatch):
+    import httpx
+
+    monkeypatch.setenv("BROWSER_BACKEND", "steel")
+    monkeypatch.setenv("STEEL_API_BASE_URL", "http://steel-browser:3000/v1")
+    monkeypatch.delenv("STEEL_API_KEY", raising=False)
+    runtime = BrowserRuntime()
+    captured = {}
+
+    class FakeContext:
+        async def route(self, pattern, handler):
+            captured["route_pattern"] = pattern
+
+    context = FakeContext()
+
+    class FakeBrowser:
+        contexts = [context]
+
+        def is_connected(self):
+            return True
+
+        async def close(self):
+            return None
+
+    browser = FakeBrowser()
+
+    class FakeChromium:
+        async def connect_over_cdp(self, url, timeout):
+            captured["websocket_url"] = url
+            return browser
+
+    class FakePlaywright:
+        chromium = FakeChromium()
+
+    runtime._playwright = FakePlaywright()
+
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "id": "session-123",
+                "websocketUrl": "ws://steel-browser:9223/devtools/browser/session-123",
+            }
+
+    class FakeAsyncClient:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, headers, json):
+            captured["api_url"] = url
+            captured["headers"] = headers
+            return FakeResponse()
+
+    monkeypatch.setattr("nightwalker.browser_runtime.httpx.AsyncClient", FakeAsyncClient)
+    result = await runtime._guarded_context()
+
+    assert result is context
+    assert captured["api_url"] == "http://steel-browser:3000/v1/sessions"
+    assert "steel-api-key" not in captured["headers"]
+    assert captured["websocket_url"].startswith("ws://steel-browser:9223/")
+    assert captured["route_pattern"] == "**/*"
