@@ -143,6 +143,17 @@ async def follow_up_task(task_id: str, request: TaskFollowUpRequest):
         raise HTTPException(status_code=404, detail="Task not found")
     return task
 
+@app.post("/tasks/{task_id}/retry")
+async def retry_task(task_id: str):
+    try:
+        task = task_manager.retry(task_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
+
+
 @app.delete("/tasks/{task_id}")
 async def stop_task(task_id: str):
     task = await task_manager.stop(task_id)
