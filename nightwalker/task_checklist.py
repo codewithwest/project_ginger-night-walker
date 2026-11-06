@@ -30,6 +30,11 @@ class TaskChecklist:
         completed = set(goal.get("completed") or [])
         evidence_map = goal.get("evidence_by_criterion") or {}
         blueprint = task.get("execution_blueprint") or {}
+        criterion_specs = {
+            item.get("description"): item
+            for item in blueprint.get("success_criteria") or []
+            if isinstance(item, dict)
+        }
         subtasks = blueprint.get("subtasks") or []
         assignments = {
             item.get("subtask_id"): item
@@ -83,6 +88,11 @@ class TaskChecklist:
                     if is_done and evidence.get("evidence_id") else ""
                 )
                 lines.append(f"{index}. {self._checkbox(is_done)} {self._safe(criterion, 400)}{suffix}")
+                spec = criterion_specs.get(criterion, {})
+                if spec.get("acceptance_test"):
+                    lines.append(f"   - Acceptance test: {self._safe(spec.get('acceptance_test'), 400)}")
+                if spec.get("evidence_required"):
+                    lines.append(f"   - Evidence required: {self._safe(spec.get('evidence_required'), 300)}")
             for criterion in completed:
                 if criterion not in criteria:
                     lines.append(f"- [!] Unknown completed criterion (review): {self._safe(criterion)}")
