@@ -78,6 +78,10 @@ class TaskManager:
         next_assignment: str, research_complete: bool = False,
         round_in_progress: bool = False,
     ) -> None:
+        # Revalidate the complete object before serialisation. This also repairs
+        # legacy/in-memory plans restored from older snapshots where URL and step
+        # fields may still be plain strings/dicts instead of typed Pydantic values.
+        initial_plan = DecisionPlan.model_validate(initial_plan.__dict__)
         self.tasks[task_id]["checkpoint"] = {
             "version": 1, "initial_plan": initial_plan.model_dump(mode="json"),
             "sources": sources, "findings": findings, "evidence": evidence,
