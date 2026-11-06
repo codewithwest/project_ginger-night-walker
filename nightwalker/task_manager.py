@@ -491,9 +491,8 @@ class TaskManager:
                     from urllib.parse import urlsplit
                     search_host = (urlsplit(final_url).hostname or "").lower()
                     is_search_page = (
-                        search_host == "bing.com" or search_host.endswith(".bing.com")
-                        or search_host == "google.com" or search_host.endswith(".google.com")
-                        or search_host == "duckduckgo.com" or search_host.endswith(".duckduckgo.com")
+                        search_host in {"bing.com", "google.com", "duckduckgo.com"}
+                        or search_host.endswith((".bing.com", ".google.com", ".duckduckgo.com"))
                     )
                     if is_search_page:
                         candidates.extend(result.get("candidate_urls", []))
