@@ -4,6 +4,7 @@
 
 - Ginger OS / Docker host runs FastAPI, Playwright Chromium and the React UI.
 - Remote Ollama serves model inference; no Ollama container is part of this Compose stack.
+- Browser execution defaults to local Playwright. Set `BROWSER_BACKEND=steel` and provide `STEEL_API_KEY` to use Steel-managed cloud browser sessions.
 - The default Compose binding is `127.0.0.1:8000`.
 - Task records and resumable checkpoints are persisted as atomic JSON snapshots under `EVIDENCE_DIR/tasks` (Docker default: `/app/evidence/tasks`). Evidence JSON and append-only scratchpad notes share the same persistent volume.
 
@@ -82,6 +83,10 @@ Vite proxies API requests to the local FastAPI service on port 8000.
 | `OLLAMA_MODEL_EXTRACT` | Extraction capability model | Falls back to default |
 | `OLLAMA_MODEL_RECOVER` | Recovery capability model | Falls back to default |
 | `NAVIGATION_TIMEOUT_MS` | Browser navigation timeout | Keep bounded |
+| `BROWSER_BACKEND` | Browser execution provider (`local` or `steel`) | Defaults to `local`; Steel requires an API key |
+| `STEEL_API_KEY` | Steel API credential | Secret; configure in `.env` or secret manager; never commit |
+| `STEEL_API_BASE_URL` | Steel Sessions REST API base | Defaults to `https://api.steel.dev/v1`; only override for a trusted compatible endpoint |
+| `STEEL_SESSION_TIMEOUT_MS` | Steel session lifetime in milliseconds | Defaults to 300000 (5 minutes); keep bounded |
 | `EVIDENCE_DIR` | Evidence, scratchpad and default task-state root | Docker default `/app/evidence`; must be on persistent storage |
 | `TASK_STATE_DIR` | Optional override for atomic task JSON snapshots | Defaults to `EVIDENCE_DIR/tasks` |
 
@@ -169,3 +174,18 @@ Common diagnoses:
 - Product price extraction is a narrow structured-data adapter.
 - Browser interactions are read-only and do not support arbitrary click/type/form workflows.
 - The application is not authenticated or hardened for multi-user hostile workloads.
+
+
+## 7. Steel cloud browser backend
+
+Night Walker can connect Playwright to a Steel-managed browser without changing its research planner, evidence schema, or task API. Set these values in the untracked `.env` file:
+
+```dotenv
+BROWSER_BACKEND=steel
+STEEL_API_KEY=your-steel-api-key
+STEEL_SESSION_TIMEOUT_MS=300000
+```
+
+Rebuild and restart the service after changing backend configuration. Steel sessions are created per browser workflow, connected using the session's returned WebSocket URL, and released after the workflow. If release fails, Steel's session timeout is the fallback cleanup mechanism. The API key is sent only to Steel and is not included in evidence records.
+
+The existing Night Walker URL policy and request guard remain in place, but Steel is a remote browser provider—not a replacement for outbound network egress controls. Keep the container/network firewall or trusted egress proxy as the final control against SSRF and internal-network access. Validate the Steel backend with a real key in a non-production environment before switching a live deployment.
