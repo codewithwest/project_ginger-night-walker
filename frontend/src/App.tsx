@@ -203,6 +203,7 @@ export default function App() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [online, setOnline] = useState(false);
+  const [checklistPinned, setChecklistPinned] = useState(false);
 
   const selected = useMemo(
     () => tasks.find((task) => task.task_id === selectedId) || null,
@@ -621,16 +622,13 @@ export default function App() {
           </section>
         </div>
 
-        <div className={`floating-checklist ${selected && ["queued", "running"].includes(selected.status) ? "is-running" : ""}`}>
+        <div className={`floating-checklist ${selected && ["queued", "running"].includes(selected.status) ? "is-running" : ""} ${checklistPinned ? "is-pinned" : ""}`}>
           <button
             type="button"
             className="floating-checklist__trigger"
             aria-label={selected ? `Open checklist for ${selected.objective}` : "Open task checklist"}
-            aria-expanded={undefined}
-            onClick={(event) => {
-              const root = event.currentTarget.parentElement;
-              root?.classList.toggle("is-pinned");
-            }}
+            aria-expanded={checklistPinned}
+            onClick={() => setChecklistPinned((current) => !current)}
           >
             <span className="floating-checklist__trigger-icon"><ListChecks size={21} /></span>
             {selected?.goal_state && (
@@ -654,7 +652,7 @@ export default function App() {
                 type="button"
                 className="floating-checklist__close"
                 aria-label="Close checklist"
-                onClick={(event) => event.currentTarget.closest(".floating-checklist")?.classList.remove("is-pinned")}
+                onClick={() => setChecklistPinned(false)}
               >
                 <X size={16} />
               </button>
