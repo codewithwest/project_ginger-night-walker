@@ -15,6 +15,8 @@ import {
   Sun,
   Moon,
   MonitorPlay,
+  Maximize2,
+  Minimize2,
   Square,
   Terminal,
   X,
@@ -243,10 +245,20 @@ export default function App() {
   const [checklistDismissed, setChecklistDismissed] = useState(false);
   const [browserPinned, setBrowserPinned] = useState(false);
   const [browserDismissed, setBrowserDismissed] = useState(false);
+  const [checklistFullscreen, setChecklistFullscreen] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     try { return localStorage.getItem("night-walker-theme") === "light" ? "light" : "dark"; }
     catch { return "dark"; }
   });
+
+  useEffect(() => {
+    if (!checklistFullscreen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setChecklistFullscreen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [checklistFullscreen]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -643,6 +655,7 @@ export default function App() {
                       <ArrowDownRight size={15} />
                     </summary>
                     <div className="report-details__body">
+                      <div className="checklist-actions"><span>Readable task guidance</span><button type="button" onClick={() => setChecklistFullscreen(true)}><Maximize2 size={14} /> Full screen</button></div>
                       <MarkdownContent className="checklist-markdown">{selected.checklist_markdown}</MarkdownContent>
                     </div>
                   </details>
@@ -818,6 +831,7 @@ export default function App() {
               ))}
               {!selected?.browser?.activity?.length && <p className="floating-browser__empty">No browser events recorded for this mission yet.</p>}
             </div>
+            <div className="floating-browser__resize-hint">Resize from the lower-right corner · width and height are adjustable</div>
             <div className="floating-browser__footer">
               <span>Live view is read-only</span>
               {selected?.browser?.backend === "steel" && <a href="http://localhost:3000/ui" target="_blank" rel="noreferrer">Open Steel UI <ExternalLink size={11} /></a>}
@@ -914,6 +928,16 @@ export default function App() {
             )}
           </section>
         </div>
+
+        {checklistFullscreen && selected?.checklist_markdown && (
+          <div className="checklist-fullscreen" role="dialog" aria-modal="true" aria-label="Full-screen task guidance">
+            <header className="checklist-fullscreen__header">
+              <div><span className="section-kicker"><ListChecks size={14} /> TASK GOAL &amp; PROGRESS</span><strong>{selected.objective}</strong></div>
+              <button type="button" onClick={() => setChecklistFullscreen(false)} aria-label="Exit full screen"><Minimize2 size={17} /> Exit full screen</button>
+            </header>
+            <div className="checklist-fullscreen__content"><MarkdownContent className="checklist-markdown checklist-markdown--fullscreen">{selected.checklist_markdown}</MarkdownContent></div>
+          </div>
+        )}
 
         <footer className="footer">
           <span>GINGER NIGHT WALKER</span>
