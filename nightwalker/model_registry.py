@@ -18,7 +18,7 @@ class ModelRegistry:
 
     def model_for(self, capability: Capability) -> str:
         key = self.ENV_KEYS[capability]
-        model = os.getenv(key) or os.getenv("OLLAMA_MODEL_DEFAULT", "qwen2.5:7b")
+        model = os.getenv(key) or os.getenv("OLLAMA_MODEL_DEFAULT", "qwen3.5:9b")
         if not model.strip():
             raise ValueError(f"No Ollama model configured for {capability.value}")
         return model.strip()
