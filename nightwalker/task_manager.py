@@ -171,6 +171,26 @@ class TaskManager:
                 self._persist(task_id)
         return restored
 
+    def send_a2a_message(self, task_id: str, message) -> dict[str, Any] | None:
+        record = self.tasks.get(task_id)
+        if record is None:
+            return None
+        assignments = record.get("agent_assignments", [])
+        allowed_agents = {item.get("agent_id") for item in assignments}
+        allowed_agents.add("night-walker-orchestrator")
+        if message.parent_task_id != task_id:
+            raise ValueError("A2A message parent task does not match the route")
+        if message.sender_agent_id not in allowed_agents or message.recipient_agent_id not in allowed_agents:
+            raise ValueError("A2A sender and recipient must be allocated agents for this task")
+        known_subtasks = {item.get("subtask_id") for item in assignments}
+        if message.subtask_id not in known_subtasks:
+            raise ValueError("A2A message references an unknown subtask")
+        self.a2a_bus.send(message)
+        record["a2a_messages"] = self.a2a_bus.history(task_id)
+        self._log(task_id, f"A2A {message.message_type.value}: {message.sender_agent_id} → {message.recipient_agent_id} ({message.subtask_id})")
+        self._persist(task_id)
+        return {"task_id": task_id, "messages": record["a2a_messages"]}
+
     def snapshot(self, task_id: str) -> dict[str, Any] | None:
         record = self.tasks.get(task_id)
         return {**record, "logs": list(record["logs"])} if record else None
