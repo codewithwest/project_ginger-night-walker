@@ -75,7 +75,6 @@ class BrowserRuntime:
         if self.backend == "steel":
             api_key = os.getenv("STEEL_API_KEY", "").strip()
             api_base = os.getenv("STEEL_API_BASE_URL", "https://api.steel.dev/v1").rstrip("/")
-            connect_base = os.getenv("STEEL_CONNECT_URL", "wss://connect.steel.dev").rstrip("/")
             timeout_ms = max(60_000, int(os.getenv("STEEL_SESSION_TIMEOUT_MS", "300000")))
             async with httpx.AsyncClient(timeout=20.0) as client:
                 response = await client.post(
@@ -86,12 +85,16 @@ class BrowserRuntime:
                 response.raise_for_status()
                 session = response.json()
             session_id = str(session.get("id") or session.get("sessionId") or "")
-            if not session_id:
-                raise RuntimeError("Steel created a session without returning an id")
+            websocket_url = str(session.get("websocketUrl") or session.get("websocket_url") or "")
+            if not session_id or not websocket_url:
+                if session_id:
+                    await self._release_steel_session(session_id)
+                raise RuntimeError("Steel session response did not include id and websocketUrl")
+            separator = "&" if "?" in websocket_url else "?"
             browser = None
             try:
                 browser = await self._playwright.chromium.connect_over_cdp(
-                    connect_base + "?" + urlencode({"apiKey": api_key, "sessionId": session_id}),
+                    websocket_url + separator + urlencode({"apiKey": api_key}),
                     timeout=30_000,
                 )
                 if not browser.contexts:
