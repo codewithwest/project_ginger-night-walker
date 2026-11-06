@@ -186,9 +186,7 @@ class OllamaClient:
     async def decide_task(self, objective: str, task_id: str | None = None) -> DecisionPlan:
         """Turn one natural-language request into a bounded, capability-scoped plan."""
         base_url = self._require_base_url("DECIDER")
-        model = os.getenv("OLLAMA_MODEL_DECIDER") or os.getenv(
-            "OLLAMA_MODEL_DEFAULT", "qwen3.5:9b"
-        )
+        model = os.getenv("OLLAMA_MODEL_DEFAULT", "qwen3.5:9b")
         schema = DecisionPlan.model_json_schema()
         system_prompt = (
             "You are Ginger Night Walker's Decider. Convert the user's request into an "
@@ -314,7 +312,7 @@ class OllamaClient:
     async def create_execution_blueprint(self, objective: str, task_id: str | None = None) -> ExecutionBlueprint:
         """Plan measurable success, subtasks, dependencies and tool needs before allocation."""
         base_url = self._require_base_url("DECIDER")
-        model = os.getenv("OLLAMA_MODEL_DECIDER") or os.getenv("OLLAMA_MODEL_DEFAULT", "qwen3.5:9b")
+        model = os.getenv("OLLAMA_MODEL_DEFAULT", "qwen3.5:9b")
         schema = ExecutionBlueprint.model_json_schema()
         system_prompt = (
             "You are Ginger's goal analyst and execution architect. Before any agent is assigned, "
@@ -360,7 +358,7 @@ class OllamaClient:
 
     async def initialise_goal_criteria(self, objective: str, proposed_steps: list[str], task_id: str | None = None) -> list[str]:
         base_url = self._require_base_url("GOAL_STATE")
-        model = os.getenv("OLLAMA_MODEL_GOAL_STATE", "qwen3.5:0.8b")
+        model = os.getenv("OLLAMA_MODEL_LIGHT", "qwen3.5:4b")
         body = {"model": model, "stream": False, "think": False, "format": GoalCriteriaPlan.model_json_schema(),
             "messages": [{"role": "system", "content": "Extract 1-6 concrete success criteria from the original user objective. Preserve explicit requirements; do not invent requirements. Return JSON only."},
                 {"role": "user", "content": json.dumps({"original_goal": objective[:2000], "planner_steps": proposed_steps[:8]}, ensure_ascii=False)}],
@@ -383,7 +381,7 @@ class OllamaClient:
         checklist_markdown: str = "",
     ) -> GoalProgressProposal:
         base_url = self._require_base_url("GOAL_STATE")
-        model = os.getenv("OLLAMA_MODEL_GOAL_STATE", "qwen3.5:0.8b")
+        model = os.getenv("OLLAMA_MODEL_LIGHT", "qwen3.5:4b")
         evidence = [{"evidence_id": item.get("evidence_id"), "captured_text": str(item.get("captured_text") or "")[:1800]} for item in round_evidence[:8]]
         body = {"model": model, "stream": False, "think": False, "format": GoalProgressProposal.model_json_schema(),
             "messages": [{"role": "system", "content": "Use the goal_progress_checklist and criterion acceptance tests. Only propose completed criteria when current-round evidence directly satisfies the acceptance test. Copy an exact quote and evidence_id. Never infer completion or mark work complete based on a plan, URL visit or prior model claim. Return JSON only."},
@@ -498,9 +496,7 @@ class OllamaClient:
     ) -> ResearchRoundPlan:
         """Choose only from browser-discovered URLs; context is a compact task packet."""
         base_url = self._require_base_url("DECIDER")
-        model = os.getenv("OLLAMA_MODEL_DECIDER") or os.getenv(
-            "OLLAMA_MODEL_DEFAULT", "qwen3.5:9b"
-        )
+        model = os.getenv("OLLAMA_MODEL_DEFAULT", "qwen3.5:9b")
         allowed = [
             item for item in candidates
             if item.get("url") and item["url"] not in set(visited_urls)
@@ -611,9 +607,7 @@ class OllamaClient:
     ) -> ResearchSynthesis:
         """Produce a concise synthesis from captured observations, not raw conversation history."""
         base_url = self._require_base_url("SYNTHESIS")
-        model = os.getenv("OLLAMA_MODEL_SYNTHESIS") or os.getenv("OLLAMA_MODEL_DECIDER") or os.getenv(
-            "OLLAMA_MODEL_DEFAULT", "qwen3.5:9b"
-        )
+        model = os.getenv("OLLAMA_MODEL_SYNTHESIS") or os.getenv("OLLAMA_MODEL_DEFAULT", "qwen3.5:9b")
         compact_findings = [
             {
                 "claim": item.get("claim", "")[:250],
