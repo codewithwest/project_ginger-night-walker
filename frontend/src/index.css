@@ -272,9 +272,9 @@ button { cursor: pointer; }
   transform-origin: bottom right;
   transition: opacity .18s ease, transform .18s ease, visibility .18s;
 }
-.floating-checklist:hover .floating-checklist__panel,
-.floating-checklist:focus-within .floating-checklist__panel,
-.floating-checklist.is-pinned .floating-checklist__panel {
+.floating-checklist:not(.is-dismissed):hover .floating-checklist__panel,
+.floating-checklist:not(.is-dismissed):focus-within .floating-checklist__panel,
+.floating-checklist.is-pinned:not(.is-dismissed) .floating-checklist__panel {
   opacity: 1;
   visibility: visible;
   transform: translateY(0) scale(1);
