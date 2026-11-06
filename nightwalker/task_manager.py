@@ -257,11 +257,11 @@ class TaskManager:
         try:
             if not checkpoint:
                 self._log(task_id, "Decider analysing objective and identifying the starting point")
-                initial_plan = await self.orchestrator.ollama.decide_task(objective)
+                initial_plan = await self.orchestrator.ollama.decide_task(objective, task_id=task_id)
                 record["plan"] = initial_plan.model_dump(mode="json")
                 proposed_steps = [step.objective for step in initial_plan.steps]
                 try:
-                    criteria = await self.orchestrator.ollama.initialise_goal_criteria(objective, proposed_steps)
+                    criteria = await self.orchestrator.ollama.initialise_goal_criteria(objective, proposed_steps, task_id=task_id)
                 except (OllamaUnavailable, AttributeError) as exc:
                     criteria = proposed_steps or [initial_plan.summary or objective]
                     self._log(task_id, f"Goal criteria model unavailable; using planner steps: {exc}", "warning")
@@ -410,7 +410,7 @@ class TaskManager:
                     evidence.extend(round_evidence)
                     if record.get("goal_state") and round_evidence:
                         try:
-                            proposal = await self.orchestrator.ollama.evaluate_goal_progress(record["goal_state"], round_evidence)
+                            proposal = await self.orchestrator.ollama.evaluate_goal_progress(record["goal_state"], round_evidence, task_id=task_id, round_number=round_count)
                             GoalStateManager.apply_proposal(record["goal_state"], proposal, round_evidence)
                             self._log(task_id, f"Goal progress: {len(record['goal_state']['completed'])}/{len(record['goal_state']['criteria'])} criteria have verified evidence.")
                         except (OllamaUnavailable, AttributeError) as exc:
@@ -514,6 +514,7 @@ class TaskManager:
                         scratchpad=self.scratchpad.read(task_id)[-8:],
                         candidates=candidates,
                         visited_urls=visited_urls,
+                        task_id=task_id,
                     )
                 except (OllamaUnavailable, ValueError, TypeError) as exc:
                     # A model planning failure must not discard successfully captured
@@ -591,7 +592,7 @@ class TaskManager:
                 })
                 try:
                     synthesis = await self.orchestrator.ollama.synthesise_research(
-                        self._effective_objective(task_id, objective), findings, sources, round_count, self.max_rounds
+                        self._effective_objective(task_id, objective), findings, sources, round_count, self.max_rounds, task_id=task_id
                     )
                     answer = synthesis.answer
                     if synthesis.coverage_summary:
