@@ -21,12 +21,14 @@ def test_browser_backend_rejects_unknown_provider(monkeypatch):
         BrowserRuntime()
 
 
-def test_steel_backend_requires_api_key_at_start(monkeypatch):
+def test_self_hosted_steel_backend_does_not_require_cloud_api_key(monkeypatch):
     monkeypatch.setenv("BROWSER_BACKEND", "steel")
     monkeypatch.delenv("STEEL_API_KEY", raising=False)
     runtime = BrowserRuntime()
 
     class FakePlaywright:
+        stopped = False
+
         async def stop(self):
             self.stopped = True
 
@@ -38,7 +40,8 @@ def test_steel_backend_requires_api_key_at_start(monkeypatch):
 
     monkeypatch.setattr("nightwalker.browser_runtime.async_playwright", FakePlaywrightStarter)
 
-    with pytest.raises(RuntimeError, match="STEEL_API_KEY"):
-        asyncio.run(runtime.start())
+    asyncio.run(runtime.start())
 
-    assert runtime._playwright is None
+    assert runtime._playwright is fake
+    asyncio.run(runtime.close())
+    assert fake.stopped
