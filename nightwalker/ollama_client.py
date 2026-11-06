@@ -315,7 +315,7 @@ class OllamaClient:
             raise OllamaUnavailable(f"Goal criteria inference failed: {exc}") from exc
 
     async def evaluate_goal_progress(self, goal_state: dict[str, Any], round_evidence: list[dict[str, Any]]) -> GoalProgressProposal:
-        base_url = self._require_base_url()
+        base_url = self._require_base_url("GOAL_STATE")
         model = os.getenv("OLLAMA_MODEL_GOAL_STATE", "qwen3:0.6b")
         evidence = [{"evidence_id": item.get("evidence_id"), "captured_text": str(item.get("captured_text") or "")[:1800]} for item in round_evidence[:8]]
         body = {"model": model, "stream": False, "think": False, "format": GoalProgressProposal.model_json_schema(),
