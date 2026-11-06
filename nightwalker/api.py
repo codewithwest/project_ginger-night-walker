@@ -86,6 +86,7 @@ async def get_task(task_id: str):
     task = task_manager.snapshot(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
+    task["browser"] = browser.task_session(task_id)
     return task
 
 
