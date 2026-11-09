@@ -59,6 +59,8 @@ type BrowserResult = {
     effort?: string;
     affected_urls?: string[];
     evidence_ids?: string[];
+    recommendation_status?: string;
+    validation?: { verdict?: string; reason?: string; limitations?: string[] };
   }[];
   sources?: { url: string; title?: string; retrieved_at?: string }[];
   evidence?: { evidence_id?: string; source_url?: string; captured_text?: string; visited_urls?: string[] }[];
@@ -256,6 +258,7 @@ function ResearchReport({ result }: { result: BrowserResult }) {
             {finding.priority && <strong className={"finding-priority finding-priority--" + finding.priority.toLowerCase()}>{finding.priority}</strong>}
           </div>
           <small>{finding.type?.replaceAll("_", " ") || "observation"} · {finding.confidence || "observed"}{finding.impact_score != null ? " · impact " + finding.impact_score + "/100" : ""}{finding.effort ? " · " + finding.effort + " effort" : ""}</small>
+          {finding.validation && <p className="finding-impact"><strong>Validation: {finding.validation.verdict?.replaceAll("_", " ") || "pending"}</strong>{finding.validation.reason ? " · " + finding.validation.reason : ""}</p>}
           {finding.impact_rationale && <p className="finding-impact">{finding.impact_rationale}</p>}
           {finding.remediation && <p className="finding-remediation"><strong>Recommended fix:</strong> {finding.remediation}</p>}
           {finding.affected_urls && finding.affected_urls.length > 0 && <div className="finding-urls">
