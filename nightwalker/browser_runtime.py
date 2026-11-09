@@ -967,7 +967,9 @@ class BrowserRuntime:
                     candidates = [item for item in candidates if item.get("url") not in disallowed]
                 candidates = candidates[:1000]
             if workflow_type in {"qa", "seo_qa"}:
-                audit_signals["qa_extended"] = await collect_qa_extended_signals(page)
+                audit_signals["qa_extended"] = (
+                    {} if single_page_qa else await collect_qa_extended_signals(page)
+                )
                 audit_signals["qa_navigation_journeys"] = (
                     await self._run_readonly_navigation_smoke(page, limit=5)
                     if not single_page_qa else {"checks": [], "checked_count": 0, "scope": "not_requested_single_page_qa"}
