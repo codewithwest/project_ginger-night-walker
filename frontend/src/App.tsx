@@ -39,6 +39,7 @@ type Product = {
 
 type BrowserResult = {
   schema_version?: string;
+  workflow_type?: string;
   status?: string;
   final_url?: string;
   title?: string;
@@ -47,7 +48,18 @@ type BrowserResult = {
   products?: Product[];
   evidence_id?: string;
   issues?: string[];
-  findings?: { claim: string; type?: string; confidence?: string }[];
+  findings?: {
+    claim: string;
+    type?: string;
+    confidence?: string;
+    priority?: string;
+    impact_score?: number;
+    impact_rationale?: string;
+    remediation?: string;
+    effort?: string;
+    affected_urls?: string[];
+    evidence_ids?: string[];
+  }[];
   sources?: { url: string; title?: string; retrieved_at?: string }[];
   evidence?: { evidence_id?: string; source_url?: string; captured_text?: string; visited_urls?: string[] }[];
   structured_data?: Record<string, unknown>;
@@ -168,11 +180,23 @@ function ResearchReport({ result }: { result: BrowserResult }) {
   const findings = result.findings || [];
   const sources = result.sources || (result.final_url ? [{ url: result.final_url, title: result.title }] : []);
   const structuredData = result.structured_data || {};
+  const auditSummary = structuredData.audit_report_summary as Record<string, number | boolean | undefined> | undefined;
+  const summaryMetrics = auditSummary ? [
+    { label: "Pages inspected", value: auditSummary.pages_inspected ?? 0 },
+    { label: "Known URL coverage", value: auditSummary.crawl_coverage_percent == null ? "—" : auditSummary.crawl_coverage_percent + "%" },
+    { label: "Broken internal links", value: auditSummary.broken_internal_links ?? 0 },
+    { label: "Duplicate title groups", value: auditSummary.duplicate_title_groups ?? 0 },
+    { label: "Duplicate content groups", value: auditSummary.duplicate_content_groups ?? 0 },
+    { label: "Accessibility findings", value: auditSummary.accessibility_findings ?? 0 },
+  ] : [];
   const limitations = result.limitations || result.issues || [];
+  const reportLabel = result.workflow_type
+    ? result.workflow_type.replaceAll("_", " ").toUpperCase() + " REPORT"
+    : "RESEARCH REPORT";
   return (
     <section className="answer-panel research-report">
       <div className="answer-panel__topline">
-        <span className="eyebrow"><Check size={13} /> RESEARCH REPORT</span>
+        <span className="eyebrow"><Check size={13} /> {reportLabel}</span>
         <span className="result-count">{findings.length} findings · {sources.length} sources{result.schema_version ? " · schema " + result.schema_version : ""}</span>
       </div>
       <div className="research-report__answer">
@@ -190,10 +214,28 @@ function ResearchReport({ result }: { result: BrowserResult }) {
           </li>;
         })}</ul>
       </div>}
+      {summaryMetrics.length > 0 && <div className="research-section">
+        <h3>Audit overview <span className="audit-completion">{auditSummary?.crawl_complete ? "Known discovery queue exhausted" : "Coverage incomplete"}</span></h3>
+        <div className="audit-summary-grid">{summaryMetrics.map((metric) => (
+          <div className="audit-summary-metric" key={metric.label}>
+            <strong>{metric.value}</strong><span>{metric.label}</span>
+          </div>
+        ))}</div>
+      </div>}
       {findings.length > 0 && <div className="research-section">
-        <h3>Findings</h3>
-        <ul className="finding-list">{findings.map((finding, index) => <li key={index}>
-          <span>{finding.claim}</span><small>{finding.type?.replaceAll("_", " ") || "observation"} · {finding.confidence || "observed"}</small>
+        <h3>Prioritised findings</h3>
+        <ul className="finding-list">{findings.map((finding, index) => <li key={finding.claim + "-" + index}>
+          <div className="finding-heading">
+            <span>{finding.claim}</span>
+            {finding.priority && <strong className={"finding-priority finding-priority--" + finding.priority.toLowerCase()}>{finding.priority}</strong>}
+          </div>
+          <small>{finding.type?.replaceAll("_", " ") || "observation"} · {finding.confidence || "observed"}{finding.impact_score != null ? " · impact " + finding.impact_score + "/100" : ""}{finding.effort ? " · " + finding.effort + " effort" : ""}</small>
+          {finding.impact_rationale && <p className="finding-impact">{finding.impact_rationale}</p>}
+          {finding.remediation && <p className="finding-remediation"><strong>Recommended fix:</strong> {finding.remediation}</p>}
+          {finding.affected_urls && finding.affected_urls.length > 0 && <div className="finding-urls">
+            {finding.affected_urls.slice(0, 5).map((url) => <a href={url} target="_blank" rel="noreferrer" key={url}>{url}</a>)}
+          </div>}
+          {finding.evidence_ids && finding.evidence_ids.length > 0 && <small>Evidence: {finding.evidence_ids.join(", ")}</small>}
         </li>)}</ul>
       </div>}
       {Object.entries(structuredData).map(([kind, value]) => (
