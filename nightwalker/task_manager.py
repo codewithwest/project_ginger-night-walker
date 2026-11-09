@@ -1635,7 +1635,7 @@ class TaskManager:
                     synthesis_objective = self._effective_objective(task_id, objective)
                     if recommendations_skipped():
                         synthesis_objective += (
-                            "\\n\\nREPORTING POLICY: Do not make recommendations, prescribe fixes, "
+                            "\n\nREPORTING POLICY: Do not make recommendations, prescribe fixes, "
                             "or infer root causes. Summarise observations and validation outcomes only."
                         )
                     synthesis = await self.orchestrator.ollama.synthesise_research(
