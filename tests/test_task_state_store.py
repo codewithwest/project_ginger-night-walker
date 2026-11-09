@@ -30,8 +30,6 @@ def test_task_state_store_ignores_corrupt_files_and_deletes_by_task_id(tmp_path)
 
 
 def test_task_state_store_rejects_snapshot_copied_under_another_task_filename(tmp_path):
-    import json
-
     store = TaskStateStore(str(tmp_path))
     store.save({"task_id": "original-task", "status": "completed"})
     original = tmp_path / store._filename("original-task")
