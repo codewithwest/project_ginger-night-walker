@@ -7,7 +7,7 @@ from typing import Any
 
 async def collect_page_signals(page: Any) -> dict[str, Any]:
     """Collect observable DOM signals; do not treat these as full audit passes."""
-    return await page.evaluate("""() => {
+    return await page.evaluate(r"""() => {
       const meta = name => document.querySelector(`meta[name="${name}"]`)?.content || null;
       const links = Array.from(document.querySelectorAll("a[href]"));
       const images = Array.from(document.images);
