@@ -494,6 +494,7 @@ class BrowserRuntime:
                 wait_until="domcontentloaded",
                 timeout=int(os.getenv("NAVIGATION_TIMEOUT_MS", "20000")),
             )
+            http_status = response.status if response else None
             self._browser_event(task_id, "Navigated to target page", url=page.url, title=(await page.title())[:500])
             if response and response.status >= 400:
                 return {
@@ -695,6 +696,7 @@ class BrowserRuntime:
                 **report,
                 "products": products,
                 "final_url": page.url,
+                "http_status": http_status,
                 "title": title,
                 "headings": headings,
                 "text": body_text,
@@ -713,6 +715,7 @@ class BrowserRuntime:
                 "status": "completed" if body_text.strip() and not issues else "blocked",
                 **report,
                 "final_url": page.url,
+                "http_status": http_status,
                 "title": title,
                 "headings": headings,
                 "text": body_text,
