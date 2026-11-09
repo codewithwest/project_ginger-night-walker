@@ -22,18 +22,22 @@ def test_named_subject_alone_does_not_become_shopping_or_general_research():
 
 def test_seo_blueprint_has_measurable_acceptance_criteria():
     blueprint = build_workflow_blueprint('SEO audit https://example.com', WorkflowType.SEO)
-    assert len(blueprint.success_criteria) == 6
-    assert len(blueprint.subtasks) == 6
+    assert len(blueprint.success_criteria) == 7
+    assert len(blueprint.subtasks) == 7
+    assert any(item.subtask_id == "seo-validate" for item in blueprint.subtasks)
+    assert any(item.criterion_id == "seo-validation" for item in blueprint.success_criteria)
     assert any(item.subtask_id == "seo-crawl" for item in blueprint.subtasks)
     assert all(item.evidence_required and item.acceptance_test for item in blueprint.success_criteria)
 
 
 def test_combined_blueprint_has_unique_ids_and_valid_dependencies():
     blueprint = build_workflow_blueprint('SEO and QA audit https://example.com', WorkflowType.SEO_QA)
-    assert len(blueprint.success_criteria) == 12
-    assert len(blueprint.subtasks) == 11
-    assert len({item.criterion_id for item in blueprint.success_criteria}) == 12
-    assert len({item.subtask_id for item in blueprint.subtasks}) == 11
+    assert len(blueprint.success_criteria) == 14
+    assert len(blueprint.subtasks) == 13
+    assert len({item.criterion_id for item in blueprint.success_criteria}) == 14
+    assert len({item.subtask_id for item in blueprint.subtasks}) == 13
+    assert "combined-seo-validate" in [item.subtask_id for item in blueprint.subtasks]
+    assert "combined-qa-validate" in [item.subtask_id for item in blueprint.subtasks]
     assert [item.subtask_id for item in blueprint.subtasks].count("combined-audit-crawl") == 1
     assert "combined-audit-crawl" in [item.subtask_id for item in blueprint.subtasks]
 
@@ -64,10 +68,11 @@ def test_page_smoke_qa_defaults_to_single_requested_url():
     blueprint = build_workflow_blueprint(objective, WorkflowType.QA)
     step_ids = [item.subtask_id for item in blueprint.subtasks]
     criterion_ids = [item.criterion_id for item in blueprint.success_criteria]
-    assert step_ids == ["qa-discover", "qa-availability", "qa-content", "qa-synthesise"]
+    assert step_ids == ["qa-discover", "qa-availability", "qa-content", "qa-validate", "qa-synthesise"]
     assert "qa-crawl" not in step_ids
     assert "qa-coverage" not in criterion_ids
     assert "qa-page-smoke" in criterion_ids
+    assert "qa-validation" in criterion_ids
 
 
 def test_explicit_site_wide_phrasing_enables_qa_crawl():
