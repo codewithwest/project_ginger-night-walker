@@ -857,7 +857,7 @@ class OllamaClient:
                 {"role": "user", "content": json.dumps(packet, ensure_ascii=False)},
             ],
             "options": {
-                "num_ctx": int(os.getenv("OLLAMA_NUM_CTX", "8192")),"temperature": 0.1, "num_predict": int(os.getenv("OLLAMA_SYNTHESIS_MAX_TOKENS", "1600"))},
+                "num_ctx": int(os.getenv("OLLAMA_NUM_CTX", "8192")),"temperature": 0.1, "num_predict": int(os.getenv("OLLAMA_SYNTHESIS_MAX_TOKENS", "2800"))},
         }
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
