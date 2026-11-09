@@ -179,8 +179,10 @@ def _recommendation_observations(
         if dataset == "qa_page_smoke":
             images = record.get("images") or []
             image_url = finding.get("image_url")
-            if image_url:
+            if kind == "qa_broken_image" and image_url:
                 images = [image for image in images if image.get("src") == image_url]
+            else:
+                images = []
             base.update({
                 "document_title": record.get("document_title"),
                 "h1_count": record.get("h1_count"),
@@ -199,12 +201,25 @@ def _recommendation_observations(
                 "heading_outline", "images_missing_alt", "image_count", "images",
                 "json_ld_blocks",
             )
-            base.update({key: record.get(key) for key in keys if key in record})
+            base.update({key: record.get(key) for key in keys if key in record and key not in {"images", "heading_outline", "json_ld_blocks"}})
+            if "images" in record:
+                images = record.get("images") or []
+                if "alt" in str(finding.get("claim") or "").casefold():
+                    images = [image for image in images if not image.get("alt")]
+                base["images"] = images[:10]
+            if "heading_outline" in record:
+                base["heading_outline"] = record.get("heading_outline", [])[:30]
+            if "json_ld_blocks" in record:
+                base["json_ld_blocks"] = record.get("json_ld_blocks", [])[:5]
         elif dataset == "qa_checks":
             keys = ("page_ready_state", "visible_control_count", "controls_without_accessible_name",
                     "controls_without_accessible_name_details", "duplicate_ids", "duplicate_id_details",
                     "form_count", "link_count")
-            base.update({key: record.get(key) for key in keys if key in record})
+            base.update({key: record.get(key) for key in keys if key in record and key not in {"controls_without_accessible_name_details", "duplicate_id_details"}})
+            if record.get("controls_without_accessible_name_details"):
+                base["controls_without_accessible_name_details"] = record["controls_without_accessible_name_details"][:10]
+            if record.get("duplicate_id_details"):
+                base["duplicate_id_details"] = record["duplicate_id_details"][:10]
         elif dataset == "qa_extended":
             base.update({
                 "responsive_viewports": record.get("responsive_viewports", []),
