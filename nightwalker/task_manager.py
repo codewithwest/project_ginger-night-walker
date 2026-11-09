@@ -773,6 +773,13 @@ class TaskManager:
                         # Advance all sequential steps that this single captured page
                         # can actually satisfy. The trusted runtime performs extraction
                         # and numeric comparison; models cannot self-tick the checklist.
+                        def _price_value(product):
+                            value = product.get("price_value")
+                            if isinstance(value, (int, float)):
+                                return float(value)
+                            match = re.search(r"[\d,]+(?:\.\d{1,2})?", str(product.get("price") or ""))
+                            return float(match.group(0).replace(",", "")) if match else None
+
                         while True:
                             ready = ready_steps(execution_plan)
                             if not ready:
@@ -817,12 +824,6 @@ class TaskManager:
                                     verified_result = f"Opened the selected product page and verified {matching_product.get('name')} at {matching_product.get('price')}"
                             elif capability == "extract" and products:
                                 if any(term in objective_text for term in ("cheapest", "lowest", "minimum", "compare", "identify")):
-                                    def _price_value(product):
-                                        value = product.get("price_value")
-                                        if isinstance(value, (int, float)):
-                                            return float(value)
-                                        match = re.search(r"[\d,]+(?:\.\d{1,2})?", str(product.get("price") or ""))
-                                        return float(match.group(0).replace(",", "")) if match else None
                                     priced = [(amount, product) for product in products if (amount := _price_value(product)) is not None]
                                     if priced:
                                         amount, cheapest_product = min(priced, key=lambda item: item[0])
