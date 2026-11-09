@@ -947,7 +947,13 @@ class BrowserRuntime:
                 self._task_sessions[task_id]["qa_runtime_events"] = []
             audit_findings = page_signal_findings(audit_signals, workflow_type)
             for check in audit_signals["internal_link_checks"].get("checks", []):
-                if check.get("ok") is False:
+                if check.get("off_origin_redirect"):
+                    audit_findings.append({
+                        "claim": f"Internal link redirects outside the audited origin: {check.get('url')} → {check.get('final_url')}",
+                        "type": "off_origin_internal_redirect", "severity": "medium",
+                        "affected_urls": [check.get("url")], "source_url": page.url,
+                    })
+                elif check.get("ok") is False:
                     audit_findings.append({
                         "claim": f"Internal link destination returned HTTP {check.get('status')}: {check.get('url')}",
                         "type": "broken_internal_link", "severity": "high",
