@@ -26,7 +26,7 @@ from nightwalker.scratchpad import TaskScratchpad
 from nightwalker.task_checklist import TaskChecklist
 from nightwalker.task_state_store import TaskStateStore
 from nightwalker.task_timing import TaskTiming
-from nightwalker.crawl_intelligence import crawl_candidate_metrics, rank_crawl_candidates
+from nightwalker.crawl_intelligence import candidate_exclusion_reason, crawl_candidate_metrics, rank_crawl_candidates
 from nightwalker.workflows import WorkflowType, build_workflow_blueprint, classify_workflow, target_url_from_objective
 
 
@@ -1318,7 +1318,10 @@ class TaskManager:
                 duplicate_analysis = analyse_duplicate_pages(crawl_pages)
                 known_urls = list(record.get("discovered_urls") or [])
                 known_urls.extend(str(item.get("url") or "") for item in crawl_pages if isinstance(item, dict))
-                coverage = crawl_coverage(known_urls, visited_urls)
+                excluded_urls = [
+                    url for url in known_urls if candidate_exclusion_reason(url) is not None
+                ]
+                coverage = crawl_coverage(known_urls, visited_urls, excluded_urls=excluded_urls)
                 discovery_records = structured_data.get("seo_discovery", [])
                 sitemap_by_url = {}
                 for discovery in discovery_records:
@@ -1480,6 +1483,8 @@ class TaskManager:
                         min(100, len(crawl_pages) / max(1, int(record.get("max_rounds", self.max_rounds))) * 100), 1
                     ),
                     "known_discovered_url_count": coverage["discovered_url_count"],
+                    "eligible_discovered_url_count": coverage["eligible_url_count"],
+                    "excluded_url_count": coverage["excluded_url_count"],
                     "candidate_scheduler": record.get("crawl_scheduler", {}),
                     "crawl_coverage_percent": coverage["coverage_percent"],
                     "crawl_complete": coverage["crawl_complete"],
