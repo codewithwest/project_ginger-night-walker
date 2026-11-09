@@ -136,6 +136,15 @@ Engineering rules:
 
 A passing build is not evidence that a browser security boundary is complete. Keep security tests separate and explicit.
 
+For a live audit through the running local service, first rebuild/restart Night Walker, then run:
+
+```bash
+uv run python scripts/live_audit_smoke.py --url https://weylandts.co.za --workflow seo --output /tmp/nightwalker-seo-report.json
+uv run python scripts/live_audit_smoke.py --url https://weylandts.co.za --workflow qa --output /tmp/nightwalker-qa-report.json
+```
+
+The script submits through `POST /tasks`, polls `GET /tasks/{task_id}`, and prints the final status, finding count and deterministic audit summary. A `blocked` result is a completed execution with unmet verification criteria, not a successful audit. Preserve the JSON report and execution logs when diagnosing a live run.
+
 ## 10. Operational checks
 
 ```bash
