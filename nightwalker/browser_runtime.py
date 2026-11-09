@@ -438,39 +438,102 @@ class BrowserRuntime:
         return page.url
 
     async def _run_product_search_smoke(self, page: Page, objective: str) -> dict[str, Any] | None:
-        """Run a user-requested, read-only product search and capture the rendered result."""
-        match = re.search(r'(?i)search\s+for\s+[“"\']([^”"\']{1,100})[”"\']', objective)
+        """Find a usable product search from the supplied page, with a product-page fallback."""
+        match = re.search(r'(?i)search\\s+for\\s+[“"\\']([^”"\\']{1,100})[”"\\']', objective)
         if not match:
             return None
         query = match.group(1).strip()
-        search_inputs = page.locator(
-            'input[type="search"], input[name*="search" i], input[id*="search" i], '
-            'input[placeholder*="search" i], input[aria-label*="search" i]'
-        )
-        input_count = await search_inputs.count()
-        if input_count == 0:
-            return {"query": query, "performed": False, "status": "search_control_not_found",
-                    "result_count": 0, "matches": []}
-        # Prefer a visible enabled field; do not guess among multiple indistinguishable controls.
-        candidates = []
-        for index in range(min(input_count, 8)):
-            field = search_inputs.nth(index)
+        route = [{"url": page.url, "action": "opened_requested_url"}]
+
+        async def visible_search_fields():
+            locator = page.locator(
+                'input[type="search"], input[name*="search" i], input[id*="search" i], '
+                'input[placeholder*="search" i], input[aria-label*="search" i], '
+                'form[role="search"] input, [role="search"] input'
+            )
+            found = []
+            for index in range(min(await locator.count(), 12)):
+                field = locator.nth(index)
+                try:
+                    if await field.is_visible() and await field.is_enabled():
+                        found.append(field)
+                except Exception:
+                    continue
+            return found
+
+        fields = await visible_search_fields()
+        if not fields:
+            # Do not guess a /products URL. Discover a same-origin product/shop
+            # destination from the links actually rendered on the supplied page.
+            links = await page.locator("a[href]").evaluate_all(
+                """nodes => nodes.slice(0, 1500).map(a => ({
+                    href: a.href,
+                    text: (a.innerText || a.getAttribute('aria-label') || a.title || '').trim()
+                }))"""
+            )
+            origin = urlparse(page.url)
+            candidates = []
+            seen = set()
+            for link in links:
+                href = str(link.get("href") or "")
+                label = str(link.get("text") or "")
+                parsed = urlparse(href)
+                if (parsed.scheme, parsed.hostname, parsed.port) != (origin.scheme, origin.hostname, origin.port):
+                    continue
+                signal = (label + " " + parsed.path).casefold()
+                if not re.search(r"\\b(products?|shop|catalogue|catalog|collection|store)\\b", signal):
+                    continue
+                clean = href.split("#", 1)[0]
+                if clean and clean not in seen and clean != page.url:
+                    seen.add(clean)
+                    candidates.append({"url": clean, "label": label[:160]})
+            if not candidates:
+                return {
+                    "query": query, "performed": False, "status": "search_and_product_page_not_found",
+                    "route": route, "result_count": 0, "matches": [],
+                    "reason": "No usable search field or same-origin product/shop link was found on the supplied page."
+                }
+            # Prefer explicit product/shop labels and product-like paths; stable order
+            # preserves the page's navigation order when relevance is tied.
+            candidates.sort(key=lambda item: (
+                0 if re.search(r"\\b(products?|shop|catalogue|catalog)\\b", item["label"], re.I) else 1,
+                0 if re.search(r"/(products?|shop|catalogue|catalog)(/|$)", urlparse(item["url"]).path, re.I) else 1,
+            ))
+            destination = candidates[0]["url"]
             try:
-                if await field.is_visible() and await field.is_enabled():
-                    candidates.append(field)
-            except Exception:
-                continue
-        if len(candidates) != 1:
-            return {"query": query, "performed": False, "status": "ambiguous_search_control",
-                    "visible_search_controls": len(candidates), "result_count": 0, "matches": []}
-        field = candidates[0]
+                response = await page.goto(
+                    destination, wait_until="domcontentloaded",
+                    timeout=int(os.getenv("NAVIGATION_TIMEOUT_MS", "20000")),
+                )
+            except Exception as exc:
+                return {
+                    "query": query, "performed": False, "status": "product_page_navigation_failed",
+                    "route": route + [{"url": destination, "action": "navigation_failed", "error": str(exc)[:300]}],
+                    "result_count": 0, "matches": []
+                }
+            route.append({
+                "url": page.url, "action": "opened_discovered_product_page",
+                "http_status": response.status if response else None,
+                "discovered_from": route[0]["url"], "link_label": candidates[0]["label"]
+            })
+            fields = await visible_search_fields()
+
+        if len(fields) != 1:
+            return {
+                "query": query, "performed": False,
+                "status": "search_control_not_found" if not fields else "ambiguous_search_control",
+                "visible_search_controls": len(fields), "route": route,
+                "result_count": 0, "matches": []
+            }
+
+        field = fields[0]
         await field.fill(query)
         submit = page.locator(
             'button#submit_search, button[type="submit"], input[type="submit"], '
-            'button[aria-label*="search" i]'
+            'button[aria-label*="search" i], form[role="search"] button'
         )
         visible_submit = []
-        for index in range(min(await submit.count(), 8)):
+        for index in range(min(await submit.count(), 12)):
             button = submit.nth(index)
             try:
                 if await button.is_visible() and await button.is_enabled():
@@ -482,8 +545,10 @@ class BrowserRuntime:
         elif len(visible_submit) == 0:
             await field.press("Enter")
         else:
-            return {"query": query, "performed": False, "status": "ambiguous_search_submit",
-                    "result_count": 0, "matches": []}
+            return {
+                "query": query, "performed": False, "status": "ambiguous_search_submit",
+                "route": route, "result_count": 0, "matches": []
+            }
         try:
             await page.wait_for_load_state("domcontentloaded", timeout=5000)
         except Exception:
@@ -509,10 +574,9 @@ class BrowserRuntime:
             text_value = str(item.get("text") or "")
             if query_lower not in text_value.casefold():
                 continue
-            price = re.search(r'(?i)(?:Rs\.?\s*|R\s*)[\d,]+(?:\.\d{1,2})?', text_value)
+            price = re.search(r'(?i)(?:Rs\\.?\\s*|R\\s*)[\\d,]+(?:\\.\\d{1,2})?', text_value)
             matched.append({
-                **item,
-                "name_match": query,
+                **item, "name_match": query,
                 "price": price.group(0).strip() if price else None,
                 "image_present": bool(item.get("image_src")),
                 "image_loaded": bool(item.get("image_complete") and item.get("image_natural_width", 0) > 0),
@@ -521,7 +585,7 @@ class BrowserRuntime:
             "query": query, "performed": True,
             "status": "matched" if matched else "no_matching_product_card",
             "result_count": len(matches), "matches": matched[:12],
-            "searched_url": page.url,
+            "searched_url": page.url, "route": route,
         }
 
     @staticmethod
