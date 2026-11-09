@@ -527,38 +527,59 @@ class TaskManager:
                     return
 
                 self._log(task_id, "Preparing dedicated " + workflow.value.upper() + " workflow")
+                # The Decider's plan is authoritative for task routing. Never silently
+                # replace its proposed steps with a deterministic template.
+                decision = await self.orchestrator.ollama.decide_task(objective, task_id=task_id)
+                if decision.status != DecisionStatus.READY:
+                    record["plan"] = normalise_decision_plan(decision).model_dump(mode="json")
+                    record["status"] = decision.status.value
+                    question = decision.clarification_question or decision.summary
+                    self._log(task_id, "Decider did not return an executable plan: " + question, "warning")
+                    self._persist(task_id)
+                    return
+                if not decision.steps:
+                    raise ValueError("Decider returned a ready plan without executable steps")
+                # An explicit URL supplied by the user is immutable. The Decider may
+                # enrich the interpretation, but cannot redirect the task elsewhere.
                 decided_target = explicit_target
                 decided_site_name = urlsplit(explicit_target).hostname
-                decided_summary = None
-                try:
-                    decision = await self.orchestrator.ollama.decide_task(objective, task_id=task_id)
-                    if decision.target_url:
-                        decided_target = str(decision.target_url)
-                    if decision.site_name:
-                        decided_site_name = decision.site_name
-                    if decision.summary:
-                        decided_summary = decision.summary
-                except OllamaUnavailable as exc:
-                    self._log(task_id, f"Decider unavailable; using regex-extracted target URL. {exc}", "warning")
-                blueprint = build_workflow_blueprint(objective, workflow)
-                record["execution_blueprint"] = blueprint.model_dump(mode="json")
-                record["execution_plan"] = initialise_plan(record["execution_blueprint"])
-                record["workflow_summary"] = decided_summary or blueprint.interpretation
-                criteria = [item.description for item in blueprint.success_criteria]
-                record["research_queries"] = []
-                first_subtask = blueprint.subtasks[0]
-                initial_plan = DecisionPlan.model_validate({
-                    "status": "ready",
-                    "summary": record["workflow_summary"],
+                if decision.site_name:
+                    decided_site_name = decision.site_name
+                decision_payload = normalise_decision_plan({
+                    "status": decision.status,
+                    "summary": decision.summary,
                     "site_name": decided_site_name,
                     "target_url": decided_target,
-                    "steps": [{
-                        "step_id": first_subtask.subtask_id,
-                        "capability": first_subtask.capability.value,
-                        "objective": first_subtask.objective,
-                    }],
+                    "clarification_question": None,
+                    "steps": [step.model_dump(mode="python") for step in decision.steps],
                 })
-                self._log(task_id, workflow.value.upper() + " workflow planned: " + str(len(blueprint.success_criteria)) + " acceptance criteria and " + str(len(blueprint.subtasks)) + " workflow steps")
+                record["decider_plan"] = decision_payload.model_dump(mode="json")
+                record["planner_provenance"] = {
+                    "decider": "ollama.decide_task",
+                    "execution_blueprint": "ollama.create_execution_blueprint",
+                    "objective_sha256": __import__("hashlib").sha256(objective.encode("utf-8")).hexdigest(),
+                }
+                # A separate goal analyst turns the Decider's routing plan into
+                # evidence-testable criteria and dependent subtasks. This is also
+                # model-generated; build_workflow_blueprint is no longer the runtime
+                # source of the task checklist.
+                blueprint = await self.orchestrator.ollama.create_execution_blueprint(
+                    objective, task_id=task_id
+                )
+                if blueprint.original_objective.strip() != objective.strip():
+                    raise ValueError("Execution planner changed the immutable task objective")
+                record["execution_blueprint"] = blueprint.model_dump(mode="json")
+                record["execution_plan"] = initialise_plan(record["execution_blueprint"])
+                record["workflow_summary"] = decision.summary or blueprint.interpretation
+                criteria = [item.description for item in blueprint.success_criteria]
+                record["research_queries"] = list(blueprint.research_queries)
+                initial_plan = decision_payload
+                self._log(
+                    task_id,
+                    "Decider plan accepted with " + str(len(decision.steps)) +
+                    " routing steps; goal analyst produced " + str(len(criteria)) +
+                    " acceptance criteria and " + str(len(blueprint.subtasks)) + " dependent execution steps",
+                )
                 self._persist(task_id)
                 initial_plan = DecisionPlan.model_validate(initial_plan.__dict__)
                 record["research_queries"] = []
