@@ -30,7 +30,9 @@ _QA_TERMS = {
     "qa", "quality assurance", "test website", "test web app", "test web application",
     "website testing", "web app testing", "functional testing", "regression testing",
     "broken links", "user journey", "usability testing", "accessibility testing",
-    "responsive testing", "bug", "bugs", "defects",
+    "responsive testing", "smoke test", "smoke testing", "broken images",
+    "console error", "console errors", "browser errors", "page title", "h1 heading", "h1 headings",
+    "bug", "bugs", "defects",
 }
 
 
