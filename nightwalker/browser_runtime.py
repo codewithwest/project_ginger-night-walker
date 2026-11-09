@@ -438,12 +438,13 @@ class BrowserRuntime:
         return page.url
 
     async def _run_product_search_smoke(self, page: Page, objective: str) -> dict[str, Any] | None:
-        """Find a usable product search from the supplied page, with a product-page fallback."""
-        match = re.search(r'(?i)search\s+for\s+[“"\']([^”"\']{1,100})[”"\']', objective)
+        """Find a usable product search from the supplied page or the site's real catalogue."""
+        match = re.search(r'(?i)search\\s+for\\s+[“"\\']([^”"\\']{1,100})[”"\\']', objective)
         if not match:
             return None
         query = match.group(1).strip()
         route = [{"url": page.url, "action": "opened_requested_url"}]
+        origin = urlparse(page.url)
 
         async def visible_search_fields():
             locator = page.locator(
@@ -461,17 +462,13 @@ class BrowserRuntime:
                     continue
             return found
 
-        fields = await visible_search_fields()
-        if not fields:
-            # Do not guess a /products URL. Discover a same-origin product/shop
-            # destination from the links actually rendered on the supplied page.
+        async def discover_catalogue_links():
             links = await page.locator("a[href]").evaluate_all(
-                """nodes => nodes.slice(0, 1500).map(a => ({
+                """nodes => nodes.slice(0, 2000).map(a => ({
                     href: a.href,
                     text: (a.innerText || a.getAttribute('aria-label') || a.title || '').trim()
                 }))"""
             )
-            origin = urlparse(page.url)
             candidates = []
             seen = set()
             for link in links:
@@ -481,24 +478,76 @@ class BrowserRuntime:
                 if (parsed.scheme, parsed.hostname, parsed.port) != (origin.scheme, origin.hostname, origin.port):
                     continue
                 signal = (label + " " + parsed.path).casefold()
-                if not re.search(r"\b(products?|shop|catalogue|catalog|collection|store)\b", signal):
+                if not re.search(
+                    r"\\b(products?|product range|furniture|homeware|shop|catalogue|catalog|collection|store)\\b",
+                    signal,
+                ):
                     continue
                 clean = href.split("#", 1)[0]
                 if clean and clean not in seen and clean != page.url:
                     seen.add(clean)
                     candidates.append({"url": clean, "label": label[:160]})
+            candidates.sort(key=lambda item: (
+                0 if re.search(r"\\b(furniture|products?|shop|catalogue|catalog)\\b", item["label"], re.I) else 1,
+                0 if re.search(r"/(furniture|products?|shop|catalogue|catalog)(/|$)", urlparse(item["url"]).path, re.I) else 1,
+            ))
+            return candidates
+
+        async def reveal_search_if_needed():
+            fields = await visible_search_fields()
+            if fields:
+                return fields
+            triggers = page.locator(
+                'button[aria-label*="search" i], a[aria-label*="search" i], '
+                'button[title*="search" i], a[title*="search" i], '
+                '[role="button"][aria-label*="search" i]'
+            )
+            visible = []
+            for index in range(min(await triggers.count(), 8)):
+                trigger = triggers.nth(index)
+                try:
+                    if await trigger.is_visible() and await trigger.is_enabled():
+                        visible.append(trigger)
+                except Exception:
+                    continue
+            if len(visible) == 1:
+                try:
+                    await visible[0].click(timeout=2500)
+                    await page.wait_for_timeout(300)
+                except Exception:
+                    pass
+            return await visible_search_fields()
+
+        fields = await reveal_search_if_needed()
+        if not fields:
+            candidates = await discover_catalogue_links()
+            # A not-found/empty route may not render the site's navigation.
+            # In that case inspect the origin homepage for the real catalogue link.
+            if not candidates and origin.scheme and origin.netloc:
+                homepage = f"{origin.scheme}://{origin.netloc}/"
+                if page.url.rstrip("/") != homepage.rstrip("/"):
+                    try:
+                        response = await page.goto(
+                            homepage, wait_until="domcontentloaded",
+                            timeout=int(os.getenv("NAVIGATION_TIMEOUT_MS", "20000")),
+                        )
+                        route.append({
+                            "url": page.url, "action": "opened_homepage_for_catalogue_discovery",
+                            "http_status": response.status if response else None,
+                        })
+                        candidates = await discover_catalogue_links()
+                    except Exception as exc:
+                        return {
+                            "query": query, "performed": False, "status": "catalogue_discovery_failed",
+                            "route": route, "error": str(exc)[:300],
+                            "result_count": 0, "matches": [],
+                        }
             if not candidates:
                 return {
-                    "query": query, "performed": False, "status": "search_and_product_page_not_found",
+                    "query": query, "performed": False, "status": "search_and_catalogue_not_found",
                     "route": route, "result_count": 0, "matches": [],
-                    "reason": "No usable search field or same-origin product/shop link was found on the supplied page."
+                    "reason": "No usable search field or same-origin furniture/product catalogue link was found."
                 }
-            # Prefer explicit product/shop labels and product-like paths; stable order
-            # preserves the page's navigation order when relevance is tied.
-            candidates.sort(key=lambda item: (
-                0 if re.search(r"\b(products?|shop|catalogue|catalog)\b", item["label"], re.I) else 1,
-                0 if re.search(r"/(products?|shop|catalogue|catalog)(/|$)", urlparse(item["url"]).path, re.I) else 1,
-            ))
             destination = candidates[0]["url"]
             try:
                 response = await page.goto(
@@ -507,16 +556,16 @@ class BrowserRuntime:
                 )
             except Exception as exc:
                 return {
-                    "query": query, "performed": False, "status": "product_page_navigation_failed",
+                    "query": query, "performed": False, "status": "catalogue_navigation_failed",
                     "route": route + [{"url": destination, "action": "navigation_failed", "error": str(exc)[:300]}],
                     "result_count": 0, "matches": []
                 }
             route.append({
-                "url": page.url, "action": "opened_discovered_product_page",
+                "url": page.url, "action": "opened_discovered_catalogue",
                 "http_status": response.status if response else None,
-                "discovered_from": route[0]["url"], "link_label": candidates[0]["label"]
+                "discovered_from": route[-1]["url"], "link_label": candidates[0]["label"]
             })
-            fields = await visible_search_fields()
+            fields = await reveal_search_if_needed()
 
         if len(fields) != 1:
             return {
@@ -555,9 +604,10 @@ class BrowserRuntime:
             pass
         await page.wait_for_timeout(min(2500, max(500, int(os.getenv("QA_PRODUCT_RESULT_SETTLE_MS", "1500")))))
         matches = await page.locator(
-            '.productinfo, .product-image-wrapper, .single-products, .product-card, [data-product-id]'
+            '.productinfo, .product-image-wrapper, .single-products, .product-card, '
+            '.product-item, [data-product-id], [data-product]'
         ).evaluate_all(
-            """nodes => nodes.slice(0, 80).map(node => {
+            """nodes => nodes.slice(0, 100).map(node => {
                 const image = node.querySelector('img');
                 return {
                     text: (node.innerText || '').trim().slice(0, 1200),
@@ -574,7 +624,7 @@ class BrowserRuntime:
             text_value = str(item.get("text") or "")
             if query_lower not in text_value.casefold():
                 continue
-            price = re.search(r'(?i)(?:Rs\.?\s*|R\s*)[\d,]+(?:\.\d{1,2})?', text_value)
+            price = re.search(r'(?i)(?:Rs\\.?\\s*|R\\s*)[\\d,]+(?:\\.\\d{1,2})?', text_value)
             matched.append({
                 **item, "name_match": query,
                 "price": price.group(0).strip() if price else None,
