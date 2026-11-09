@@ -39,3 +39,10 @@ def test_target_url_is_extracted_without_treating_entity_names_as_urls():
     assert target_url_from_objective('Audit https://example.com/products') == 'https://example.com/products'
     assert target_url_from_objective('Audit example.com') == 'https://example.com'
     assert target_url_from_objective('What is Velocity Knight Trainer?') is None
+
+
+def test_qa_blueprint_keeps_a_dedicated_crawl_step():
+    blueprint = build_workflow_blueprint('QA testing https://example.com', WorkflowType.QA)
+    crawl_step = next(item for item in blueprint.subtasks if item.subtask_id == "qa-crawl")
+    assert crawl_step.capability.value == "navigate"
+    assert crawl_step.success_criteria == []
