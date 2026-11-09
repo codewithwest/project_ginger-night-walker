@@ -939,6 +939,7 @@ class BrowserRuntime:
                 structured_data["crawl_page"] = {
                     "url": page.url, "title": title,
                     "canonical_url": (audit_signals.get("seo") or {}).get("canonical_url"),
+                    "meta_description": (audit_signals.get("seo") or {}).get("meta_description"),
                     "content_fingerprint": content_fingerprint(body_text),
                     "http_status": http_status,
                 }
