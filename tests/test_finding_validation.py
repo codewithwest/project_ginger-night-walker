@@ -2,7 +2,8 @@ from nightwalker.audit_analysis import prioritise_findings
 from nightwalker.finding_validation import validate_findings
 
 
-def test_finding_without_evidence_is_not_confirmed():
+def test_finding_without_evidence_is_not_confirmed(monkeypatch):
+    monkeypatch.setenv("AUDIT_SKIP_RECOMMENDATIONS", "false")
     findings, summary = validate_findings(
         [{"finding_id": "f-1", "claim": "Rs 1200", "type": "product_price"}],
         [],
