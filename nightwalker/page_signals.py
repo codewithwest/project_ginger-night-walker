@@ -67,7 +67,8 @@ async def collect_page_signals(page: Any) -> dict[str, Any]:
             tag: el.tagName.toLowerCase(), type: el.getAttribute("type"), role: el.getAttribute("role"),
             id: el.id || null, selector: selectorFor(el), aria_label: el.getAttribute("aria-label"),
             aria_labelledby: el.getAttribute("aria-labelledby"), title: el.getAttribute("title"),
-            text: (el.innerText || el.value || "").trim().slice(0,300), outer_html: el.outerHTML.slice(0,1800)
+            text: (el.tagName === "BUTTON" ? (el.innerText || "") : "").trim().slice(0,300),
+            outer_html: (() => { const clone=el.cloneNode(false); ["value","checked","selected"].forEach(name=>clone.removeAttribute(name)); return clone.outerHTML.slice(0,1800); })()
           })),
           duplicate_ids: duplicates.slice(0, 30),
           duplicate_id_details: duplicates.slice(0,30).map(id => ({
