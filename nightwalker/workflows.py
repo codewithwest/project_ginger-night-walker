@@ -9,8 +9,6 @@ import re
 from enum import StrEnum
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict
-
 from nightwalker.contracts import Capability
 from nightwalker.planning_contracts import ExecutionBlueprint, PlannedSubtask, SuccessCriterion
 
@@ -98,6 +96,9 @@ def build_workflow_blueprint(objective: str, workflow: WorkflowType) -> Executio
             ("qa-content", "Inspect page structure and visible content for observable defects.", Capability.EXTRACT, ["qa-content"]),
             ("qa-synthesise", "Produce a QA report with evidence and tested/untested boundaries.", Capability.EXTRACT, ["qa-report"]),
         ]
+    elif workflow == WorkflowType.SEO_QA:
+        criteria = []
+        tasks = []
     else:
         raise ValueError("A dedicated SEO or QA workflow is required")
 
