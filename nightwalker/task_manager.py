@@ -780,18 +780,43 @@ class TaskManager:
                             step = ready[0]
                             if step.get("status") != "in_progress":
                                 start_step(execution_plan, step["step_id"])
-                            record.setdefault("plan_step_urls", {}).setdefault(step["step_id"], result.get("final_url") or next_url)
                             capability = str(step.get("capability") or "").casefold()
                             objective_text = str(step.get("objective") or "").casefold()
                             verified_result = None
+                            detail_lookup = capability == "extract" and any(
+                                term in objective_text
+                                for term in ("retrieve details", "open product", "product page", "visit product")
+                            )
+                            plan_step_urls = record.setdefault("plan_step_urls", {})
+                            if detail_lookup:
+                                selected_product = (record.get("plan_outputs") or {}).get("cheapest_product") or {}
+                                product_url = selected_product.get("url")
+                                if product_url:
+                                    plan_step_urls[step["step_id"]] = product_url
+                            else:
+                                plan_step_urls.setdefault(step["step_id"], result.get("final_url") or next_url)
                             if capability == "navigate" and (
                                 int(step.get("index") or 0) == 1
                                 or any(term in objective_text for term in ("homepage", "home page", "starting page"))
                             ):
                                 verified_result = f"Captured {source.get('title') or final_url}"
+                            elif capability == "extract" and detail_lookup:
+                                selected_product = (record.get("plan_outputs") or {}).get("cheapest_product") or {}
+                                expected_name = str(selected_product.get("name") or "").strip().casefold()
+                                expected_price = _price_value(selected_product) if selected_product else None
+                                expected_url = str(selected_product.get("url") or "")
+                                current_url = str(result.get("final_url") or "")
+                                matching_product = next((
+                                    item for item in products
+                                    if expected_name
+                                    and str(item.get("name") or "").strip().casefold() == expected_name
+                                    and expected_price is not None
+                                    and _price_value(item) == expected_price
+                                ), None)
+                                if expected_url and canonical_url_key(current_url) == canonical_url_key(expected_url) and matching_product:
+                                    verified_result = f"Opened the selected product page and verified {matching_product.get('name')} at {matching_product.get('price')}"
                             elif capability == "extract" and products:
-                                detail_lookup = any(term in objective_text for term in ("retrieve details", "open product", "product page", "visit product"))
-                                if not detail_lookup and any(term in objective_text for term in ("cheapest", "lowest", "minimum", "compare", "identify")):
+                                if any(term in objective_text for term in ("cheapest", "lowest", "minimum", "compare", "identify")):
                                     def _price_value(product):
                                         value = product.get("price_value")
                                         if isinstance(value, (int, float)):
