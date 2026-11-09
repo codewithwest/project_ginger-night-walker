@@ -823,10 +823,24 @@ class BrowserRuntime:
                         "affected_url": page.url,
                     })
             qa_semantic = (audit_signals.get("qa_extended") or {}).get("semantic_accessibility") or {}
-            if qa_semantic.get("visible_form_controls_without_label"):
+            for field, description, severity in (
+                ("visible_form_controls_without_label", "visible form control(s) lack a detectable programmatic label", "high"),
+                ("links_without_accessible_name", "visible link(s) lack a detectable accessible name", "medium"),
+                ("buttons_without_accessible_name", "visible button(s) lack a detectable accessible name", "high"),
+                ("focusable_inside_aria_hidden", "focusable element(s) are inside aria-hidden content", "high"),
+            ):
+                count = int(qa_semantic.get(field) or 0)
+                if count:
+                    audit_findings.append({
+                        "claim": f"{count} {description}.",
+                        "type": "qa_accessibility_issue", "severity": severity,
+                        "affected_url": page.url,
+                    })
+            landmark_counts = qa_semantic.get("landmark_counts") or {}
+            if not landmark_counts.get("main"):
                 audit_findings.append({
-                    "claim": f"{qa_semantic['visible_form_controls_without_label']} visible form control(s) lack a detectable programmatic label.",
-                    "type": "qa_accessibility_issue", "severity": "high",
+                    "claim": "No main landmark was detected on the page.",
+                    "type": "qa_accessibility_warning", "severity": "low",
                     "affected_url": page.url,
                 })
             wants_products = bool(re.search(r"(?i)\b(product|products|item|items|price|pricing)\b", objective))
