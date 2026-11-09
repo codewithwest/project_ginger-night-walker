@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 from collections import defaultdict
 from typing import Any
@@ -132,9 +133,24 @@ def prioritise_findings(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
             priority = "P0" if score >= 100 else "P1" if score >= 80 else priority
         item["impact_score"] = score
         item["priority"] = priority
-        item.setdefault("impact_rationale", _IMPACT.get(kind, "This issue may affect search visibility, usability or reliability; validate against the affected page and business context."))
-        item.setdefault("remediation", _REMEDIATION.get(kind, "Review the evidence, correct the underlying page issue and re-run the affected check."))
-        item.setdefault("effort", "low" if kind in {"broken_internal_link", "seo_warning"} else "medium")
+        item.setdefault("impact_rationale", _IMPACT.get(kind, "Potential impact is not established until the affected page and business context are validated."))
+        validation = item.get("validation") or {}
+        confirmed = validation.get("verdict") == "confirmed"
+        skip_recommendations = os.getenv("AUDIT_SKIP_RECOMMENDATIONS", "false").strip().casefold() in {"1", "true", "yes", "on"}
+        if confirmed and not skip_recommendations:
+            item.setdefault("remediation", _REMEDIATION.get(kind, "Correct the confirmed underlying issue and re-run the affected check."))
+            item.setdefault("recommendation", {
+                "status": "ready",
+                "root_cause": validation.get("reason", "Confirmed by linked structured browser evidence."),
+                "action": item["remediation"],
+                "expected_outcome": "The validated defect is no longer reproducible.",
+                "verification_steps": ["Re-run the same check on the affected URL and compare fresh browser evidence."],
+            })
+            item.setdefault("effort", "low" if kind in {"broken_internal_link", "seo_warning"} else "medium")
+        else:
+            item.pop("remediation", None)
+            item.pop("recommendation", None)
+            item["recommendation_status"] = "skipped_by_configuration" if skip_recommendations else "blocked_until_confirmed"
         item.setdefault("affected_urls", [])
         output.append(item)
     order = {"P0": 0, "P1": 1, "P2": 2, "P3": 3, "P4": 4}
