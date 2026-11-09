@@ -5,7 +5,7 @@
 SEO, QA and combined audit tasks use deterministic same-origin discovery rather than the general-research planner.
 
 - The requested URL is the crawl seed.
-- Same-origin HTML links and same-origin sitemap URLs enter a bounded candidate queue. SEO/QA candidates are classified and priority-ranked rather than inspected in discovery order.
+- Up to 2,000 rendered anchors per inspected page are considered for discovery, with up to 200 unique same-origin links admitted from that page. Link context (main/article content, navigation, footer or body) contributes to scheduling priority. Same-origin sitemap URLs also enter the bounded candidate queue. SEO/QA candidates are classified and priority-ranked rather than inspected in discovery order.
 - `robots.txt` is read before discovered URLs are followed. Disallowed URLs are excluded. If the robots endpoint fails unexpectedly or returns a server error, further discovery is paused conservatively.
 - Sitemap indexes are parsed with bounded tag extraction. Up to 5 sitemap endpoints and 20 child sitemap files are inspected once per task origin and cached for the remainder of that task.
 - At most 1,000 sitemap page URLs are admitted from a sitemap response.
