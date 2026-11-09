@@ -439,7 +439,7 @@ class BrowserRuntime:
 
     async def _run_product_search_smoke(self, page: Page, objective: str) -> dict[str, Any] | None:
         """Find a usable product search from the supplied page or the site's real catalogue."""
-        match = re.search(r'(?i)search\\s+for\\s+[“"\\']([^”"\\']{1,100})[”"\\']', objective)
+        match = re.search(r'(?i)search\s+for\s+[“"\']([^”"\']{1,100})[”"\']', objective)
         if not match:
             return None
         query = match.group(1).strip()
@@ -479,7 +479,7 @@ class BrowserRuntime:
                     continue
                 signal = (label + " " + parsed.path).casefold()
                 if not re.search(
-                    r"\\b(products?|product range|furniture|homeware|shop|catalogue|catalog|collection|store)\\b",
+                    r"\b(products?|product range|furniture|homeware|shop|catalogue|catalog|collection|store)\b",
                     signal,
                 ):
                     continue
@@ -488,7 +488,7 @@ class BrowserRuntime:
                     seen.add(clean)
                     candidates.append({"url": clean, "label": label[:160]})
             candidates.sort(key=lambda item: (
-                0 if re.search(r"\\b(furniture|products?|shop|catalogue|catalog)\\b", item["label"], re.I) else 1,
+                0 if re.search(r"\b(furniture|products?|shop|catalogue|catalog)\b", item["label"], re.I) else 1,
                 0 if re.search(r"/(furniture|products?|shop|catalogue|catalog)(/|$)", urlparse(item["url"]).path, re.I) else 1,
             ))
             return candidates
@@ -624,7 +624,7 @@ class BrowserRuntime:
             text_value = str(item.get("text") or "")
             if query_lower not in text_value.casefold():
                 continue
-            price = re.search(r'(?i)(?:Rs\\.?\\s*|R\\s*)[\\d,]+(?:\\.\\d{1,2})?', text_value)
+            price = re.search(r'(?i)(?:Rs\.?\s*|R\s*)[\d,]+(?:\.\d{1,2})?', text_value)
             matched.append({
                 **item, "name_match": query,
                 "price": price.group(0).strip() if price else None,
