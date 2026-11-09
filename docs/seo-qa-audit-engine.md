@@ -41,6 +41,19 @@ Findings receive a deterministic priority (P0-P4), impact score, impact rational
 
 Core Web Vitals, rendered field performance, full structured-data schema validation, exhaustive crawl of every route and search-engine index coverage are not claimed.
 
+## Product-search QA flow
+
+A single-page QA request that explicitly asks to search for a named product uses an observation-driven branch rather than assuming the supplied URL is already a catalogue page:
+
+1. Open the exact supplied URL and inspect the rendered page for a visible, enabled search field.
+2. If a search field exists, use it.
+3. If no search field exists, inspect rendered same-origin navigation links for an actual product/shop/catalogue destination; do not guess or append a conventional path.
+4. Open the best evidenced destination and inspect it for a usable search field.
+5. Search only when exactly one usable field is available. Ambiguous or missing controls are reported as blockers, not silently guessed.
+6. Capture matching product-card text, image source/load state and displayed price independently. Missing fields remain unverified.
+
+The route taken (requested page, discovered product page and search results page) is recorded in `qa_product_search.route`. The fallback is bounded to one discovered product-page destination; it does not perform a broad site crawl.
+
 ## QA observations
 
 The read-only QA smoke checks include:
