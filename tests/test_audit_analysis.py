@@ -17,14 +17,15 @@ def test_content_fingerprint_ignores_case_and_whitespace():
 
 def test_duplicate_analysis_reports_canonical_title_and_content_groups():
     pages = [
-        {"url": "https://example.com/a", "canonical_url": "https://example.com/shared", "title": "Same", "content_fingerprint": "abc"},
-        {"url": "https://example.com/b", "canonical_url": "https://example.com/shared", "title": "Same", "content_fingerprint": "abc"},
-        {"url": "https://example.com/c", "canonical_url": "https://example.com/c", "title": "Other", "content_fingerprint": "xyz"},
+        {"url": "https://example.com/a", "canonical_url": "https://example.com/shared", "title": "Same", "meta_description": "Same description", "content_fingerprint": "abc"},
+        {"url": "https://example.com/b", "canonical_url": "https://example.com/shared", "title": "Same", "meta_description": "Same description", "content_fingerprint": "abc"},
+        {"url": "https://example.com/c", "canonical_url": "https://example.com/c", "title": "Other", "meta_description": "Other description", "content_fingerprint": "xyz"},
     ]
     result = analyse_duplicate_pages(pages)
     assert result["pages_analysed"] == 3
     assert result["duplicate_canonical_groups"][0]["urls"] == ["https://example.com/a", "https://example.com/b"]
     assert result["duplicate_title_groups"][0]["count"] == 2
+    assert result["duplicate_meta_description_groups"][0]["count"] == 2
     assert result["duplicate_content_groups"][0]["count"] == 2
 
 
