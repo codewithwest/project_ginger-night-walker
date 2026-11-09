@@ -1242,6 +1242,7 @@ class TaskManager:
                 for group_type, groups in (
                     ("duplicate_canonical", duplicate_analysis["duplicate_canonical_groups"]),
                     ("duplicate_title", duplicate_analysis["duplicate_title_groups"]),
+                    ("duplicate_meta_description", duplicate_analysis["duplicate_meta_description_groups"]),
                     ("duplicate_content", duplicate_analysis["duplicate_content_groups"]),
                 ):
                     for group in groups:
@@ -1301,6 +1302,7 @@ class TaskManager:
                     "sitemap_urls_beyond_sample_cap": coverage["sitemap_urls_beyond_sample_cap"],
                     "duplicate_canonical_groups": len(duplicate_analysis["duplicate_canonical_groups"]),
                     "duplicate_title_groups": len(duplicate_analysis["duplicate_title_groups"]),
+                    "duplicate_meta_description_groups": len(duplicate_analysis["duplicate_meta_description_groups"]),
                     "duplicate_content_groups": len(duplicate_analysis["duplicate_content_groups"]),
                     "internal_links_checked": len(flattened_checks),
                     "broken_internal_links": sum(item.get("ok") is False for item in flattened_checks),
