@@ -112,6 +112,15 @@ async def clarify_task(task_id: str, request: TaskClarificationRequest):
 
 
 
+@app.get("/tasks/{task_id}/trace")
+async def get_task_trace(task_id: str, limit: int = 100):
+    try:
+        events = task_manager.trace_events(task_id, limit=limit)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Task not found") from exc
+    return {"task_id": task_id, "events": events}
+
+
 @app.get("/tasks/{task_id}/a2a")
 async def get_a2a_messages(task_id: str):
     task = task_manager.snapshot(task_id)

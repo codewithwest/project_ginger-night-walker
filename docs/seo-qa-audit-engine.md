@@ -55,6 +55,10 @@ The read-only QA smoke checks include:
 
 No forms are submitted and no state-changing controls are activated. SPA click handlers, authentication journeys, transactions, exhaustive keyboard paths, visual regression, screen-reader output, contrast conformance and automated WCAG certification are not claimed. Use an approved test account and explicit test authorization before expanding into stateful journeys.
 
+## Execution control and observability
+
+The browser execution layer separates tool selection, argument validation, element resolution, execution and verification. Tool proposals are restricted to the SEO/QA read-only registry; the second model call receives only the selected tool's argument schema. The proposal itself never grants permission to execute. Element resolution uses observed accessibility names and refs, and ambiguous matches are left unresolved. Browser completion is accepted only when the runtime returns a matching persisted evidence reference. Redacted per-task JSONL traces record observe, decide, resolve, act, verify and evaluate phases; trace records are operational diagnostics and are not treated as audit evidence. Prompt working memory is bounded separately from durable task snapshots, scratchpad history and evidence.
+
 ## Evidence and completion
 
 A finding is only emitted from captured page or destination observations. Failed or unsupported requests remain distinguishable from confirmed HTTP failures. Crawl coverage, duplicate groups, link-check totals, QA navigation samples and priority counts are included in the structured report summary.

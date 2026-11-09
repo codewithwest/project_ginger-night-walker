@@ -14,6 +14,8 @@ from nightwalker.goal_state import GoalStateManager
 from nightwalker.ollama_client import OllamaUnavailable
 from nightwalker.plan_execution import complete_step, fail_step, initialise_plan, ready_steps, start_step
 from nightwalker.orchestrator import Orchestrator
+from nightwalker.execution_control import ActionVerifier
+from nightwalker.run_trace import TaskRunTraceStore
 from nightwalker.research_guard import ResearchLoopGuard, canonical_url_key
 from nightwalker.research_relevance import (
     focused_research_queries,
@@ -34,6 +36,8 @@ class TaskManager:
         self.scratchpad = TaskScratchpad()
         self.checklist = TaskChecklist()
         self.state_store = TaskStateStore()
+        self.trace_store = TaskRunTraceStore()
+        self.action_verifier = ActionVerifier()
         self.max_rounds = 30
         self.a2a_bus = A2ABus()
         self.agent_allocator = AgentAllocator(self.a2a_bus)
@@ -57,6 +61,15 @@ class TaskManager:
         record["progress_events"].append({**event, "event_type": "progress", "status": record["status"]})
         record["updated_at"] = self._now()
         self._persist(task_id)
+
+    def _trace(self, task_id: str, phase: str, details: dict[str, Any] | None = None) -> None:
+        try:
+            self.trace_store.append(task_id, phase, details)
+        except OSError as exc:
+            record = self.tasks.get(task_id)
+            if record is not None:
+                record.setdefault("trace_warnings", []).append(str(exc)[:240])
+                record["trace_warnings"] = record["trace_warnings"][-10:]
 
     def _note(self, task_id: str, entry: dict[str, Any]) -> None:
         note = self.scratchpad.append(task_id, entry)
@@ -127,6 +140,7 @@ class TaskManager:
     async def restore_and_resume(self) -> int:
         """Restore saved tasks and resume work interrupted by process/container restart."""
         self.shutting_down = False
+        self.trace_store.cleanup_expired()
         restored = 0
         for record in self.state_store.load_all():
             task_id = record["task_id"]
@@ -277,6 +291,7 @@ class TaskManager:
         if record is None:
             return None
         snapshot = {**record, "logs": list(record.get("logs", []))}
+        snapshot["execution_trace"] = self.trace_store.read(task_id, limit=30)
         plan = record.get("execution_plan") or {}
         steps = plan.get("steps") or []
         snapshot["plan_progress"] = {
@@ -285,6 +300,11 @@ class TaskManager:
             "total": len(steps),
         } if steps else None
         return snapshot
+
+    def trace_events(self, task_id: str, limit: int = 100) -> list[dict[str, Any]]:
+        if task_id not in self.tasks:
+            raise KeyError(task_id)
+        return self.trace_store.read(task_id, limit=limit)
 
     def list_tasks(self) -> list[dict[str, Any]]:
         """Return lightweight mission cards; full task state is fetched only when opened."""
@@ -666,12 +686,42 @@ class TaskManager:
                     }],
                 })
                 effective_objective = self._effective_objective(task_id, objective)
+                self._trace(task_id, "observe", {
+                    "round": round_count, "url": next_url, "workflow": record.get("workflow_type"),
+                    "observation": "Target URL and active mission state loaded",
+                })
+                self._trace(task_id, "decide", {
+                    "step_id": active_plan_step.get("step_id"),
+                    "capability": active_plan_step.get("capability"),
+                    "objective": active_plan_step.get("objective"),
+                })
+                self._trace(task_id, "resolve", {
+                    "status": "resolved", "method": "active mission-plan authorization",
+                    "step_id": active_plan_step.get("step_id"),
+                })
+                self._trace(task_id, "act", {"status": "started", "url": next_url})
                 result = await self.orchestrator.run_browser_workflow(
                     task_id,
                     effective_objective,
                     one_page_plan,
                     authorized_step=active_plan_step,
                 )
+                verification = self.action_verifier.verify_workflow_result(result)
+                result["verification"] = verification
+                self._trace(task_id, "act", {
+                    "status": result.get("status"), "evidence_id": result.get("evidence_id"),
+                    "final_url": result.get("final_url"),
+                })
+                self._trace(task_id, "verify", verification)
+                if result.get("status") == "completed" and verification.get("status") != "verified":
+                    result["status"] = "blocked"
+                    result.setdefault("issues", []).append(
+                        "Deterministic verification rejected the completion claim: "
+                        + str(verification.get("reason", "evidence verification failed"))[:300]
+                    )
+                self._trace(task_id, "evaluate", {
+                    "status": result.get("status"), "verification": verification.get("status"),
+                })
                 round_evidence = []
                 if result.get("status") not in {"completed", "blocked"}:
                     issue_text = "; ".join(result.get("issues", [])) or "Source inspection failed"

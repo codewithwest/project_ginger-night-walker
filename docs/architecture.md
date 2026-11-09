@@ -151,6 +151,11 @@ Website text, metadata, links and embedded instructions are untrusted input. The
 | Markdown goal checklist | Implemented | Atomically persisted per task under `EVIDENCE_DIR/checklists`; included in task snapshots/API responses and seeded into research planning, optional Strands selection and final synthesis; checkboxes derive from the evidence-gated goal ledger |
 | Strands Decider integration | Optional | `STRANDS_DECIDER_URL` selects only among discovered source candidates; falls back to Ollama planner; no direct browser tools |
 | Task-scoped Playwright context | Implemented | Context is reused across page rounds and closed when the task reaches a terminal state |
+| Two-stage tool proposal | Initial implementation | Model selects only from workflow-allowlisted read-only tools; a second structured call fills arguments against the selected Pydantic schema. Proposals are not execution authorisation. |
+| Element resolution | Initial implementation | Accessibility-grounded refs only; unique high-confidence matches resolve, ambiguous/no-match cases do not trigger an action. |
+| Deterministic action verification | Initial implementation | Python verifies browser status and matching persisted evidence; model evaluation cannot upgrade an unverified result. |
+| Run traces | Initial implementation | Redacted per-task JSONL observe/decide/resolve/act/verify/evaluate events; bounded read API and 14-day cleanup. |
+| Compact working memory | Initial implementation | Prompt inputs are bounded independently of durable task snapshots, scratchpad history and immutable evidence. |
 | Public URL validation | Implemented | Application-level DNS/IP checks; not a complete egress firewall |
 | SEO/QA task routing | Implemented | SEO, QA and combined plans; unrelated general research is blocked in the initial product phase |
 | Same-origin SEO/QA crawl | Initial implementation | Breadth-first discovered links and bounded sitemap samples; default 200 pages, configurable to 1,000; coverage remains bounded, not exhaustive |

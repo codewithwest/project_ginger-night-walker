@@ -15,6 +15,7 @@ from playwright.async_api import Browser, BrowserContext, Page, Route, async_pla
 
 from nightwalker.evidence import EvidenceStore
 from nightwalker.policy import PolicyEngine
+from nightwalker.execution_control import ElementResolver
 
 
 class BrowserRuntime:
@@ -37,6 +38,7 @@ class BrowserRuntime:
         if self.backend not in {"local", "steel"}:
             raise ValueError("BROWSER_BACKEND must be 'local' or 'steel'")
         self.policy = PolicyEngine()
+        self.element_resolver = ElementResolver()
         self.evidence = EvidenceStore()
 
     async def start(self) -> None:
@@ -409,7 +411,21 @@ class BrowserRuntime:
         if not ranked:
             return None
         ranked.sort(reverse=True)
-        destination = ranked[0][1]
+        # Resolve only a unique, grounded accessible link. Similar matches stay
+        # ambiguous rather than allowing a guessed destination to drive navigation.
+        resolution = self.element_resolver.resolve(
+            [
+                {"ref": href, "role": "link", "name": str(item.get("text", ""))}
+                for score, href in ranked
+                for item in candidates
+                if urljoin(page.url, str(item.get("href", ""))) == href
+            ],
+            objective,
+            role="link",
+        )
+        if resolution.status != "resolved" or not resolution.ref:
+            return None
+        destination = resolution.ref
         self.policy.validate_url(destination, allow_private_networks=False)
         await page.goto(
             destination,

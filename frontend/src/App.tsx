@@ -98,6 +98,7 @@ type Task = {
   error?: string;
   logs?: Log[];
   progress_events?: { at?: string; event_type?: string; status?: string; message?: string }[];
+  execution_trace?: { event_id?: string; at?: string; phase?: string; details?: Record<string, unknown> }[];
   round?: number;
   max_rounds?: number;
   scratchpad?: { round?: number; assignment?: string; status?: string; findings?: unknown[]; evidence_ids?: string[] }[];
@@ -803,6 +804,25 @@ export default function App() {
                                   <time>{event.at ? new Date(event.at).toLocaleString() : "—"}</time>
                                 </div>
                                 <MarkdownContent>{event.message || "Progress updated."}</MarkdownContent>
+                              </div>
+                            </article>
+                          ))}
+                        </div>
+                      </section>
+                    ) : null}
+                    {selected.execution_trace?.length ? (
+                      <section className="progress-history">
+                        <div className="progress-history__heading">Execution trace <span>{selected.execution_trace.length} events</span></div>
+                        <div className="progress-timeline">
+                          {selected.execution_trace.map((event, index) => (
+                            <article className="progress-event" key={event.event_id || (event.at || "") + index}>
+                              <span className="progress-event__marker" />
+                              <div className="progress-event__body">
+                                <div className="progress-event__meta">
+                                  <span>EXECUTION · {(event.phase || "event").toUpperCase()}</span>
+                                  <time>{event.at ? new Date(event.at).toLocaleString() : "—"}</time>
+                                </div>
+                                <MarkdownContent>{String(event.details?.reason || event.details?.observation || event.details?.status || event.details?.method || "Execution phase recorded.")}</MarkdownContent>
                               </div>
                             </article>
                           ))}

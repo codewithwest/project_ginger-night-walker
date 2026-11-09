@@ -23,6 +23,9 @@ class Orchestrator:
     async def run_agent_task(self, task: AgentTask) -> AgentResult:
         return await self.ollama.run_agent(task)
 
+    async def propose_tool_call(self, **kwargs) -> dict:
+        return await self.ollama.propose_tool_call(**kwargs)
+
     async def _cleanup_browser_tabs(self, task_id: str, objective: str) -> dict | None:
         tabs = await self.browser.tab_inventory(task_id)
         if len(tabs) <= 1:

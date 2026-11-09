@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 
 from nightwalker.contracts import AgentTask
+from nightwalker.working_memory import WorkingMemory
 
 
 @dataclass(frozen=True)
@@ -17,6 +18,9 @@ class CompiledContext:
 
 
 class ContextCompiler:
+    def __init__(self) -> None:
+        self.working_memory = WorkingMemory(max_chars=6000, max_items=40)
+
     INPUT_ALLOWLIST: ClassVar[dict[str, set[str]]] = {
         "navigate": {"url", "destination"},
         "interact": {"target_selector", "action", "value"},
@@ -34,7 +38,7 @@ class ContextCompiler:
         capability = task.capability.value
         allowed_inputs = self.INPUT_ALLOWLIST[capability]
         allowed_requirements = self.REQUIREMENT_ALLOWLIST[capability]
-        input_data = {k: v for k, v in task.input_data.items() if k in allowed_inputs}
+        input_data = self.working_memory.compact_value({k: v for k, v in task.input_data.items() if k in allowed_inputs})
         if task.target_url and capability in {"navigate", "extract"}:
             input_data["url"] = str(task.target_url)
         return CompiledContext(
