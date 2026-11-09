@@ -1278,7 +1278,13 @@ class TaskManager:
                 structured_data["internal_link_audit"] = {
                     "pages_with_link_checks": len(link_records),
                     "checked_destination_count": len(flattened_checks),
-                    "broken_destination_count": sum(item.get("ok") is False for item in flattened_checks),
+                    "broken_destination_count": sum(
+                        item.get("ok") is False and not item.get("off_origin_redirect")
+                        for item in flattened_checks
+                    ),
+                    "off_origin_redirect_count": sum(
+                        bool(item.get("off_origin_redirect")) for item in flattened_checks
+                    ),
                     "unknown_destination_count": sum(item.get("ok") is None for item in flattened_checks),
                     "checks": flattened_checks[:2000],
                 }
@@ -1366,7 +1372,13 @@ class TaskManager:
                     "duplicate_meta_description_groups": len(duplicate_analysis["duplicate_meta_description_groups"]),
                     "duplicate_content_groups": len(duplicate_analysis["duplicate_content_groups"]),
                     "internal_links_checked": len(flattened_checks),
-                    "broken_internal_links": sum(item.get("ok") is False for item in flattened_checks),
+                    "broken_internal_links": sum(
+                        item.get("ok") is False and not item.get("off_origin_redirect")
+                        for item in flattened_checks
+                    ),
+                    "off_origin_internal_redirects": sum(
+                        bool(item.get("off_origin_redirect")) for item in flattened_checks
+                    ),
                     "unknown_internal_link_results": sum(item.get("ok") is None for item in flattened_checks),
                     "qa_navigation_destinations_checked": len(navigation_checks),
                     "qa_navigation_failures": sum(item.get("ok") is False for item in navigation_checks),
