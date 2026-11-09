@@ -1,5 +1,3 @@
-import pytest
-
 from nightwalker.audit_analysis import prioritise_findings
 from nightwalker.finding_validation import validate_findings
 
