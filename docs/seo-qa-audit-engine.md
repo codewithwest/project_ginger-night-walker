@@ -78,6 +78,10 @@ The scheduler is deterministic and does not ask an LLM to choose crawl URLs. It 
 The report summary includes inspected template count, candidate page-type counts, pagination count, queued distinct template count and page-budget utilisation. These are scheduling diagnostics, not proof of complete route coverage.
 
 
+## Product listing and on-page search QA
+
+A request to search a supplied product/listing page and verify that a named result is rendered is a QA task when it explicitly asks to verify/check/test the result. The presence of a product or brand name alone does not trigger QA or shopping. These requests use the single-page QA boundary unless site-wide coverage is explicitly requested. The expected checks are the matching result's visible name, image presence/load state and displayed price; missing or contradictory result data must be reported as unverified rather than inferred. This intent is routed to QA, not the deferred general-research or shopping workflows.
+
 ## QA scope selection
 
 QA defaults to a single-page smoke test for the URL supplied by the user. It inspects that page and does not silently expand into a same-origin crawl, internal-link journey sample or reversible interaction sample. This keeps a request such as checking a page title, H1s, images and console errors focused and fast. A site-wide crawl is enabled only when the objective explicitly asks for site-wide/full-site coverage, all/every page, all URLs, or a site crawl. SEO audits and combined SEO+QA audits retain their site-wide crawl behaviour.
