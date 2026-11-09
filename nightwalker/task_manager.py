@@ -11,6 +11,7 @@ from nightwalker.contracts import AgentTask
 from nightwalker.decision_contracts import DecisionPlan, DecisionStatus, normalise_decision_plan
 from nightwalker.goal_state import GoalStateManager
 from nightwalker.ollama_client import OllamaUnavailable
+from nightwalker.plan_execution import complete_step, initialise_plan, ready_steps, start_step
 from nightwalker.orchestrator import Orchestrator
 from nightwalker.research_guard import ResearchLoopGuard
 from nightwalker.research_relevance import (
@@ -130,6 +131,7 @@ class TaskManager:
             record.setdefault("step_results", [])
             record.setdefault("checkpoint", None)
             record.setdefault("execution_blueprint", None)
+            record.setdefault("execution_plan", None)
             record.setdefault("agent_assignments", [])
             record.setdefault("a2a_messages", [])
             self.a2a_bus.restore(task_id, record.get("a2a_messages", []))
@@ -261,6 +263,7 @@ class TaskManager:
             "goal_state": None,
             "checkpoint": None,
             "execution_blueprint": None,
+            "execution_plan": None,
             "agent_assignments": [],
             "a2a_messages": [],
         }
@@ -351,6 +354,7 @@ class TaskManager:
                 try:
                     blueprint = await self.orchestrator.ollama.create_execution_blueprint(objective, task_id=task_id)
                     record["execution_blueprint"] = blueprint.model_dump(mode="json")
+                    record["execution_plan"] = initialise_plan(record["execution_blueprint"])
                     criteria = [item.description for item in blueprint.success_criteria]
                     self._log(task_id, f"Execution blueprint created: {len(criteria)} success criteria and {len(blueprint.subtasks)} subtasks")
                     self._persist(task_id)
@@ -473,11 +477,21 @@ class TaskManager:
                 else:
                     round_count += 1
                 record["round"] = round_count
+                execution_plan = record.get("execution_plan")
+                active_plan_step = None
+                if isinstance(execution_plan, dict):
+                    available_plan_steps = ready_steps(execution_plan)
+                    if available_plan_steps:
+                        active_plan_step = start_step(execution_plan, available_plan_steps[0]["step_id"])
+                        record["active_plan_step_id"] = active_plan_step["step_id"]
+                        self._log(task_id, f"Plan step started: {active_plan_step['step_id']} — {active_plan_step['objective']}")
                 record["current_step"] = {
                     "index": round_count, "total": int(record.get("max_rounds", self.max_rounds)),
                     "capability": "research", "objective": next_assignment,
                     "url": next_url,
+                    "plan_step_id": active_plan_step.get("step_id") if active_plan_step else None,
                 }
+                self._persist(task_id)
                 self._log(task_id, f"Round {round_count}/{self.max_rounds}: {next_assignment}")
                 attempt = loop_guard.begin(next_url, next_assignment)
                 already_visited = loop_guard.is_visited(next_url, visited_urls)
@@ -676,6 +690,24 @@ class TaskManager:
                     for captured in round_evidence:
                         captured["source_id"] = source_id
                     evidence.extend(round_evidence)
+                    active_plan_step_id = record.get("active_plan_step_id")
+                    execution_plan = record.get("execution_plan")
+                    if active_plan_step_id and isinstance(execution_plan, dict):
+                        active_step = next((item for item in execution_plan.get("steps", []) if item.get("step_id") == active_plan_step_id), None)
+                        evidence_refs = [item.get("evidence_id") for item in round_evidence if item.get("evidence_id")]
+                        # Navigation is complete only after a real page capture.
+                        # Extraction remains open until structured output is available.
+                        if active_step and active_step.get("capability") == "navigate" and evidence_refs:
+                            complete_step(execution_plan, active_plan_step_id, evidence_refs=evidence_refs, result=f"Captured {source.get('title') or final_url}")
+                            self._log(task_id, f"Plan step verified: {active_plan_step_id}")
+                        elif active_step and active_step.get("capability") == "extract":
+                            extracted = result.get("structured_data") or {}
+                            has_records = any(isinstance(value, list) and value for value in extracted.values())
+                            if has_records and evidence_refs:
+                                complete_step(execution_plan, active_plan_step_id, evidence_refs=evidence_refs, result="Structured records extracted from the captured source")
+                                self._log(task_id, f"Plan step verified: {active_plan_step_id}")
+                        record["active_plan_step_id"] = None
+                        self._persist(task_id)
                     if record.get("goal_state") and round_evidence:
                         try:
                             proposal = await self.orchestrator.ollama.evaluate_goal_progress(
