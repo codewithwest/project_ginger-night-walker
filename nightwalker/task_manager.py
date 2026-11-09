@@ -132,6 +132,8 @@ class TaskManager:
             record.setdefault("checkpoint", None)
             record.setdefault("execution_blueprint", None)
             record.setdefault("execution_plan", None)
+            if record.get("execution_plan") is None and isinstance(record.get("execution_blueprint"), dict):
+                record["execution_plan"] = initialise_plan(record["execution_blueprint"])
             record.setdefault("agent_assignments", [])
             record.setdefault("a2a_messages", [])
             self.a2a_bus.restore(task_id, record.get("a2a_messages", []))
