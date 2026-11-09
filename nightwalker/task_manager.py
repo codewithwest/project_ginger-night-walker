@@ -1286,6 +1286,11 @@ class TaskManager:
                     check for page_record in navigation_records if isinstance(page_record, dict)
                     for check in page_record.get("checks", [])
                 ]
+                interaction_records = structured_data.get("qa_interaction_journeys", [])
+                interaction_checks = [
+                    check for page_record in interaction_records if isinstance(page_record, dict)
+                    for check in page_record.get("checks", [])
+                ]
                 responsive_overflows = sum(
                     bool(viewport.get("horizontal_overflow"))
                     for page_record in structured_data.get("qa_extended", [])
@@ -1309,6 +1314,9 @@ class TaskManager:
                     "unknown_internal_link_results": sum(item.get("ok") is None for item in flattened_checks),
                     "qa_navigation_destinations_checked": len(navigation_checks),
                     "qa_navigation_failures": sum(item.get("ok") is False for item in navigation_checks),
+                    "qa_interaction_controls_checked": len(interaction_checks),
+                    "qa_interaction_controls_passed": sum(item.get("ok") is True for item in interaction_checks),
+                    "qa_interaction_controls_failed": sum(item.get("ok") is False for item in interaction_checks),
                     "responsive_viewport_overflows": responsive_overflows,
                     "finding_priority_counts": priority_counts,
                 }
@@ -1355,7 +1363,8 @@ class TaskManager:
                         if workflow_value in {"qa", "seo_qa"}:
                             answer += (
                                 f" QA sampled {summary.get('qa_navigation_destinations_checked', 0)} navigation destination(s) "
-                                f"and {summary.get('responsive_viewport_overflows', 0)} viewport overflow condition(s)."
+                                f"and {summary.get('responsive_viewport_overflows', 0)} viewport overflow condition(s); "
+                                f"{summary.get('qa_interaction_controls_passed', 0)} reversible local interaction(s) passed."
                             )
                 except OllamaUnavailable as exc:
                     answer = (
