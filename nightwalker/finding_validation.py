@@ -64,6 +64,9 @@ def _support_for_type(
         matched = [r for r in records if r.get("dataset") in {"internal_link_checks", "qa_navigation_journeys"}
                    and any(c.get("ok") is False and not c.get("off_origin_redirect")
                            for c in r.get("checks", []) if isinstance(c, dict))]
+    elif kind == "off_origin_internal_redirect":
+        matched = [r for r in records if r.get("dataset") == "internal_link_checks"
+                   and any(c.get("off_origin_redirect") for c in r.get("checks", []) if isinstance(c, dict))]
     elif kind.startswith("duplicate_"):
         group_key = {
             "duplicate_canonical": "duplicate_canonical_groups",
