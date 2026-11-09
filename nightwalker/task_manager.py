@@ -1279,7 +1279,6 @@ class TaskManager:
                             "affected_urls": group["urls"],
                             "source_ids": list(dict.fromkeys(item.get("source_id") for item in matched if item.get("source_id"))),
                             "evidence_ids": list(dict.fromkeys(eid for item in matched for eid in item.get("evidence_ids", []))),
-                            "remediation": "Review whether these pages should have distinct canonical URLs, titles and substantive content.",
                         })
                 findings = prioritise_findings(findings)
                 # Complete report synthesis steps only after deterministic aggregation exists.
