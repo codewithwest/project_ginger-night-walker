@@ -145,9 +145,13 @@ class BrowserRuntime:
     async def close_task_session(self, task_id: str) -> None:
         """Close the single browser context retained across this task's research rounds."""
         context = self._task_contexts.pop(task_id, None)
-        self._task_pages.pop(task_id, None)
+        primary_page = self._task_pages.pop(task_id, None)
+        if primary_page is not None:
+            self._qa_listener_pages.discard(id(primary_page))
         if context is not None:
             self._tab_listener_contexts.discard(id(context))
+            for page in getattr(context, "pages", []):
+                self._qa_listener_pages.discard(id(page))
         state = self._task_sessions.get(task_id)
         if state:
             self._browser_event(task_id, "Browser session closed after task completion", status="finished")
