@@ -5,8 +5,6 @@ import hashlib
 import re
 from collections import defaultdict
 from typing import Any
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
-
 from nightwalker.crawl_intelligence import url_identity
 
 
