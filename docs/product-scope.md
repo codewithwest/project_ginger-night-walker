@@ -108,6 +108,18 @@ Agents may help plan, inspect and interpret evidence, but they cannot grant them
 - Zero relevant evidence cannot produce a completed audit.
 - Scores, if introduced, must have a documented denominator and must not conceal missing coverage.
 
+## Current implementation status
+
+The current code path is a partial implementation of the initial scope, not a completed audit product:
+
+- **SEO — implemented foundation, still partial:** same-origin crawling with a configurable page budget, robots.txt and bounded sitemap-index discovery, page-level metadata/indexability observations, internal-link destination checks, duplicate canonical/title/meta-description/visible-text groups, evidence-linked findings and deterministic prioritisation. Exhaustive site discovery, field/lab Core Web Vitals, full Schema.org validation and image performance analysis are not implemented.
+- **QA — implemented read-only smoke layer, still partial:** same-origin GET navigation samples, link status checks, 375/768/1280px overflow measurements, DOM/accessible-name heuristics and a short keyboard focus sample. Stateful journeys, form validation execution, SPA interaction coverage, visual regression, exhaustive keyboard testing and automated WCAG conformance are not implemented.
+- **Combined workflow — routed and planned:** both workstreams are represented in the execution blueprint; end-to-end combined completion still requires live validation.
+- **Reporting — improved foundation:** evidence-linked findings include P0-P4 priorities, impact rationale, effort and remediation defaults. The report includes discovered/sitemap coverage and duplicate/link/QA summary metrics; these metrics are bounded by crawl and sampling limits.
+- **Validation — not yet verified end to end:** unit tests have been added for deterministic analysis and page-signal helpers, but tests/build have not been executed in the current implementation session and no live Night Walker run against a public website has been verified.
+
+See [SEO/QA audit engine](seo-qa-audit-engine.md) for exact bounds and safety behaviour. Do not describe the current checks as a full WCAG audit or an exhaustive crawl.
+
 ## Explicitly deferred
 
 - General-purpose web research and deep research.
