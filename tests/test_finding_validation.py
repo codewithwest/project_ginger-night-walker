@@ -87,3 +87,34 @@ def test_browser_error_must_match_a_captured_console_or_page_error():
     structured["qa_runtime_events"][0]["message"] = "A different error"
     findings, _ = validate_findings([finding], evidence, structured)
     assert findings[0]["validation"]["verdict"] == "insufficient_evidence"
+
+
+def test_off_origin_redirect_requires_captured_redirect_evidence():
+    evidence = [{"evidence_id": "ev-4"}]
+    finding = {"claim": "Internal link redirects outside the audited origin",
+               "type": "off_origin_internal_redirect", "source_ids": ["s-4"],
+               "evidence_ids": ["ev-4"]}
+    structured = {"internal_link_checks": [{
+        "source_id": "s-4", "evidence_ids": ["ev-4"],
+        "checks": [{"url": "https://example.com/out", "ok": False,
+                    "off_origin_redirect": True, "final_url": "https://other.example/"}],
+    }]}
+    findings, _ = validate_findings([finding], evidence, structured)
+    assert findings[0]["validation"]["verdict"] == "confirmed"
+
+
+def test_accessibility_finding_requires_the_matching_semantic_signal():
+    evidence = [{"evidence_id": "ev-5"}]
+    finding = {"claim": "2 visible link(s) lack a detectable accessible name.",
+               "type": "qa_accessibility_issue", "source_ids": ["s-5"],
+               "evidence_ids": ["ev-5"]}
+    structured = {"qa_extended": [{
+        "source_id": "s-5", "evidence_ids": ["ev-5"],
+        "semantic_accessibility": {"links_without_accessible_name": 0,
+                                   "buttons_without_accessible_name": 2},
+    }]}
+    findings, _ = validate_findings([finding], evidence, structured)
+    assert findings[0]["validation"]["verdict"] == "insufficient_evidence"
+    structured["qa_extended"][0]["semantic_accessibility"]["links_without_accessible_name"] = 2
+    findings, _ = validate_findings([finding], evidence, structured)
+    assert findings[0]["validation"]["verdict"] == "confirmed"
