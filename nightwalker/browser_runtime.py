@@ -439,7 +439,7 @@ class BrowserRuntime:
 
     async def _run_product_search_smoke(self, page: Page, objective: str) -> dict[str, Any] | None:
         """Find a usable product search from the supplied page, with a product-page fallback."""
-        match = re.search(r'(?i)search\\s+for\\s+[“"\\']([^”"\\']{1,100})[”"\\']', objective)
+        match = re.search(r'(?i)search\s+for\s+[“"\']([^”"\']{1,100})[”"\']', objective)
         if not match:
             return None
         query = match.group(1).strip()
@@ -481,7 +481,7 @@ class BrowserRuntime:
                 if (parsed.scheme, parsed.hostname, parsed.port) != (origin.scheme, origin.hostname, origin.port):
                     continue
                 signal = (label + " " + parsed.path).casefold()
-                if not re.search(r"\\b(products?|shop|catalogue|catalog|collection|store)\\b", signal):
+                if not re.search(r"\b(products?|shop|catalogue|catalog|collection|store)\b", signal):
                     continue
                 clean = href.split("#", 1)[0]
                 if clean and clean not in seen and clean != page.url:
@@ -496,7 +496,7 @@ class BrowserRuntime:
             # Prefer explicit product/shop labels and product-like paths; stable order
             # preserves the page's navigation order when relevance is tied.
             candidates.sort(key=lambda item: (
-                0 if re.search(r"\\b(products?|shop|catalogue|catalog)\\b", item["label"], re.I) else 1,
+                0 if re.search(r"\b(products?|shop|catalogue|catalog)\b", item["label"], re.I) else 1,
                 0 if re.search(r"/(products?|shop|catalogue|catalog)(/|$)", urlparse(item["url"]).path, re.I) else 1,
             ))
             destination = candidates[0]["url"]
@@ -574,7 +574,7 @@ class BrowserRuntime:
             text_value = str(item.get("text") or "")
             if query_lower not in text_value.casefold():
                 continue
-            price = re.search(r'(?i)(?:Rs\\.?\\s*|R\\s*)[\\d,]+(?:\\.\\d{1,2})?', text_value)
+            price = re.search(r'(?i)(?:Rs\.?\s*|R\s*)[\d,]+(?:\.\d{1,2})?', text_value)
             matched.append({
                 **item, "name_match": query,
                 "price": price.group(0).strip() if price else None,
