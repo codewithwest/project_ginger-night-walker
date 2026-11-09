@@ -731,11 +731,12 @@ class BrowserRuntime:
             structured_data = {"products": products} if products else {}
             if workflow_type in {"seo", "seo_qa"}:
                 structured_data["seo_checks"] = audit_signals.get("seo", {})
+                structured_data["seo_discovery"] = audit_signals.get("seo_discovery", {})
             if workflow_type in {"qa", "seo_qa"}:
                 structured_data["qa_checks"] = audit_signals.get("qa", {})
             limitations = list(issues)
             if workflow_type in {"seo", "seo_qa"}:
-                limitations.append("Page-level SEO signals only: robots.txt, XML sitemap coverage, full-site crawl completeness, structured-data validation and field Core Web Vitals are not yet measured.")
+                limitations.append("SEO scope is currently one inspected page plus robots.txt and a bounded same-origin sitemap sample; full-site crawl coverage, exhaustive sitemap URL validation and field Core Web Vitals are not measured.")
             if workflow_type in {"qa", "seo_qa"}:
                 limitations.append("Read-only QA smoke check only: interactive journeys, form submission, keyboard navigation, cross-viewport rendering and automated accessibility rules are not yet executed.")
             if not body_text.strip():
