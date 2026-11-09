@@ -1009,7 +1009,7 @@ class TaskManager:
                                 if record.get("qa_scope") == "single_page":
                                     smoke_complete = all(key in page_smoke for key in (
                                         "url", "document_title", "h1_count", "h1_headings",
-                                        "image_count", "images", "broken_image_count",
+                                        "image_count", "images", "broken_image_count", "pending_image_count",
                                         "console_error_count", "page_error_count",
                                     ))
                                     if smoke_complete and result.get("evidence_id"):
