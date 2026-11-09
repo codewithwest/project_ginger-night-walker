@@ -171,9 +171,10 @@ class TaskManager:
             # immutable original objective. Refuse to resume a snapshot whose
             # stored plan/checklist provenance belongs to another objective.
             objective = str(record.get("objective") or "")
+            planner_objective = str(record.get("execution_objective") or objective)
             provenance = record.get("planner_provenance") or {}
             expected_objective_hash = provenance.get("objective_sha256")
-            actual_objective_hash = hashlib.sha256(objective.encode("utf-8")).hexdigest()
+            actual_objective_hash = hashlib.sha256(planner_objective.encode("utf-8")).hexdigest()
             goal_state = record.get("goal_state") or {}
             identity_mismatch = (
                 (expected_objective_hash and expected_objective_hash != actual_objective_hash)
@@ -184,7 +185,7 @@ class TaskManager:
                 or (
                     isinstance(record.get("execution_blueprint"), dict)
                     and record["execution_blueprint"].get("original_objective")
-                    and str(record["execution_blueprint"].get("original_objective")) != objective
+                    and str(record["execution_blueprint"].get("original_objective")) != planner_objective
                 )
             )
             if identity_mismatch:
