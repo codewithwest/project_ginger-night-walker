@@ -296,6 +296,7 @@ class TaskManager:
         snapshot = {**record, "logs": list(record.get("logs", []))}
         snapshot["execution_trace"] = self.trace_store.read(task_id, limit=30)
         snapshot["timing"] = self.timing.snapshot(record)
+        snapshot["inference_events"] = self.orchestrator.ollama.inference_events_for_task(task_id)
         plan = record.get("execution_plan") or {}
         steps = plan.get("steps") or []
         snapshot["plan_progress"] = {
@@ -323,6 +324,7 @@ class TaskManager:
             plan = record.get("execution_plan") or {}
             steps = plan.get("steps") or []
             summary["timing"] = self.timing.snapshot(record)
+            summary["inference_events"] = self.orchestrator.ollama.inference_events_for_task(task_id, limit=20)
             summary["plan_progress"] = {
                 "status": plan.get("status", "pending"),
                 "completed": sum(1 for step in steps if step.get("status") == "completed"),
