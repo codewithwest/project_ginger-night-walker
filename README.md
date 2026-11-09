@@ -53,7 +53,7 @@ Implemented baseline:
 - duplicate canonical, title, meta-description and exact visible-text analysis across inspected pages;
 - internal destination verification using HEAD with GET fallback only when HEAD is unsupported;
 - deterministic finding priorities (P0-P4), impact rationale, effort estimate, affected URLs and remediation guidance;
-- QA responsive overflow sampling at 375px, 768px and 1280px, semantic/accessibility heuristics, keyboard focus sampling and safe same-origin GET navigation journeys;
+- QA responsive overflow sampling at 375px, 768px and 1280px, semantic/accessibility heuristics, keyboard focus sampling, safe same-origin GET navigation journeys, reversible local disclosure toggles and browser runtime diagnostics;
 - evidence-linked findings, crawl coverage statistics, structured report summaries, durable task snapshots and restart recovery;
 - task-isolated Playwright browser contexts, URL policy enforcement, and React + TypeScript operator UI.
 
