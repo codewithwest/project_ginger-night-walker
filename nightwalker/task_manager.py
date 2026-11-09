@@ -748,7 +748,8 @@ class TaskManager:
                             if capability == "navigate":
                                 verified_result = f"Captured {source.get('title') or final_url}"
                             elif capability == "extract" and products:
-                                if any(term in objective_text for term in ("cheapest", "lowest", "minimum", "compare", "identify")):
+                                detail_lookup = any(term in objective_text for term in ("retrieve details", "open product", "product page", "visit product"))
+                                if not detail_lookup and any(term in objective_text for term in ("cheapest", "lowest", "minimum", "compare", "identify")):
                                     def _price_value(product):
                                         value = product.get("price_value")
                                         if isinstance(value, (int, float)):
