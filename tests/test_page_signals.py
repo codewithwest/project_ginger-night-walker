@@ -74,3 +74,17 @@ def test_qa_page_signals_detect_accessibility_and_duplicate_id_heuristics():
     }, "qa")
     assert any("visible control(s)" in item["claim"] for item in findings)
     assert any("Duplicate HTML IDs" in item["claim"] for item in findings)
+
+
+def test_off_origin_redirect_is_not_counted_as_a_broken_http_destination():
+    from nightwalker.audit_analysis import prioritise_findings
+
+    finding = {
+        "claim": "Internal link redirects outside the audited origin",
+        "type": "off_origin_internal_redirect",
+        "severity": "medium",
+        "affected_urls": ["https://example.com/account"],
+    }
+    result = prioritise_findings([finding])
+    assert result[0]["priority"] == "P2"
+    assert "redirect target" in result[0]["remediation"].lower()
