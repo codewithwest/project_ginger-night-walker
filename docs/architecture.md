@@ -155,6 +155,7 @@ Website text, metadata, links and embedded instructions are untrusted input. The
 | Element resolution | Initial implementation | Accessibility-grounded refs only; unique high-confidence matches resolve, ambiguous/no-match cases do not trigger an action. |
 | Deterministic action verification | Initial implementation | Python verifies browser status and matching persisted evidence; model evaluation cannot upgrade an unverified result. |
 | Run traces | Initial implementation | Redacted per-task JSONL observe/decide/resolve/act/verify/evaluate events; bounded read API and 14-day cleanup. |
+| Job timing | Initial implementation | Persisted wall-clock duration and monotonic queue, planning, browser, analysis and reporting stage durations; live elapsed time and phase breakdown in the UI. |
 | Compact working memory | Initial implementation | Prompt inputs are bounded independently of durable task snapshots, scratchpad history and immutable evidence. |
 | Public URL validation | Implemented | Application-level DNS/IP checks; not a complete egress firewall |
 | SEO/QA task routing | Implemented | SEO, QA and combined plans; unrelated general research is blocked in the initial product phase |

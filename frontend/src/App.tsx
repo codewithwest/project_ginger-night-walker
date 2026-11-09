@@ -619,6 +619,7 @@ export default function App() {
                       {task.plan_progress && task.plan_progress.total > 0 && (
                         <span className="mission-item__id">Plan · {task.plan_progress.completed}/{task.plan_progress.total} steps verified</span>
                       )}
+                      {task.timing && <span className="mission-item__duration">Elapsed · {formatDuration(task.timing.elapsed_ms)}</span>}
                       <span className="mission-item__id">
                         {task.task_id.slice(0, 18)}
                       </span>

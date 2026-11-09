@@ -22,3 +22,10 @@ Each task has an append-only JSONL trace under EVIDENCE_DIR/traces. Sensitive-ke
 ## Limits
 
 The two-stage proposal method is available to the orchestrator but does not bypass the existing mission-plan authorisation gate. SEO/QA audit runs continue to use their deterministic workflow plans; proposals are not automatically executed. Accessibility resolution is conservative and may decline to act when labels are vague or repeated. The verifier currently checks browser completion plus the matching persisted evidence ID; richer per-action assertions can be added as specific interactive QA workflows are introduced.
+
+
+## Job timing and bottleneck analysis
+
+Every task records its accepted timestamp, completion timestamp, total wall-clock elapsed milliseconds and accumulated stage durations. Queue time is separated from active execution. Active stages are measured with a monotonic clock and accumulated at stage boundaries; persisted totals survive task recovery and clarification/retry cycles. The API includes timing in both task snapshots and task-list summaries.
+
+The UI shows elapsed/total time in the mission list and report header, plus a live stage breakdown for queue, planning, browser work, analysis and report synthesis. The current active stage is displayed while the job runs. Wall-clock total includes time waiting between resumptions; stage durations represent measured work intervals. Model inference currently contributes to the enclosing stage rather than being split into a separate model-only bucket.
