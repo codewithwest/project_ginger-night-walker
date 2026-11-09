@@ -1382,12 +1382,16 @@ class TaskManager:
                             f"{summary.get('pages_inspected', 0)} page(s) inspected; "
                             f"{summary.get('crawl_coverage_percent') if summary.get('crawl_coverage_percent') is not None else 'unknown'}% "
                             "of known discovered URLs visited; "
-                            f"{summary.get('sitemap_sample_coverage_percent') if summary.get('sitemap_sample_coverage_percent') is not None else 'unknown'}% "
-                            "of sampled sitemap URLs visited; "
                             f"{summary.get('broken_internal_links', 0)} broken internal destination(s) confirmed; "
                             f"{summary.get('duplicate_title_groups', 0)} duplicate-title group(s); "
+                            f"{summary.get('duplicate_meta_description_groups', 0)} duplicate-description group(s); "
                             f"{summary.get('duplicate_content_groups', 0)} duplicate-content group(s)."
                         )
+                        if workflow_value in {"seo", "seo_qa"}:
+                            answer += (
+                                f" Sitemap sample coverage: {summary.get('sitemap_sample_coverage_percent') if summary.get('sitemap_sample_coverage_percent') is not None else 'not available'}%; "
+                                f"{summary.get('sitemap_disallowed_by_robots', 0)} sitemap URL(s) excluded by robots policy."
+                            )
                         if workflow_value in {"qa", "seo_qa"}:
                             answer += (
                                 f" QA sampled {summary.get('qa_navigation_destinations_checked', 0)} navigation destination(s) "
