@@ -972,7 +972,10 @@ class TaskManager:
                     # General research retains its relevance-ranked candidate selection.
                     workflow_value = str(record.get("workflow_type") or "")
                     if workflow_value in {"seo", "qa", "seo_qa"}:
-                        candidates = loop_guard.filter_candidates(candidates, visited_urls)
+                        candidates = loop_guard.filter_candidates(
+                            candidates, visited_urls,
+                            limit=int(record.get("max_rounds", self.max_rounds)),
+                        )
                     else:
                         candidates = loop_guard.filter_candidates(
                             rank_research_candidates(self._effective_objective(task_id, objective), candidates),
@@ -1083,7 +1086,10 @@ class TaskManager:
                     )
                     break
                 if workflow_value in {"seo", "qa", "seo_qa"}:
-                    available = loop_guard.filter_candidates(candidates, visited_urls)
+                    available = loop_guard.filter_candidates(
+                        candidates, visited_urls,
+                        limit=int(record.get("max_rounds", self.max_rounds)),
+                    )
                     if not available:
                         next_url = ""
                         research_complete = True
