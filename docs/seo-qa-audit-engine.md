@@ -83,3 +83,17 @@ The report summary includes inspected template count, candidate page-type counts
 QA defaults to a single-page smoke test for the URL supplied by the user. It inspects that page and does not silently expand into a same-origin crawl, internal-link journey sample or reversible interaction sample. This keeps a request such as checking a page title, H1s, images and console errors focused and fast. A site-wide crawl is enabled only when the objective explicitly asks for site-wide/full-site coverage, all/every page, all URLs, or a site crawl. SEO audits and combined SEO+QA audits retain their site-wide crawl behaviour.
 
 Single-page QA captures the document title, H1 heading texts/count, image source/load state (loaded, broken or still pending), and browser console/page errors. Pending images are not reported as broken. The report marks crawl coverage as not applicable rather than treating undiscovered links as incomplete or implying a full-site audit. Site-wide QA retains discovered-URL coverage gates.
+
+
+## Finding validation and recommendation gate
+
+Every detected finding is retained as a candidate and passed through a separate deterministic validation stage before remediation is attached. The validator checks that referenced evidence IDs exist and that a type-specific structured browser observation supports the claim. It records the verdict, evidence references checked, supporting observation references, limitations and a bounded recommendation context containing matching observations and evidence excerpts.
+
+- `confirmed`: a matching structured observation supports the finding; recommendations may be generated.
+- `insufficient_evidence`: evidence is missing, unrelated, or the finding type has no dedicated validator; the candidate remains visible without a recommendation.
+- The validator currently does not assign a `rejected` verdict; contradictory-evidence checks and reproducibility retries remain future work. A confidence value is not used as a substitute for evidence.
+- Recommendation output includes the confirmed root-cause context, action, expected outcome and a verification step. Unconfirmed findings have remediation/recommendation fields removed.
+- The full matching observation and evidence excerpt packet is attached to each finding under `validation.recommendation_context`, so later recommendation agents can inspect the underlying data rather than relying on a short claim.
+- Set `AUDIT_SKIP_RECOMMENDATIONS=true` to suppress remediation and recommendation generation. Finding validation still runs and remains visible in the report. The default is `false`.
+
+This is an initial conservative validator, not an independent second-browser reproduction for every defect. Types without a dedicated matching rule remain insufficient rather than being promoted based on a model's assertion. The validation summary is persisted in task structured data and task state.
