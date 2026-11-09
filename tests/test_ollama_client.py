@@ -406,3 +406,36 @@ def test_keep_alive_uses_zero_when_no_retention_settings_exist(monkeypatch):
         monkeypatch.delenv(key, raising=False)
     client = OllamaClient()
     assert client._keep_alive_for_model("qwen3.5:9b") == "0"
+
+
+@pytest.mark.asyncio
+async def test_inference_telemetry_records_requested_and_actual_model(monkeypatch):
+    monkeypatch.setenv("OLLAMA_BASE_URL", "https://ollama.example.test")
+    monkeypatch.setenv("OLLAMA_MODEL_DEFAULT", "main-test-model")
+    monkeypatch.setenv("OLLAMA_MODEL_LIGHT", "unit-test-model")
+
+    class FakeAsyncClient:
+        async def post(self, url, **kwargs):
+            return httpx.Response(200, json={
+                "model": "main-test-model",
+                "load_duration": 2_000_000,
+                "prompt_eval_duration": 3_000_000,
+                "eval_duration": 4_000_000,
+                "prompt_eval_count": 12,
+                "eval_count": 5,
+            }, request=httpx.Request("POST", url))
+
+    client = OllamaClient()
+    response = await client._post_inference(
+        FakeAsyncClient(), "https://ollama.example.test/api/chat",
+        headers={"X-Ginger-Task-Id": "task-telemetry", "X-Ginger-Operation": "planning",
+                 "X-Ginger-Capability": "navigate"},
+        json={"model": "main-test-model"},
+    )
+    assert response.status_code == 200
+    event = client.inference_events_for_task("task-telemetry")[0]
+    assert event["requested_model"] == "main-test-model"
+    assert event["response_model"] == "main-test-model"
+    assert event["load_duration_ms"] == 2
+    assert event["eval_duration_ms"] == 4
+    assert event["prompt_tokens"] == 12
