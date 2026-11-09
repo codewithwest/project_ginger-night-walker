@@ -606,7 +606,16 @@ class TaskManager:
                         "remaining_work": [reason], "loop_guard": loop_guard.snapshot(),
                         "seed_for_next_round": ["Choose a different undiscovered source"],
                     })
-                    available = loop_guard.filter_candidates(rank_research_candidates(self._effective_objective(task_id, objective), candidates), visited_urls)
+                    if str(record.get("workflow_type") or "") in {"seo", "qa", "seo_qa"}:
+                        available = loop_guard.filter_candidates(
+                            candidates, visited_urls,
+                            limit=int(record.get("max_rounds", self.max_rounds)),
+                        )
+                    else:
+                        available = loop_guard.filter_candidates(
+                            rank_research_candidates(self._effective_objective(task_id, objective), candidates),
+                            visited_urls,
+                        )
                     if not available:
                         next_url = ""
                         research_complete = True
