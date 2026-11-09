@@ -133,6 +133,7 @@ class TaskManager:
             record.setdefault("checkpoint", None)
             record.setdefault("execution_blueprint", None)
             record.setdefault("execution_plan", None)
+            record.setdefault("workflow_type", classify_workflow(str(record.get("objective") or "")).value)
             if record.get("execution_plan") is None and isinstance(record.get("execution_blueprint"), dict):
                 record["execution_plan"] = initialise_plan(record["execution_blueprint"])
             record.setdefault("agent_assignments", [])
@@ -446,6 +447,7 @@ class TaskManager:
                 record["execution_blueprint"] = blueprint.model_dump(mode="json")
                 record["execution_plan"] = initialise_plan(record["execution_blueprint"])
                 record["workflow_summary"] = blueprint.interpretation
+                criteria = [item.description for item in blueprint.success_criteria]
                 record["research_queries"] = []
                 from urllib.parse import urlsplit
                 first_subtask = blueprint.subtasks[0]
