@@ -1297,6 +1297,7 @@ class TaskManager:
                     if isinstance(page_record, dict)
                     for viewport in page_record.get("responsive_viewports", [])
                 )
+                runtime_events = structured_data.get("qa_runtime_events", [])
                 structured_data["audit_report_summary"] = {
                     "pages_inspected": len(visited_urls),
                     "known_discovered_url_count": coverage["discovered_url_count"],
@@ -1318,6 +1319,9 @@ class TaskManager:
                     "qa_interaction_controls_passed": sum(item.get("ok") is True for item in interaction_checks),
                     "qa_interaction_controls_failed": sum(item.get("ok") is False for item in interaction_checks),
                     "responsive_viewport_overflows": responsive_overflows,
+                    "browser_console_errors": sum(item.get("kind") == "console_error" for item in runtime_events if isinstance(item, dict)),
+                    "browser_page_errors": sum(item.get("kind") == "page_error" for item in runtime_events if isinstance(item, dict)),
+                    "failed_network_requests": sum(item.get("kind") == "request_failed" for item in runtime_events if isinstance(item, dict)),
                     "finding_priority_counts": priority_counts,
                 }
                 limitations.append(
@@ -1364,7 +1368,10 @@ class TaskManager:
                             answer += (
                                 f" QA sampled {summary.get('qa_navigation_destinations_checked', 0)} navigation destination(s) "
                                 f"and {summary.get('responsive_viewport_overflows', 0)} viewport overflow condition(s); "
-                                f"{summary.get('qa_interaction_controls_passed', 0)} reversible local interaction(s) passed."
+                                f"{summary.get('qa_interaction_controls_passed', 0)} reversible local interaction(s) passed; "
+                                f"{summary.get('browser_console_errors', 0)} console error(s), "
+                                f"{summary.get('browser_page_errors', 0)} page exception(s) and "
+                                f"{summary.get('failed_network_requests', 0)} failed request(s) captured."
                             )
                 except OllamaUnavailable as exc:
                     answer = (
