@@ -13,7 +13,7 @@ SEO, QA and combined audit tasks use deterministic same-origin discovery rather 
 - Redirected pages are checked against the established origin. External destinations are not added to the audit crawl.
 - URL and content fingerprints are used to report canonical, title, meta-description and exact visible-text duplicate groups.
 
-Coverage is reported against URLs discovered from inspected internal links and parsed sitemap samples. It is not a guarantee that every URL on a site was found. Orphaned pages, blocked pages, JavaScript-only routes, unlinked content and URLs beyond the sitemap sample/page budget may remain undiscovered or unvisited.
+Coverage is reported against URLs discovered from inspected internal links and parsed sitemap samples. The crawl acceptance step remains incomplete if discovered URLs remain unvisited, the sitemap sample cap is exceeded, or robots policy cannot be read reliably; the task is then blocked rather than marked complete. This is not a guarantee that every URL on a site was found. Orphaned pages, JavaScript-only routes, unlinked content and URLs beyond the sitemap sample/page budget may remain undiscovered.
 
 ## SEO observations
 
@@ -57,4 +57,4 @@ No forms are submitted and no state-changing controls are activated. SPA click h
 
 A finding is only emitted from captured page or destination observations. Failed or unsupported requests remain distinguishable from confirmed HTTP failures. Crawl coverage, duplicate groups, link-check totals, QA navigation samples and priority counts are included in the structured report summary.
 
-The audit is bounded by `AUDIT_MAX_PAGES`, per-page link-check limits and sitemap sample limits. A report must preserve remaining/unvisited URL counts and untested QA scope; it must not label an incomplete crawl as exhaustive.
+The audit is bounded by `AUDIT_MAX_PAGES`, per-page link-check limits and sitemap sample limits. A report must preserve remaining/unvisited URL counts and untested QA scope; it must not label an incomplete crawl as exhaustive. The crawl success criterion is evidence-gated, so reaching the page budget with remaining discovered URLs produces a blocked/incomplete task rather than a false completed status.
