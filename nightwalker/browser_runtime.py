@@ -641,8 +641,13 @@ class BrowserRuntime:
                 body_text = await page.locator("body").evaluate(
                     "element => (element.innerText || '').slice(0, 20000)"
                 )
-            from nightwalker.page_signals import collect_page_signals, page_signal_findings
+            from nightwalker.page_signals import (
+                collect_internal_link_checks, collect_page_signals,
+                collect_qa_extended_signals, page_signal_findings,
+            )
+            from nightwalker.audit_analysis import content_fingerprint
             audit_signals = await collect_page_signals(page)
+            audit_signals["internal_link_checks"] = await collect_internal_link_checks(page, limit=40)
             if workflow_type in {"seo", "seo_qa"}:
                 audit_signals["seo_discovery"] = await self._collect_seo_discovery_signals(page)
                 sitemap_urls = (audit_signals["seo_discovery"].get("sitemap") or {}).get("sample_urls", [])
@@ -650,7 +655,30 @@ class BrowserRuntime:
                     if sitemap_url != page.url and not any(item.get("url") == sitemap_url for item in candidates):
                         candidates.append({"url": sitemap_url, "label": "URL discovered in XML sitemap"})
                 candidates = candidates[:200]
+            if workflow_type in {"qa", "seo_qa"}:
+                audit_signals["qa_extended"] = await collect_qa_extended_signals(page)
             audit_findings = page_signal_findings(audit_signals, workflow_type)
+            for check in audit_signals["internal_link_checks"].get("checks", []):
+                if check.get("ok") is False:
+                    audit_findings.append({
+                        "claim": f"Internal link destination returned HTTP {check.get('status')}: {check.get('url')}",
+                        "type": "broken_internal_link", "severity": "high",
+                        "affected_url": check.get("url"),
+                    })
+            for viewport in (audit_signals.get("qa_extended") or {}).get("responsive_viewports", []):
+                if viewport.get("horizontal_overflow"):
+                    audit_findings.append({
+                        "claim": f"Horizontal overflow detected at {viewport.get('viewport')} viewport ({viewport.get('viewport_width')}px).",
+                        "type": "qa_responsive_issue", "severity": "medium",
+                        "affected_url": page.url,
+                    })
+            qa_semantic = (audit_signals.get("qa_extended") or {}).get("semantic_accessibility") or {}
+            if qa_semantic.get("visible_form_controls_without_label"):
+                audit_findings.append({
+                    "claim": f"{qa_semantic['visible_form_controls_without_label']} visible form control(s) lack a detectable programmatic label.",
+                    "type": "qa_accessibility_issue", "severity": "high",
+                    "affected_url": page.url,
+                })
             wants_products = bool(re.search(r"(?i)\b(product|products|item|items|price|pricing)\b", objective))
             products = self._extract_products_from_text(body_text, limit=200) if wants_products else []
             if wants_products:
@@ -732,13 +760,23 @@ class BrowserRuntime:
             if workflow_type in {"seo", "seo_qa"}:
                 structured_data["seo_checks"] = audit_signals.get("seo", {})
                 structured_data["seo_discovery"] = audit_signals.get("seo_discovery", {})
+            if workflow_type in {"seo", "seo_qa"}:
+                structured_data["crawl_page"] = {
+                    "url": page.url, "title": title,
+                    "canonical_url": (audit_signals.get("seo") or {}).get("canonical_url"),
+                    "content_fingerprint": content_fingerprint(body_text),
+                    "http_status": http_status,
+                }
+                structured_data["internal_link_checks"] = audit_signals.get("internal_link_checks", {})
             if workflow_type in {"qa", "seo_qa"}:
                 structured_data["qa_checks"] = audit_signals.get("qa", {})
+                structured_data["qa_extended"] = audit_signals.get("qa_extended", {})
+                structured_data["internal_link_checks"] = audit_signals.get("internal_link_checks", {})
             limitations = list(issues)
             if workflow_type in {"seo", "seo_qa"}:
-                limitations.append("SEO scope is currently one inspected page plus robots.txt and a bounded same-origin sitemap sample; full-site crawl coverage, exhaustive sitemap URL validation and field Core Web Vitals are not measured.")
+                limitations.append("Crawl coverage is bounded by the configured round/page budget and discovered same-origin links/sitemap entries; inaccessible, JavaScript-only, orphaned and undiscovered URLs may be absent. Core Web Vitals are not measured.")
             if workflow_type in {"qa", "seo_qa"}:
-                limitations.append("Read-only QA smoke check only: interactive journeys, form submission, keyboard navigation, cross-viewport rendering and automated accessibility rules are not yet executed.")
+                limitations.append("QA checks are read-only: forms are not submitted, state-changing controls are not activated, and keyboard focus is sampled rather than exhaustively tested. Automated WCAG conformance is not claimed.")
             if not body_text.strip():
                 limitations.append("No visible page text was available to analyse.")
             report = {
