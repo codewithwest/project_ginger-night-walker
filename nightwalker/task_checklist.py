@@ -90,6 +90,7 @@ class TaskChecklist:
             "",
             "## Task status",
             "",
+            f"- **Task ID:** {self._safe(task.get('task_id'), 120)}",
             f"- **Status:** {status}",
             f"- **Research rounds:** {round_number}/{round_limit}",
             f"- **Sources captured:** {len(sources)}",
