@@ -1296,7 +1296,7 @@ class TaskManager:
                 )
                 runtime_events = structured_data.get("qa_runtime_events", [])
                 structured_data["audit_report_summary"] = {
-                    "pages_inspected": len(visited_urls),
+                    "pages_inspected": len(crawl_pages),
                     "known_discovered_url_count": coverage["discovered_url_count"],
                     "crawl_coverage_percent": coverage["coverage_percent"],
                     "sitemap_url_count": coverage["sitemap_url_count"],
