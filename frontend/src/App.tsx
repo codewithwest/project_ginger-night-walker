@@ -648,7 +648,7 @@ export default function App() {
                     <div>
                       <strong>Working on it</strong>
                       <p>Round {selected.round || 0} · configured ceiling {selected.max_rounds || 30}. Progress is saved as work resolves.</p>
-                      {selected.current_step && <div className="current-step"><span className="current-step__label">CURRENT STEP</span><MarkdownContent>{selected.current_step}</MarkdownContent></div>}
+                      {selected.current_step && <div className="current-step"><span className="current-step__label">CURRENT STEP</span><MarkdownContent>{typeof selected.current_step === "string" ? selected.current_step : selected.current_step.objective || "Executing planned step"}</MarkdownContent></div>}
                       <div className="progress-timeline progress-timeline--live">
                         {(selected.progress_events || []).slice(-5).map((event, index) => (
                           <article className="progress-event" key={(event.at || "") + index}>
