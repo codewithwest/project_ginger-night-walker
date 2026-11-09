@@ -95,6 +95,7 @@ _PRIORITY = {
 
 _REMEDIATION = {
     "broken_internal_link": "Correct the href, restore the destination, or add an intentional redirect; verify the final destination returns a successful response.",
+    "off_origin_internal_redirect": "Review the redirect target. Keep internal navigation on the intended origin, or make the cross-site hand-off explicit and expected.",
     "duplicate_canonical": "Choose one preferred URL and align canonical tags, redirects and internal links with that URL.",
     "duplicate_title": "Write a distinct, descriptive title that reflects each page's unique search intent.",
     "duplicate_meta_description": "Write a distinct summary for each indexable page that accurately describes its content.",
@@ -111,6 +112,7 @@ _REMEDIATION = {
 
 _IMPACT = {
     "broken_internal_link": "Users and crawlers may be unable to reach the linked destination.",
+    "off_origin_internal_redirect": "An internal link unexpectedly leaves the audited site, which can break navigation expectations and crawl paths.",
     "duplicate_canonical": "Conflicting canonical signals can fragment indexing and ranking signals.",
     "duplicate_title": "Repeated titles make page purpose less distinct in search results.",
     "duplicate_meta_description": "Repeated snippets reduce the uniqueness and relevance of search-result descriptions.",
