@@ -1028,7 +1028,7 @@ class TaskManager:
                                     ))
                                     objective_text = str(record.get("objective") or record.get("original_objective") or "")
                                     requested_product_search = bool(re.search(
-                                        r'(?i)search\\s+for\\s+[“"\\'][^”"\\']{1,100}[”"\\']',
+                                        r'(?i)search\s+for\s+[“"\'][^”"\']{1,100}[”"\']',
                                         objective_text,
                                     ))
                                     product_search = result_data.get("qa_product_search")
