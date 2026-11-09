@@ -532,7 +532,9 @@ class BrowserRuntime:
             self._browser_event(task_id, "Captured page title, headings and visible text", url=page.url, title=title)
             from nightwalker.workflows import classify_workflow
             workflow_type = classify_workflow(objective).value
-            target_parts = urlparse(url)
+            # Use the final navigated origin so a legitimate www/non-www redirect
+            # does not cause every discovered page to be excluded.
+            target_parts = urlparse(page.url)
             target_origin = (target_parts.scheme, target_parts.hostname, target_parts.port)
             candidate_links = await page.locator("a[href]").evaluate_all(
                 """nodes => nodes.slice(0, 500).map(a => ({
