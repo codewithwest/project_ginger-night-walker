@@ -11,7 +11,7 @@ from nightwalker.contracts import AgentTask
 from nightwalker.decision_contracts import DecisionPlan, DecisionStatus, normalise_decision_plan
 from nightwalker.goal_state import GoalStateManager
 from nightwalker.ollama_client import OllamaUnavailable
-from nightwalker.plan_execution import complete_step, initialise_plan, ready_steps, start_step
+from nightwalker.plan_execution import complete_step, fail_step, initialise_plan, ready_steps, start_step
 from nightwalker.orchestrator import Orchestrator
 from nightwalker.research_guard import ResearchLoopGuard, canonical_url_key
 from nightwalker.research_relevance import (
@@ -862,6 +862,14 @@ class TaskManager:
                                 if qa_checks and result.get("evidence_id"):
                                     verified_result = "Captured visible DOM structure, controls, forms, links and duplicate-ID checks"
                             if verified_result is None:
+                                workflow_value = str(record.get("workflow_type") or "")
+                                if workflow_value in {"seo", "qa", "seo_qa"} and str(step.get("step_id", "")).startswith(("seo-", "qa-", "combined-")):
+                                    fail_step(
+                                        execution_plan, step["step_id"],
+                                        "This step's acceptance test was not met by the available read-only browser evidence; it is not being retried as if verified.",
+                                        blocked=True,
+                                    )
+                                    self._log(task_id, f"Plan step blocked without evidence-backed acceptance: {step['step_id']}", "warning")
                                 break
                             complete_step(execution_plan, step["step_id"], evidence_refs=evidence_refs, result=verified_result)
                             self._log(task_id, f"Plan step verified: {step['step_id']}")
