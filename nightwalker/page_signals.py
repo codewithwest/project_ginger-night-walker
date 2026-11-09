@@ -72,8 +72,10 @@ def page_signal_findings(signals: dict[str, Any], workflow_type: str) -> list[di
 
 
 
-async def collect_internal_link_checks(page: Any, limit: int = 40) -> dict[str, Any]:
-    """Verify same-origin anchor destinations with bounded concurrent HEAD/GET requests."""
+async def collect_internal_link_checks(page: Any, limit: int = 40, policy: Any = None) -> dict[str, Any]:
+    """Verify same-origin anchors without allowing automatic cross-origin redirects."""
+    from urllib.parse import urljoin, urlsplit
+
     links = await page.locator("a[href]").evaluate_all(
         """nodes => {
           const seen = new Set();
@@ -90,24 +92,53 @@ async def collect_internal_link_checks(page: Any, limit: int = 40) -> dict[str, 
           });
         }"""
     )
+    origin = urlsplit(page.url)
+    origin_key = (origin.scheme, origin.hostname, origin.port)
     semaphore = asyncio.Semaphore(8)
 
     async def check(url: str) -> dict[str, Any]:
-        item = {"url": url, "method": "HEAD", "status": None, "ok": None, "final_url": None}
+        item = {
+            "url": url, "method": "HEAD", "status": None, "ok": None,
+            "final_url": None, "redirect_hops": 0,
+        }
         async with semaphore:
             try:
-                response = await page.request.head(url, timeout=8000, max_redirects=5)
-                if response.status in {405, 501}:
-                    response = await page.request.get(url, timeout=8000, max_redirects=5)
-                    item["method"] = "GET_fallback_after_HEAD_unsupported"
-                access_limited = response.status in {401, 403, 429}
-                item.update({
-                    "status": response.status,
-                    "ok": None if access_limited else 200 <= response.status < 400,
-                    "access_limited": access_limited,
-                    "final_url": response.url,
-                    "redirected": response.url.rstrip("/") != url.rstrip("/"),
-                })
+                current = url
+                for hop in range(6):
+                    parsed = urlsplit(current)
+                    if (parsed.scheme, parsed.hostname, parsed.port) != origin_key:
+                        item.update({
+                            "ok": False, "off_origin_redirect": True,
+                            "final_url": current, "redirect_hops": hop,
+                            "error": "Internal link redirected outside the audited origin",
+                        })
+                        break
+                    if policy is not None:
+                        policy.validate_url(current, allow_private_networks=False)
+                    response = await page.request.head(current, timeout=8000, max_redirects=0)
+                    if response.status in {405, 501}:
+                        response = await page.request.get(current, timeout=8000, max_redirects=0)
+                        item["method"] = "GET_fallback_after_HEAD_unsupported"
+                    item["status"] = response.status
+                    item["final_url"] = current
+                    item["redirect_hops"] = hop
+                    if response.status in {301, 302, 303, 307, 308}:
+                        location = response.headers.get("location")
+                        if not location:
+                            item.update({"ok": None, "error": "Redirect response had no Location header"})
+                            break
+                        if hop >= 5:
+                            item.update({"ok": None, "error": "Redirect limit reached"})
+                            break
+                        current = urljoin(current, location)
+                        continue
+                    access_limited = response.status in {401, 403, 429}
+                    item.update({
+                        "ok": None if access_limited else 200 <= response.status < 400,
+                        "access_limited": access_limited,
+                        "final_url": current,
+                    })
+                    break
             except Exception as exc:  # noqa: BLE001 - unknown is not a confirmed broken link
                 item["error"] = str(exc)[:180]
         return item
@@ -119,10 +150,10 @@ async def collect_internal_link_checks(page: Any, limit: int = 40) -> dict[str, 
         "discovered_count": len(links),
         "truncated": len(links) > len(checks),
         "checks": checks,
-        "broken_count": sum(item.get("ok") is False for item in checks),
+        "broken_count": sum(item.get("ok") is False and not item.get("off_origin_redirect") for item in checks),
+        "off_origin_redirect_count": sum(bool(item.get("off_origin_redirect")) for item in checks),
         "unknown_count": sum(item.get("ok") is None for item in checks),
     }
-
 
 async def collect_qa_extended_signals(page: Any) -> dict[str, Any]:
     """Read-only responsive, semantics and keyboard-focus smoke checks."""
