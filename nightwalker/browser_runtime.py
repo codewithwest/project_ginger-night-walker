@@ -455,6 +455,70 @@ class BrowserRuntime:
 
         return products
 
+    async def _collect_seo_discovery_signals(self, page: Page) -> dict:
+        """Read robots.txt and a discovered sitemap without leaving the site origin."""
+        from urllib.parse import urljoin
+
+        origin = urlparse(page.url)
+        base = f"{origin.scheme}://{origin.netloc}/"
+        robots_url = urljoin(base, "robots.txt")
+        self.policy.validate_url(robots_url, allow_private_networks=False)
+        result = {
+            "robots_txt": {"url": robots_url, "status": None, "sitemap_urls": [], "disallow_rules": []},
+            "sitemap": {"url": None, "status": None, "url_count": 0, "sample_urls": []},
+        }
+        robots_text = ""
+        try:
+            response = await page.request.get(robots_url, timeout=10000)
+            result["robots_txt"]["status"] = response.status
+            if response.ok:
+                robots_text = (await response.text())[:200000]
+                result["robots_txt"]["sitemap_urls"] = [
+                    line.split(":", 1)[1].strip()
+                    for line in robots_text.splitlines()
+                    if line.strip().casefold().startswith("sitemap:")
+                    and line.split(":", 1)[1].strip()
+                ][:10]
+                result["robots_txt"]["disallow_rules"] = [
+                    line.split(":", 1)[1].strip()
+                    for line in robots_text.splitlines()
+                    if line.strip().casefold().startswith("disallow:")
+                ][:50]
+        except Exception as exc:  # noqa: BLE001 - record unavailable endpoint, do not fail page capture
+            result["robots_txt"]["error"] = str(exc)[:180]
+
+        sitemap_candidates = list(result["robots_txt"]["sitemap_urls"])
+        if not sitemap_candidates:
+            sitemap_candidates = [urljoin(base, "sitemap.xml")]
+        for sitemap_url in sitemap_candidates[:3]:
+            try:
+                parsed = urlparse(sitemap_url)
+                if (parsed.scheme, parsed.hostname, parsed.port) != (origin.scheme, origin.hostname, origin.port):
+                    continue
+                self.policy.validate_url(sitemap_url, allow_private_networks=False)
+                response = await page.request.get(sitemap_url, timeout=12000)
+                if not response.ok:
+                    if result["sitemap"]["status"] is None:
+                        result["sitemap"].update({"url": sitemap_url, "status": response.status})
+                    continue
+                body = (await response.text())[:2000000]
+                locs = re.findall(r"<loc>\\s*(.*?)\\s*</loc>", body, flags=re.IGNORECASE | re.DOTALL)
+                urls = []
+                for raw in locs:
+                    candidate = re.sub(r"&amp;", "&", raw.strip())
+                    parsed_candidate = urlparse(candidate)
+                    if (parsed_candidate.scheme, parsed_candidate.hostname, parsed_candidate.port) == (origin.scheme, origin.hostname, origin.port):
+                        urls.append(candidate)
+                result["sitemap"] = {
+                    "url": sitemap_url, "status": response.status,
+                    "url_count": len(urls), "sample_urls": urls[:200],
+                }
+                break
+            except Exception as exc:  # noqa: BLE001
+                if result["sitemap"]["status"] is None:
+                    result["sitemap"].update({"url": sitemap_url, "error": str(exc)[:180]})
+        return result
+
     async def run_plan(self, task_id: str, url: str, steps: list[dict], objective: str) -> dict:
         """Execute only public-site navigation, same-origin link following and extraction."""
         self.policy.validate_url(url, allow_private_networks=False)
@@ -579,6 +643,13 @@ class BrowserRuntime:
                 )
             from nightwalker.page_signals import collect_page_signals, page_signal_findings
             audit_signals = await collect_page_signals(page)
+            if workflow_type in {"seo", "seo_qa"}:
+                audit_signals["seo_discovery"] = await self._collect_seo_discovery_signals(page)
+                sitemap_urls = (audit_signals["seo_discovery"].get("sitemap") or {}).get("sample_urls", [])
+                for sitemap_url in sitemap_urls:
+                    if sitemap_url != page.url and not any(item.get("url") == sitemap_url for item in candidates):
+                        candidates.append({"url": sitemap_url, "label": "URL discovered in XML sitemap"})
+                candidates = candidates[:200]
             audit_findings = page_signal_findings(audit_signals, workflow_type)
             wants_products = bool(re.search(r"(?i)\b(product|products|item|items|price|pricing)\b", objective))
             products = self._extract_products_from_text(body_text, limit=200) if wants_products else []
