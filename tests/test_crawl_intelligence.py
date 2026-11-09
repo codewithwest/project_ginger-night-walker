@@ -61,3 +61,27 @@ def test_scheduler_prefers_template_novelty_and_qa_specific_weights():
     assert seo[0]["page_type"] == "detail"
     assert qa[0]["page_type"] == "detail"
     assert all(item["template_novelty"] for item in seo)
+
+
+def test_excluded_variants_are_accounted_for_without_hiding_valid_pages():
+    from nightwalker.audit_analysis import crawl_coverage
+    from nightwalker.crawl_intelligence import candidate_exclusion_reason
+
+    discovered = [
+        "https://example.com/products/chair",
+        "https://example.com/products/chair?utm_source=mail",
+        "https://example.com/products/chair?sort=price",
+        "https://example.com/cart",
+        "https://example.com/products/table",
+    ]
+    excluded = [url for url in discovered if candidate_exclusion_reason(url) is not None]
+    coverage = crawl_coverage(
+        discovered,
+        ["https://example.com/products/chair?utm_source=mail"],
+        excluded_urls=excluded,
+    )
+    assert coverage["discovered_url_count"] == 4
+    assert coverage["eligible_url_count"] == 2
+    assert coverage["excluded_url_count"] == 2
+    assert coverage["known_discovered_urls_remaining"] == 1
+    assert coverage["coverage_percent"] == 50.0
