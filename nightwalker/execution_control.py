@@ -78,7 +78,9 @@ for _spec in (
 
 
 def _normalise(value: str) -> str:
-    return " ".join(re.findall(r"[a-z0-9]+", (value or "").casefold()))
+    stop_words = {"go", "find", "open", "visit", "navigate", "show", "click", "select", "the", "a", "an", "to", "for", "page", "link"}
+    tokens = re.findall(r"[a-z0-9]+", (value or "").casefold())
+    return " ".join(token for token in tokens if token not in stop_words)
 
 
 @dataclass(frozen=True)

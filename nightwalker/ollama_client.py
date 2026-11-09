@@ -796,6 +796,7 @@ class OllamaClient:
             raise ValueError(f"No browser tools are registered for workflow {workflow!r}")
         base_url = self._require_base_url("EXTRACT")
         model = self.registry.model_for(Capability.EXTRACT)
+        observation = self.compiler.working_memory.compact_value(observation)
         tool_descriptions = [
             {"name": name, "description": DEFAULT_TOOL_REGISTRY.get(name, workflow).description}
             for name in allowed

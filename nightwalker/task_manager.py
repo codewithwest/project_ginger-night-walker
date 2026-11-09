@@ -693,7 +693,6 @@ class TaskManager:
                 self._trace(task_id, "decide", {
                     "step_id": active_plan_step.get("step_id"),
                     "capability": active_plan_step.get("capability"),
-                    "objective": active_plan_step.get("objective"),
                 })
                 self._trace(task_id, "resolve", {
                     "status": "resolved", "method": "active mission-plan authorization",

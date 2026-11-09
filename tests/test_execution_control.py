@@ -33,7 +33,7 @@ def test_element_resolver_requires_unique_grounded_match():
         {"ref": "node-2", "role": "link", "name": "Contact us"},
     ], "Contact us", role="link")
     assert ambiguous.status == "ambiguous" and ambiguous.ref is None
-    resolved = resolver.resolve([{"ref": "node-3", "role": "button", "name": "Open menu"}], "Open menu", role="button")
+    resolved = resolver.resolve([{"ref": "node-3", "role": "link", "name": "Contact us"}], "Navigate to the contact page", role="link")
     assert resolved.status == "resolved" and resolved.ref == "node-3"
 
 
