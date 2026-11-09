@@ -525,19 +525,32 @@ class TaskManager:
                     return
 
                 self._log(task_id, "Preparing dedicated " + workflow.value.upper() + " workflow")
+                from urllib.parse import urlsplit
+                decided_target = explicit_target
+                decided_site_name = urlsplit(explicit_target).hostname
+                decided_summary = None
+                try:
+                    decision = await self.orchestrator.ollama.decide_task(objective, task_id=task_id)
+                    if decision.target_url:
+                        decided_target = str(decision.target_url)
+                    if decision.site_name:
+                        decided_site_name = decision.site_name
+                    if decision.summary:
+                        decided_summary = decision.summary
+                except OllamaUnavailable as exc:
+                    self._log(task_id, f"Decider unavailable; using regex-extracted target URL. {exc}", "warning")
                 blueprint = build_workflow_blueprint(objective, workflow)
                 record["execution_blueprint"] = blueprint.model_dump(mode="json")
                 record["execution_plan"] = initialise_plan(record["execution_blueprint"])
-                record["workflow_summary"] = blueprint.interpretation
+                record["workflow_summary"] = decided_summary or blueprint.interpretation
                 criteria = [item.description for item in blueprint.success_criteria]
                 record["research_queries"] = []
-                from urllib.parse import urlsplit
                 first_subtask = blueprint.subtasks[0]
                 initial_plan = DecisionPlan.model_validate({
                     "status": "ready",
-                    "summary": blueprint.interpretation,
-                    "site_name": urlsplit(explicit_target).hostname,
-                    "target_url": explicit_target,
+                    "summary": record["workflow_summary"],
+                    "site_name": decided_site_name,
+                    "target_url": decided_target,
                     "steps": [{
                         "step_id": first_subtask.subtask_id,
                         "capability": first_subtask.capability.value,

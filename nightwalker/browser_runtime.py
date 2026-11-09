@@ -835,7 +835,7 @@ class BrowserRuntime:
 
                 page.on("console", lambda message: (
                     record_qa_event("console_error", message.text, page.url)
-                    if message.type == "error" else None
+                    if message.type == "error" and not message.text.startswith("[Recorder]") else None
                 ))
                 page.on("pageerror", lambda error: record_qa_event("page_error", str(error), page.url))
                 page.on("requestfailed", lambda request: record_qa_event(
