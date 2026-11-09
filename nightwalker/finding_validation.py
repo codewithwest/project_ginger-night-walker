@@ -161,6 +161,74 @@ def _support_for_type(
     return False, "Linked observations do not confirm the claimed defect.", []
 
 
+
+def _recommendation_observations(
+    finding: dict[str, Any], matched: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Keep the recommendation packet rich but relevant and bounded."""
+    kind = str(finding.get("type") or "")
+    output: list[dict[str, Any]] = []
+    for record in matched[:12]:
+        dataset = record.get("dataset")
+        base = {
+            "dataset": dataset,
+            "source_id": record.get("source_id"),
+            "evidence_ids": record.get("evidence_ids", []),
+            "url": record.get("url") or record.get("page_url"),
+        }
+        if dataset == "qa_page_smoke":
+            images = record.get("images") or []
+            image_url = finding.get("image_url")
+            if image_url:
+                images = [image for image in images if image.get("src") == image_url]
+            base.update({
+                "document_title": record.get("document_title"),
+                "h1_count": record.get("h1_count"),
+                "h1_headings": record.get("h1_headings", [])[:30],
+                "image_count": record.get("image_count"),
+                "broken_image_count": record.get("broken_image_count"),
+                "pending_image_count": record.get("pending_image_count"),
+                "images": images[:10],
+                "runtime_events": record.get("runtime_events", [])[:30],
+            })
+        elif dataset == "seo_checks":
+            keys = (
+                "title", "title_length", "meta_description", "canonical_url",
+                "canonical_is_same_origin", "robots_directive", "noindex", "language",
+                "viewport", "h1_count", "h1_headings", "heading_levels",
+                "heading_outline", "images_missing_alt", "image_count", "images",
+                "json_ld_blocks",
+            )
+            base.update({key: record.get(key) for key in keys if key in record})
+        elif dataset == "qa_checks":
+            keys = ("page_ready_state", "visible_control_count", "controls_without_accessible_name",
+                    "controls_without_accessible_name_details", "duplicate_ids", "duplicate_id_details",
+                    "form_count", "link_count")
+            base.update({key: record.get(key) for key in keys if key in record})
+        elif dataset == "qa_extended":
+            base.update({
+                "responsive_viewports": record.get("responsive_viewports", []),
+                "semantic_accessibility": record.get("semantic_accessibility", {}),
+                "keyboard_focus_sequence": record.get("keyboard_focus_sequence", [])[:20],
+                "interaction_scope": record.get("interaction_scope"),
+            })
+        elif dataset == "qa_runtime_events":
+            base.update({key: record.get(key) for key in ("kind", "message", "details", "captured_at")})
+        elif dataset in {"internal_link_checks", "qa_navigation_journeys", "qa_interaction_journeys"}:
+            checks = record.get("checks") or []
+            base["checks"] = [
+                check for check in checks
+                if check.get("ok") is False or check.get("off_origin_redirect")
+            ][:30]
+            base["checked_count"] = record.get("checked_count")
+        elif dataset == "duplicate_analysis":
+            base["matched_groups"] = record.get("matched_groups", [])[:20]
+        else:
+            base.update({key: value for key, value in record.items()
+                         if key not in {"dataset", "source_id", "evidence_ids"}})
+        output.append(base)
+    return output
+
 def validate_findings(
     findings: list[dict[str, Any]],
     evidence: list[dict[str, Any]],
@@ -185,8 +253,10 @@ def validate_findings(
         verdict = "confirmed" if supported else "insufficient_evidence"
         counts[verdict] += 1
         evidence_context = [
-            {"evidence_id": row.get("evidence_id"), "url": row.get("url"),
-             "description": row.get("description"), "captured_text": str(row.get("captured_text") or "")[:3000]}
+            {"evidence_id": row.get("evidence_id"), "url": row.get("source_url") or row.get("url"),
+             "source_id": row.get("source_id"), "kind": row.get("kind"),
+             "captured_at": row.get("captured_at"), "description": row.get("description"),
+             "captured_text": str(row.get("captured_text") or "")[:3000]}
             for row in evidence if row.get("evidence_id") in evidence_ids
         ]
         item["validation"] = {
@@ -204,7 +274,7 @@ def validate_findings(
             # Full matching browser/DOM/network observations plus evidence excerpts
             # travel with the finding so downstream recommendation has source context.
             "recommendation_context": {
-                "observations": matched[:20],
+                "observations": _recommendation_observations(item, matched),
                 "evidence": evidence_context[:10],
                 "affected_urls": item.get("affected_urls") or [],
                 "original_claim": item.get("claim"),
