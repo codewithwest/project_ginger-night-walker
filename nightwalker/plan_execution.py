@@ -81,6 +81,8 @@ def complete_step(
     unmet = [dep for dep in step.get("depends_on", []) if by_id.get(dep, {}).get("status") != "completed"]
     if unmet:
         raise ValueError("Planned step dependencies are not verified: " + ", ".join(unmet))
+    if step.get("status") != "in_progress":
+        raise ValueError("A planned step must be in progress before it can be completed")
     step["evidence_refs"] = list(dict.fromkeys([*step.get("evidence_refs", []), *evidence_refs]))
     step["result"] = str(result)[:1000]
     _event(plan, step, "completed", "Acceptance check passed with evidence: " + ", ".join(evidence_refs))
