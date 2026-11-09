@@ -114,7 +114,9 @@ async def collect_internal_link_checks(page: Any, limit: int = 40, policy: Any =
                         })
                         break
                     if policy is not None:
-                        policy.validate_url(current, allow_private_networks=False)
+                        await asyncio.to_thread(
+                            policy.validate_url, current, allow_private_networks=False
+                        )
                     response = await page.request.head(current, timeout=8000, max_redirects=0)
                     if response.status in {405, 501}:
                         response = await page.request.get(current, timeout=8000, max_redirects=0)
