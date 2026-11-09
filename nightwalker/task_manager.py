@@ -26,6 +26,7 @@ from nightwalker.scratchpad import TaskScratchpad
 from nightwalker.task_checklist import TaskChecklist
 from nightwalker.task_state_store import TaskStateStore
 from nightwalker.task_timing import TaskTiming
+from nightwalker.crawl_intelligence import crawl_candidate_metrics, rank_crawl_candidates
 from nightwalker.workflows import WorkflowType, build_workflow_blueprint, classify_workflow, target_url_from_objective
 
 
@@ -410,9 +411,20 @@ class TaskManager:
                 next_url = ""
                 resume_in_flight = False
             if not next_url and not research_complete:
-                available = loop_guard.filter_candidates(
-                    rank_research_candidates(effective_objective, candidates), visited_urls
-                )
+                if str(record.get("workflow_type") or "") in {"seo", "qa", "seo_qa"}:
+                    inspected_templates = {
+                        str(item.get("template_key")) for item in (checkpoint.get("structured_data", {}).get("crawl_page", []) if checkpoint else [])
+                        if isinstance(item, dict) and item.get("template_key")
+                    }
+                    available = rank_crawl_candidates(
+                        candidates, visited_urls, workflow=str(record.get("workflow_type")),
+                        inspected_template_keys=inspected_templates,
+                        limit=int(record.get("max_rounds", self.max_rounds)),
+                    )
+                else:
+                    available = loop_guard.filter_candidates(
+                        rank_research_candidates(effective_objective, candidates), visited_urls
+                    )
                 if not available:
                     # Older checkpoints may contain only unrelated discovery links.
                     # Re-seed the remaining rounds from the original focused query set.
@@ -1059,10 +1071,16 @@ class TaskManager:
                     # General research retains its relevance-ranked candidate selection.
                     workflow_value = str(record.get("workflow_type") or "")
                     if workflow_value in {"seo", "qa", "seo_qa"}:
-                        candidates = loop_guard.filter_candidates(
-                            candidates, visited_urls,
+                        inspected_templates = {
+                            str(item.get("template_key")) for item in structured_data.get("crawl_page", [])
+                            if isinstance(item, dict) and item.get("template_key")
+                        }
+                        candidates = rank_crawl_candidates(
+                            candidates, visited_urls, workflow=workflow_value,
+                            inspected_template_keys=inspected_templates,
                             limit=int(record.get("max_rounds", self.max_rounds)),
                         )
+                        record["crawl_scheduler"] = crawl_candidate_metrics(candidates)
                     else:
                         candidates = loop_guard.filter_candidates(
                             rank_research_candidates(self._effective_objective(task_id, objective), candidates),
@@ -1173,8 +1191,13 @@ class TaskManager:
                     )
                     break
                 if workflow_value in {"seo", "qa", "seo_qa"}:
-                    available = loop_guard.filter_candidates(
-                        candidates, visited_urls,
+                    inspected_templates = {
+                        str(item.get("template_key")) for item in structured_data.get("crawl_page", [])
+                        if isinstance(item, dict) and item.get("template_key")
+                    }
+                    available = rank_crawl_candidates(
+                        candidates, visited_urls, workflow=workflow_value,
+                        inspected_template_keys=inspected_templates,
                         limit=int(record.get("max_rounds", self.max_rounds)),
                     )
                     if not available:
@@ -1438,7 +1461,16 @@ class TaskManager:
                 runtime_events = structured_data.get("qa_runtime_events", [])
                 structured_data["audit_report_summary"] = {
                     "pages_inspected": len(crawl_pages),
+                    **crawl_candidate_metrics(candidates),
+                    "unique_templates_inspected": len({
+                        str(item.get("template_key")) for item in crawl_pages
+                        if isinstance(item, dict) and item.get("template_key")
+                    }),
+                    "budget_utilisation_percent": round(
+                        min(100, len(crawl_pages) / max(1, int(record.get("max_rounds", self.max_rounds))) * 100), 1
+                    ),
                     "known_discovered_url_count": coverage["discovered_url_count"],
+                    "candidate_scheduler": record.get("crawl_scheduler", {}),
                     "crawl_coverage_percent": coverage["coverage_percent"],
                     "crawl_complete": coverage["crawl_complete"],
                     "robots_policy_blocked": coverage["robots_policy_blocked"],
