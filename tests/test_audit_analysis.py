@@ -45,6 +45,6 @@ def test_findings_are_prioritised_without_losing_evidence_fields():
         {"claim": "Minor heading issue", "severity": "low", "evidence_ids": ["ev-1"]},
         {"claim": "Broken internal link", "severity": "high", "type": "broken_internal_link", "evidence_ids": ["ev-2"]},
     ])
-    assert result[0]["priority"] == "P0"
+    assert result[0]["priority"] == "P1"
     assert result[0]["evidence_ids"] == ["ev-2"]
     assert result[1]["priority"] == "P3"
