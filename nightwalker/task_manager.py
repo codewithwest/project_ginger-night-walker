@@ -1202,6 +1202,36 @@ class TaskManager:
                             "remediation": "Review whether these pages should have distinct canonical URLs, titles and substantive content.",
                         })
                 findings = prioritise_findings(findings)
+                priority_counts = {
+                    priority: sum(item.get("priority") == priority for item in findings)
+                    for priority in ("P0", "P1", "P2", "P3", "P4")
+                }
+                navigation_records = structured_data.get("qa_navigation_journeys", [])
+                navigation_checks = [
+                    check for page_record in navigation_records if isinstance(page_record, dict)
+                    for check in page_record.get("checks", [])
+                ]
+                responsive_overflows = sum(
+                    bool(viewport.get("horizontal_overflow"))
+                    for page_record in structured_data.get("qa_extended", [])
+                    if isinstance(page_record, dict)
+                    for viewport in page_record.get("responsive_viewports", [])
+                )
+                structured_data["audit_report_summary"] = {
+                    "pages_inspected": len(visited_urls),
+                    "known_discovered_url_count": coverage["discovered_url_count"],
+                    "crawl_coverage_percent": coverage["coverage_percent"],
+                    "duplicate_canonical_groups": len(duplicate_analysis["duplicate_canonical_groups"]),
+                    "duplicate_title_groups": len(duplicate_analysis["duplicate_title_groups"]),
+                    "duplicate_content_groups": len(duplicate_analysis["duplicate_content_groups"]),
+                    "internal_links_checked": len(flattened_checks),
+                    "broken_internal_links": sum(item.get("ok") is False for item in flattened_checks),
+                    "unknown_internal_link_results": sum(item.get("ok") is None for item in flattened_checks),
+                    "qa_navigation_destinations_checked": len(navigation_checks),
+                    "qa_navigation_failures": sum(item.get("ok") is False for item in navigation_checks),
+                    "responsive_viewport_overflows": responsive_overflows,
+                    "finding_priority_counts": priority_counts,
+                }
                 limitations.append(
                     f"Crawl visited {len(visited_urls)} pages from {coverage['discovered_url_count']} known discovered URLs "
                     f"({coverage['coverage_percent'] if coverage['coverage_percent'] is not None else 'not measurable'}% coverage). "
@@ -1229,6 +1259,22 @@ class TaskManager:
                     if synthesis.coverage_summary:
                         answer += "\n\n" + synthesis.coverage_summary
                     limitations.extend(synthesis.gaps)
+                    if workflow_value in {"seo", "qa", "seo_qa"}:
+                        summary = structured_data.get("audit_report_summary", {})
+                        answer += (
+                            "\n\nDeterministic audit summary: "
+                            f"{summary.get('pages_inspected', 0)} page(s) inspected; "
+                            f"{summary.get('crawl_coverage_percent') if summary.get('crawl_coverage_percent') is not None else 'unknown'}% "
+                            "of known discovered URLs visited; "
+                            f"{summary.get('broken_internal_links', 0)} broken internal destination(s) confirmed; "
+                            f"{summary.get('duplicate_title_groups', 0)} duplicate-title group(s); "
+                            f"{summary.get('duplicate_content_groups', 0)} duplicate-content group(s)."
+                        )
+                        if workflow_value in {"qa", "seo_qa"}:
+                            answer += (
+                                f" QA sampled {summary.get('qa_navigation_destinations_checked', 0)} navigation destination(s) "
+                                f"and {summary.get('responsive_viewport_overflows', 0)} viewport overflow condition(s)."
+                            )
                 except OllamaUnavailable as exc:
                     answer = (
                         f"Captured {len(sources)} sources and {len(findings)} observations. "
