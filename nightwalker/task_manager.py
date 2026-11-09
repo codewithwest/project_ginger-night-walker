@@ -437,6 +437,22 @@ class TaskManager:
                         criteria = proposed_steps or [initial_plan.summary or objective]
                         self._log(task_id, f"Goal criteria model unavailable; using planner steps: {exc}", "warning")
                 record["goal_state"] = GoalStateManager.initialise(objective, criteria)
+                if record.get("execution_plan") is None:
+                    fallback_subtasks = []
+                    previous_id = None
+                    for index, step in enumerate(initial_plan.steps, 1):
+                        step_id = str(getattr(step, "step_id", None) or f"step-{index}")
+                        fallback_subtasks.append({
+                            "subtask_id": step_id,
+                            "objective": str(getattr(step, "objective", None) or step_id),
+                            "capability": str(getattr(step, "capability", None) or "extract"),
+                            "depends_on": [previous_id] if previous_id else [],
+                            "success_criteria": [],
+                            "expected_output": "Evidence-backed output for this step",
+                        })
+                        previous_id = step_id
+                    if fallback_subtasks:
+                        record["execution_plan"] = initialise_plan({"version": 1, "subtasks": fallback_subtasks})
                 self._log(task_id, f"Goal State Manager established {len(criteria)} success criteria")
                 if initial_plan.status == DecisionStatus.READY and blueprint is not None:
                     record["agent_assignments"] = self.agent_allocator.assign(task_id, blueprint)
