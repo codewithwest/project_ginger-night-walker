@@ -566,15 +566,45 @@ class BrowserRuntime:
                     "element => (element.innerText || '').slice(0, 20000)"
                 )
             wants_products = bool(re.search(r"(?i)\b(product|products|item|items|price|pricing)\b", objective))
-            products = self._extract_products_from_text(body_text) if wants_products else []
+            products = self._extract_products_from_text(body_text, limit=200) if wants_products else []
+            if wants_products:
+                try:
+                    card_products = await page.locator(
+                        '[data-product], .product-item, .product-card, li.product, '
+                        '[class*="product-card"], [class*="product-item"]'
+                    ).evaluate_all("""nodes => nodes.slice(0, 200).map(node => {
+                        const link = node.querySelector('a[href]');
+                        const nameNode = node.querySelector(
+                            '[itemprop="name"], .product-name, .product-item-link, '
+                            '[class*="product-title"], h2, h3, img[alt]'
+                        );
+                        const priceNode = node.querySelector(
+                            '[itemprop="price"], .price, [class*="price"], [data-price]'
+                        );
+                        const name = (nameNode?.getAttribute('content') ||
+                            nameNode?.getAttribute('alt') || nameNode?.innerText ||
+                            link?.getAttribute('aria-label') || '').trim();
+                        const price = (priceNode?.getAttribute('content') ||
+                            priceNode?.getAttribute('data-price') || priceNode?.innerText || '').trim();
+                        return {name, price, url: link?.href || ''};
+                    }).filter(x => x.name && x.price)""")
+                    for item in card_products:
+                        price_match = re.search(r'(?i)R\\s*[\\d,]+(?:\\.\\d{2})?', item["price"])
+                        if price_match:
+                            products.append({"name": item["name"][:180], "price": price_match.group(0), "url": item["url"]})
+                except Exception:
+                    pass
+                deduped = {}
+                for item in products:
+                    match = re.search(r"[\\d,]+(?:\\.\\d{1,2})?", item["price"])
+                    if match:
+                        amount = float(match.group(0).replace(",", ""))
+                        deduped[(item["name"].casefold(), amount)] = {**item, "price_value": amount}
+                products = sorted(deduped.values(), key=lambda item: item["price_value"])
             if wants_products and not products:
-                issues.append(
-                    "The page was read, but no product name and price could be confidently extracted."
-                )
-            answer = (
-                f"{products[0]['name']} — {products[0]['price']}"
-                if products else None
-            )
+                issues.append("The page was read, but no product name and price could be confidently extracted.")
+            cheapest = products[0] if products else None
+            answer = f"{cheapest['name']} — {cheapest['price']}" if cheapest else None
             retrieved_at = __import__("datetime").datetime.now(
                 __import__("datetime").UTC
             ).isoformat()
