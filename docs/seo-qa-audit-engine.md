@@ -76,3 +76,10 @@ The audit is bounded by `AUDIT_MAX_PAGES`, per-page link-check limits and sitema
 The scheduler is deterministic and does not ask an LLM to choose crawl URLs. It prioritises homepage/category/detail and important informational templates, boosts previously unseen templates, and lowers pagination priority. QA slightly favours detail and informational routes; SEO favours category and editorial coverage. Query variants identified as tracking, sorting or facets are deduplicated or excluded from the default crawl; meaningful query parameters remain part of URL identity. The original URL is retained for navigation and evidence.
 
 The report summary includes inspected template count, candidate page-type counts, pagination count, queued distinct template count and page-budget utilisation. These are scheduling diagnostics, not proof of complete route coverage.
+
+
+## QA scope selection
+
+QA defaults to a single-page smoke test for the URL supplied by the user. It inspects that page and does not silently expand into a same-origin crawl, internal-link journey sample or reversible interaction sample. This keeps a request such as checking a page title, H1s, images and console errors focused and fast. A site-wide crawl is enabled only when the objective explicitly asks for site-wide/full-site coverage, all/every page, all URLs, or a site crawl. SEO audits and combined SEO+QA audits retain their site-wide crawl behaviour.
+
+Single-page QA captures the document title, H1 heading texts/count, image source/load state (loaded, broken or still pending), and browser console/page errors. Pending images are not reported as broken. The report marks crawl coverage as not applicable rather than treating undiscovered links as incomplete or implying a full-site audit. Site-wide QA retains discovered-URL coverage gates.
