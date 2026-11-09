@@ -7,7 +7,7 @@ SEO, QA and combined audit tasks use deterministic same-origin discovery rather 
 - The requested URL is the crawl seed.
 - Same-origin HTML links and same-origin sitemap URLs are added to a breadth-first candidate queue.
 - `robots.txt` is read before discovered URLs are followed. Disallowed URLs are excluded. If the robots endpoint fails unexpectedly or returns a server error, further discovery is paused conservatively.
-- Sitemap indexes are parsed with bounded tag extraction. Up to 5 sitemap endpoints and 20 child sitemap files are inspected per page capture.
+- Sitemap indexes are parsed with bounded tag extraction. Up to 5 sitemap endpoints and 20 child sitemap files are inspected once per task origin and cached for the remainder of that task.
 - At most 1,000 sitemap page URLs are admitted from a sitemap response.
 - The default audit page budget is 200. Set `AUDIT_MAX_PAGES` to a value from 1 to 1,000 to change it.
 - Redirected pages are checked against the established origin. External destinations are not added to the audit crawl.
