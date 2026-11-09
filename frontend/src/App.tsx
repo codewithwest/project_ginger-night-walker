@@ -183,7 +183,7 @@ function ResearchReport({ result }: { result: BrowserResult }) {
   const auditSummary = structuredData.audit_report_summary as Record<string, number | boolean | undefined> | undefined;
   const summaryMetrics = auditSummary ? [
     { label: "Pages inspected", value: auditSummary.pages_inspected ?? 0 },
-    { label: "Known URL coverage", value: auditSummary.crawl_coverage_percent == null ? "—" : auditSummary.crawl_coverage_percent + "%" },
+    { label: "Known URL coverage", value: auditSummary.crawl_coverage_percent == null ? "—" : String(auditSummary.crawl_coverage_percent) + "%" },
     { label: "Broken internal links", value: auditSummary.broken_internal_links ?? 0 },
     { label: "Duplicate title groups", value: auditSummary.duplicate_title_groups ?? 0 },
     { label: "Duplicate content groups", value: auditSummary.duplicate_content_groups ?? 0 },
