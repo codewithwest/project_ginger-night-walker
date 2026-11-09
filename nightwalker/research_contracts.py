@@ -55,6 +55,7 @@ class ResearchRoundPlan(BaseModel):
 
 class ResearchSynthesis(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    answer: str = Field(min_length=1, max_length=3000)
+    # Leave room for evidence-backed detail while keeping reports bounded.
+    answer: str = Field(min_length=1, max_length=6000)
     coverage_summary: str = Field(default="", max_length=1200)
     gaps: list[str] = Field(default_factory=list, max_length=12)
