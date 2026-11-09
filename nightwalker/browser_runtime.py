@@ -589,14 +589,14 @@ class BrowserRuntime:
                         return {name, price, url: link?.href || ''};
                     }).filter(x => x.name && x.price)""")
                     for item in card_products:
-                        price_match = re.search(r'(?i)R\\s*[\\d,]+(?:\\.\\d{2})?', item["price"])
+                        price_match = re.search(r'(?i)R\s*[\d,]+(?:\.\d{2})?', item["price"])
                         if price_match:
                             products.append({"name": item["name"][:180], "price": price_match.group(0), "url": item["url"]})
                 except Exception:
                     pass
                 deduped = {}
                 for item in products:
-                    match = re.search(r"[\\d,]+(?:\\.\\d{1,2})?", item["price"])
+                    match = re.search(r"[\d,]+(?:\.\d{1,2})?", item["price"])
                     if match:
                         amount = float(match.group(0).replace(",", ""))
                         deduped[(item["name"].casefold(), amount)] = {**item, "price_value": amount}
