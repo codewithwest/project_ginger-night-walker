@@ -1436,6 +1436,7 @@ class TaskManager:
                             "of known discovered URLs visited; "
                             f"crawl completion={'complete' if summary.get('crawl_complete') else 'incomplete'}; "
                             f"{summary.get('broken_internal_links', 0)} broken internal destination(s) confirmed; "
+                            f"{summary.get('off_origin_internal_redirects', 0)} off-origin internal redirect(s); "
                             f"{summary.get('duplicate_title_groups', 0)} duplicate-title group(s); "
                             f"{summary.get('duplicate_meta_description_groups', 0)} duplicate-description group(s); "
                             f"{summary.get('duplicate_content_groups', 0)} duplicate-content group(s)."
