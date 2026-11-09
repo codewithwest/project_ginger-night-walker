@@ -99,6 +99,7 @@ type Task = {
   logs?: Log[];
   progress_events?: { at?: string; event_type?: string; status?: string; message?: string }[];
   execution_trace?: { event_id?: string; at?: string; phase?: string; details?: Record<string, unknown> }[];
+  inference_events?: { at?: string; operation?: string; capability?: string; requested_model?: string; response_model?: string; status?: string; duration_ms?: number; load_duration_ms?: number | null; prompt_eval_duration_ms?: number | null; eval_duration_ms?: number | null; prompt_tokens?: number | null; completion_tokens?: number | null }[];
   timing?: { started_at?: string; finished_at?: string | null; elapsed_ms?: number; active_elapsed_ms?: number; active_phase?: string | null; phases_ms?: Record<string, number>; current_phase_ms?: number; phases?: Record<string, { duration_ms: number; share_percent: number }> };
   round?: number;
   max_rounds?: number;
@@ -661,7 +662,21 @@ export default function App() {
                   </div>
                 </div>
 
-                {selected.timing && (
+                {selected.inference_events?.length ? (
+        <section className="inference-panel">
+          <div className="section-kicker">MODEL INFERENCE</div>
+          <div className="inference-panel__list">
+            {selected.inference_events.slice().reverse().map((event, index) => (
+              <div className="inference-event" key={event.at || index}>
+                <div className="inference-event__top"><strong>{event.operation || "Inference"}</strong><span>{event.status} · {formatDuration(event.duration_ms)}</span></div>
+                <div className="inference-event__model">Requested: {event.requested_model || "unknown"}{event.response_model && event.response_model !== event.requested_model ? ` · Returned: ${event.response_model}` : ""}</div>
+                <div className="inference-event__metrics">Load {event.load_duration_ms == null ? "—" : formatDuration(event.load_duration_ms)} · Prompt {event.prompt_eval_duration_ms == null ? "—" : formatDuration(event.prompt_eval_duration_ms)} · Generation {event.eval_duration_ms == null ? "—" : formatDuration(event.eval_duration_ms)}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+      {selected.timing && (
                   <section className="timing-panel">
                     <div className="timing-panel__top">
                       <div><div className="section-kicker">JOB TIMING</div><strong>{selected.timing.finished_at ? "Total duration" : "Elapsed so far"}</strong></div>
