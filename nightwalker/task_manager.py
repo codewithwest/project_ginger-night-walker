@@ -564,6 +564,13 @@ class TaskManager:
                 resume_plan_source = False
                 if isinstance(execution_plan, dict):
                     available_plan_steps = ready_steps(execution_plan)
+                    if str(record.get("workflow_type") or "") in {"seo", "qa", "seo_qa"}:
+                        # Final synthesis is a task-level acceptance step, not a page-level
+                        # action; leave it pending until the crawl is exhausted.
+                        available_plan_steps = [
+                            step for step in available_plan_steps
+                            if not str(step.get("step_id", "")).endswith(("seo-synthesise", "qa-synthesise"))
+                        ]
                     if available_plan_steps:
                         active_plan_step = start_step(execution_plan, available_plan_steps[0]["step_id"])
                         record["active_plan_step_id"] = active_plan_step["step_id"]
