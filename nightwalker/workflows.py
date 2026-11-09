@@ -69,6 +69,19 @@ def target_url_from_objective(objective: str) -> str | None:
     return value
 
 
+
+def qa_requires_site_crawl(objective: str) -> bool:
+    """Only expand QA beyond the supplied URL when the user asks for site-wide coverage."""
+    value = " ".join(objective.casefold().split())
+    explicit_site_wide = (
+        r"\b(site[- ]wide|full[- ]site|entire site|whole site|all pages|every page|all urls|crawl (?:the )?site|site crawl|website-wide)\b"
+    )
+    return bool(re.search(explicit_site_wide, value))
+
+
+def qa_scope_for_objective(objective: str) -> str:
+    return "site_wide" if qa_requires_site_crawl(objective) else "single_page"
+
 def build_workflow_blueprint(objective: str, workflow: WorkflowType) -> ExecutionBlueprint:
     if workflow == WorkflowType.SEO:
         criteria = [
@@ -88,22 +101,36 @@ def build_workflow_blueprint(objective: str, workflow: WorkflowType) -> Executio
             ("seo-synthesise", "Prioritise evidence-backed SEO issues and remediation.", Capability.EXTRACT, ["seo-report"]),
         ]
     elif workflow == WorkflowType.QA:
-        criteria = [
-            ("qa-scope", "The target application and tested URL scope are recorded.", "At least one target URL and its captured source are recorded."),
-            ("qa-availability", "Target pages load and HTTP/navigation failures are recorded.", "Each tested page has a captured navigation outcome."),
-            ("qa-navigation", "Internal navigation destinations are inspected for broken-link candidates.", "Each reported broken destination has an observed failed navigation."),
-            ("qa-content", "Page structure and visible content are checked for obvious rendering/content failures.", "Evidence supports each reported page-level defect."),
-            ("qa-coverage", "Discovered same-origin QA URLs are visited or explicitly accounted for.", "The report records discovered and visited URL counts; any remaining URLs at the page budget keep coverage incomplete."),
-            ("qa-report", "QA observations are reported with reproducible URLs and honest test status.", "Each defect includes observed behaviour, URL and evidence; unexecuted interactions are marked untested."),
-        ]
-        tasks = [
-            ("qa-discover", "Discover the target application pages and establish test scope.", Capability.NAVIGATE, ["qa-scope"]),
-            ("qa-availability", "Check page availability and record navigation failures.", Capability.EXTRACT, ["qa-availability"]),
-            ("qa-navigation", "Inspect internal navigation and verify selected destinations.", Capability.INTERACT, ["qa-navigation"]),
-            ("qa-content", "Inspect page structure and visible content for observable defects.", Capability.EXTRACT, ["qa-content"]),
-            ("qa-crawl", "Continue the deterministic same-origin QA crawl until discovered URLs or the page budget are exhausted.", Capability.NAVIGATE, ["qa-coverage"]),
-            ("qa-synthesise", "Produce a QA report with evidence and tested/untested boundaries.", Capability.EXTRACT, ["qa-report"]),
-        ]
+        if qa_requires_site_crawl(objective):
+            criteria = [
+                ("qa-scope", "The target application and site-wide tested URL scope are recorded.", "The report records the seed URL and discovered/visited URL counts."),
+                ("qa-availability", "Target pages load and HTTP/navigation failures are recorded.", "Each tested page has a captured navigation outcome."),
+                ("qa-navigation", "Internal navigation destinations are inspected for broken-link candidates.", "Each reported broken destination has an observed failed navigation."),
+                ("qa-content", "Page structure and visible content are checked for observable defects.", "Evidence supports each reported page-level defect."),
+                ("qa-coverage", "Discovered same-origin QA URLs are visited or explicitly accounted for.", "The report records discovered and visited URL counts; remaining URLs keep coverage incomplete."),
+                ("qa-report", "QA observations are reported with reproducible URLs and honest test status.", "Each defect includes observed behaviour, URL and evidence; unexecuted interactions are marked untested."),
+            ]
+            tasks = [
+                ("qa-discover", "Discover the target application pages and establish site-wide test scope.", Capability.NAVIGATE, ["qa-scope"]),
+                ("qa-availability", "Check page availability and record navigation failures.", Capability.EXTRACT, ["qa-availability"]),
+                ("qa-navigation", "Inspect internal navigation and verify selected destinations.", Capability.INTERACT, ["qa-navigation"]),
+                ("qa-content", "Inspect page structure and visible content for observable defects.", Capability.EXTRACT, ["qa-content"]),
+                ("qa-crawl", "Continue the deterministic same-origin QA crawl until discovered URLs or the page budget are exhausted.", Capability.NAVIGATE, ["qa-coverage"]),
+                ("qa-synthesise", "Produce a QA report with evidence and tested/untested boundaries.", Capability.EXTRACT, ["qa-report"]),
+            ]
+        else:
+            criteria = [
+                ("qa-scope", "The requested page and single-page test boundary are recorded.", "Evidence identifies the supplied target URL; unrelated same-origin pages are not required."),
+                ("qa-availability", "The requested page loads and its HTTP/navigation outcome is recorded.", "The target page has a captured navigation outcome."),
+                ("qa-page-smoke", "The requested page title, H1 headings, image load status and browser console errors are inspected.", "Evidence records the document title, all H1 texts/count, each image load outcome and captured console/page errors."),
+                ("qa-report", "Confirmed page-level defects are reported with reproducible evidence and recommendations.", "Each defect includes the target URL, observed result, evidence and recommendation; unverified checks are marked untested."),
+            ]
+            tasks = [
+                ("qa-discover", "Open the supplied page and establish a single-page QA boundary.", Capability.NAVIGATE, ["qa-scope"]),
+                ("qa-availability", "Record the requested page's HTTP and navigation outcome.", Capability.EXTRACT, ["qa-availability"]),
+                ("qa-content", "Inspect the document title, H1 headings, broken images and browser console/page errors on this page only.", Capability.EXTRACT, ["qa-page-smoke"]),
+                ("qa-synthesise", "Report confirmed defects and recommendations for the requested page only.", Capability.EXTRACT, ["qa-report"]),
+            ]
     elif workflow == WorkflowType.SEO_QA:
         criteria = []
         tasks = []
