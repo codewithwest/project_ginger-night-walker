@@ -741,12 +741,28 @@ class TaskManager:
                         captured["captured_text"] = str(captured.get("captured_text", ""))[:1500]
                         round_evidence.append(captured)
 
-                    accepted, relevance_reason = source_relevance(
-                        effective_objective,
-                        str(source.get("url") or final_url),
-                        str(source.get("title") or result.get("title") or ""),
-                        " ".join(str(item.get("captured_text") or "") for item in round_evidence),
-                    )
+                    workflow_value = str(record.get("workflow_type") or "")
+                    if workflow_value in {"seo", "qa", "seo_qa"}:
+                        from urllib.parse import urlsplit
+                        target_parts = urlsplit(str(record.get("target_url") or ""))
+                        source_parts = urlsplit(str(source.get("url") or final_url))
+                        same_origin = (
+                            source_parts.scheme, source_parts.hostname, source_parts.port
+                        ) == (
+                            target_parts.scheme, target_parts.hostname, target_parts.port
+                        )
+                        accepted = same_origin
+                        relevance_reason = (
+                            "Accepted same-origin page as part of the requested site audit."
+                            if accepted else "Rejected page outside the requested website origin."
+                        )
+                    else:
+                        accepted, relevance_reason = source_relevance(
+                            effective_objective,
+                            str(source.get("url") or final_url),
+                            str(source.get("title") or result.get("title") or ""),
+                            " ".join(str(item.get("captured_text") or "") for item in round_evidence),
+                        )
                     if not accepted:
                         loop_guard.record_outcome(next_url, next_assignment, "irrelevant", relevance_reason)
                         self._note(task_id, {
