@@ -148,7 +148,7 @@ def build_workflow_blueprint(objective: str, workflow: WorkflowType) -> Executio
             tasks = [
                 ("qa-discover", "Open the supplied page and establish a single-page QA boundary.", Capability.NAVIGATE, ["qa-scope"]),
                 ("qa-availability", "Record the requested page's HTTP and navigation outcome.", Capability.EXTRACT, ["qa-availability"]),
-                ("qa-content", "Inspect page title, H1s, images and browser errors; when a quoted product search is requested, execute it and capture matching product-card name, image and price.", Capability.EXTRACT, ["qa-page-smoke"]),
+                ("qa-content", "Inspect the requested page for a search control. If absent, discover a same-origin product/shop page from rendered navigation, open it, and inspect again. Search for the requested product only when a usable control is found; capture matching product name, image and price.", Capability.EXTRACT, ["qa-page-smoke"]),
                 ("qa-validate", "Validate each candidate page defect against the captured page, image and runtime evidence.", Capability.EXTRACT, ["qa-validation"]),
                 ("qa-synthesise", "Report only confirmed defects and recommendations for the requested page.", Capability.EXTRACT, ["qa-report"]),
             ]
