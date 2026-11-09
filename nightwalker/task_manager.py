@@ -601,20 +601,29 @@ class TaskManager:
                     )
                     continue
 
+                if not isinstance(execution_plan, dict) or active_plan_step is None:
+                    limitations.append("Browser execution was not started because no dependency-ready mission plan step authorises it.")
+                    self._log(task_id, "Execution blocked: no active authorised mission plan step")
+                    self._persist(task_id)
+                    break
                 one_page_plan = normalise_decision_plan({
                     "status": initial_plan.status,
                     "summary": initial_plan.summary,
                     "site_name": initial_plan.site_name,
                     "target_url": next_url,
                     "clarification_question": initial_plan.clarification_question,
-                    "steps": [
-                        {"step_id": "open", "capability": "navigate", "objective": "Open this discovered public source."},
-                        {"step_id": "capture", "capability": "extract", "objective": next_assignment[:500]},
-                    ],
+                    "steps": [{
+                        "step_id": active_plan_step["step_id"],
+                        "capability": active_plan_step["capability"],
+                        "objective": active_plan_step["objective"][:500],
+                    }],
                 })
                 effective_objective = self._effective_objective(task_id, objective)
                 result = await self.orchestrator.run_browser_workflow(
-                    task_id, effective_objective, one_page_plan
+                    task_id,
+                    effective_objective,
+                    one_page_plan,
+                    authorized_step=active_plan_step,
                 )
                 round_evidence = []
                 if result.get("status") not in {"completed", "blocked"}:
