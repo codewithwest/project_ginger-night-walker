@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 import re
 from datetime import UTC, datetime
@@ -166,6 +167,33 @@ class TaskManager:
         for record in self.state_store.load_all():
             task_id = record["task_id"]
             if task_id in self.tasks:
+                continue
+            # Durable planner artifacts are scoped to both task_id and the
+            # immutable original objective. Refuse to resume a snapshot whose
+            # stored plan/checklist provenance belongs to another objective.
+            objective = str(record.get("objective") or "")
+            provenance = record.get("planner_provenance") or {}
+            expected_objective_hash = provenance.get("objective_sha256")
+            actual_objective_hash = hashlib.sha256(objective.encode("utf-8")).hexdigest()
+            goal_state = record.get("goal_state") or {}
+            identity_mismatch = (
+                (expected_objective_hash and expected_objective_hash != actual_objective_hash)
+                or (
+                    goal_state.get("original_goal")
+                    and str(goal_state.get("original_goal")) != objective
+                )
+                or (
+                    isinstance(record.get("execution_blueprint"), dict)
+                    and record["execution_blueprint"].get("original_objective")
+                    and str(record["execution_blueprint"].get("original_objective")) != objective
+                )
+            )
+            if identity_mismatch:
+                record["status"] = "failed"
+                record["error"] = "Saved task plan/checklist provenance does not match this task's immutable objective; automatic recovery was refused."
+                record["current_step"] = None
+                self.tasks[task_id] = record
+                self._persist(task_id)
                 continue
             record.setdefault("logs", [])
             record.setdefault("timing", {"started_at": record.get("created_at"), "finished_at": None, "elapsed_ms": 0, "active_elapsed_ms": 0, "phases_ms": {}, "phases": {}, "active_phase": None})
