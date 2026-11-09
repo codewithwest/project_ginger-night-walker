@@ -547,12 +547,12 @@ class BrowserRuntime:
 
         def loc_values(xml_text: str) -> tuple[str, list[str]]:
             # Bounded tag extraction avoids expanding untrusted XML entities.
-            root_match = re.search(r"<\\s*(?:[a-z0-9_-]+:)?(sitemapindex|urlset)\\b", xml_text, re.I)
+            root_match = re.search(r"<\s*(?:[a-z0-9_-]+:)?(sitemapindex|urlset)\b", xml_text, re.I)
             root_name = root_match.group(1).casefold() if root_match else ""
             values = [
                 unescape(match).strip()
                 for match in re.findall(
-                    r"<(?:[a-z0-9_-]+:)?loc\\b[^>]*>\\s*(.*?)\\s*</(?:[a-z0-9_-]+:)?loc\\s*>",
+                    r"<(?:[a-z0-9_-]+:)?loc\b[^>]*>\s*(.*?)\s*</(?:[a-z0-9_-]+:)?loc\s*>",
                     xml_text, flags=re.I | re.S,
                 )
                 if match.strip()
@@ -909,7 +909,7 @@ class BrowserRuntime:
             audit_signals = await collect_page_signals(page)
             x_robots_tag = (response.headers.get("x-robots-tag") if response else None)
             audit_signals.setdefault("seo", {})["x_robots_tag"] = x_robots_tag
-            if x_robots_tag and re.search(r"(?i)\\bnoindex\\b", x_robots_tag):
+            if x_robots_tag and re.search(r"(?i)\bnoindex\b", x_robots_tag):
                 audit_signals["seo"]["noindex"] = True
             audit_signals["internal_link_checks"] = await collect_internal_link_checks(page, limit=40)
             if workflow_type in {"seo", "seo_qa"}:
