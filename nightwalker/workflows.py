@@ -33,6 +33,10 @@ _QA_TERMS = {
     "responsive testing", "smoke test", "smoke testing", "broken images",
     "console error", "console errors", "browser errors", "page title", "h1 heading", "h1 headings",
     "bug", "bugs", "defects",
+    "product listing", "product listings", "product search", "search results",
+    "verify the product appears", "verify that the product appears",
+    "check the product appears", "check that the product appears",
+    "confirm the product appears", "confirm that the product appears",
 }
 
 
@@ -41,6 +45,15 @@ def classify_workflow(objective: str) -> WorkflowType:
     value = " ".join(objective.casefold().split())
     seo = any(term in value for term in _SEO_TERMS)
     qa = any(term in value for term in _QA_TERMS)
+    # Product-page verification is QA when the requested outcome is to test
+    # that a site search/listing renders expected UI content. The product noun
+    # alone is deliberately not sufficient to classify a task as QA.
+    product_result_verification = (
+        any(verb in value for verb in ("verify", "check", "confirm", "test"))
+        and any(term in value for term in ("product appears", "product is shown", "product is displayed", "search for"))
+        and bool(re.search(r"\\bhttps?://|\\bwww\\.", value))
+    )
+    qa = qa or product_result_verification
     if seo and qa:
         return WorkflowType.SEO_QA
     if seo:
