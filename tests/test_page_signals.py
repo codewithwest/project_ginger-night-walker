@@ -229,3 +229,10 @@ def test_qa_reports_only_confirmed_broken_images_not_pending_images():
     assert len(broken) == 1
     assert "broken.jpg" in broken[0]["claim"]
     assert broken[0]["image_url"] == "https://example.com/broken.jpg"
+
+
+def test_qa_smoke_reports_missing_title_and_h1():
+    findings = page_signal_findings({"seo": {"title": None, "h1_count": 0}, "qa": {}}, "qa")
+    claims = [item["claim"] for item in findings]
+    assert "The page has no non-empty document title." in claims
+    assert "No H1 heading was found on the requested page." in claims
