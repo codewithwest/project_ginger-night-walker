@@ -22,6 +22,7 @@ from nightwalker.research_relevance import (
 from nightwalker.scratchpad import TaskScratchpad
 from nightwalker.task_checklist import TaskChecklist
 from nightwalker.task_state_store import TaskStateStore
+from nightwalker.workflows import WorkflowType, build_workflow_blueprint, classify_workflow, target_url_from_objective
 
 
 class TaskManager:
@@ -305,6 +306,7 @@ class TaskManager:
         self.tasks[task_id] = {
             "task_id": task_id,
             "capability": "auto",
+            "workflow_type": classify_workflow(objective).value,
             "objective": objective,
             "execution_objective": objective,
             "status": "queued",
@@ -411,68 +413,56 @@ class TaskManager:
             record["low_information_rounds"] = 0
         try:
             if not checkpoint:
-                self._log(task_id, "Goal analyst defining success criteria, subtasks, dependencies and tool requirements")
-                blueprint = None
-                try:
-                    blueprint = await self.orchestrator.ollama.create_execution_blueprint(objective, task_id=task_id)
-                    record["execution_blueprint"] = blueprint.model_dump(mode="json")
-                    record["execution_plan"] = initialise_plan(record["execution_blueprint"])
-                    criteria = [item.description for item in blueprint.success_criteria]
-                    self._log(task_id, f"Execution blueprint created: {len(criteria)} success criteria and {len(blueprint.subtasks)} subtasks")
+                workflow = WorkflowType(record.get("workflow_type") or classify_workflow(objective).value)
+                if workflow == WorkflowType.UNSUPPORTED:
+                    message = "This Night Walker beta currently supports SEO audits and website/application QA. General research and other task types are deferred."
+                    record["status"] = "blocked"
+                    record["result"] = {
+                        "schema_version": "1.0", "workflow_type": workflow.value,
+                        "answer": message, "findings": [], "sources": [], "evidence": [],
+                        "structured_data": {}, "limitations": [message], "suggested_memory": [],
+                    }
+                    record["error"] = None
+                    self._log(task_id, "Task is outside the initial SEO/QA product scope; no general-research fallback was started.", "warning")
                     self._persist(task_id)
-                except (OllamaUnavailable, AttributeError, ValueError) as exc:
-                    self._log(task_id, f"Goal-first planning unavailable; using bounded legacy planning fallback: {exc}", "warning")
-                self._log(task_id, "Decider resolving the initial public research entry point")
-                try:
-                    initial_plan = await self.orchestrator.ollama.decide_task(objective, task_id=task_id)
-                except TypeError:
-                    initial_plan = await self.orchestrator.ollama.decide_task(objective)
-                # Normalise model/tool/legacy values before any model_dump call.
-                # This repairs HttpUrl strings and dict-shaped PlannedStep values.
-                initial_plan = normalise_decision_plan(initial_plan)
-                # Use concise goal-derived search queries, never the entire instruction-heavy brief.
-                proposed_queries = (
-                    getattr(blueprint, "research_queries", []) if blueprint else []
-                )
-                research_queries = focused_research_queries(objective, proposed_queries)
-                explicit_target = (
-                    self.orchestrator.ollama._explicit_target_url(objective)
-                    if hasattr(self.orchestrator.ollama, "_explicit_target_url") else None
-                )
-                if not research_queries and not explicit_target:
-                    # Deterministic fallback when the planning model is unavailable:
-                    # use the task's subject sentence, not its report instructions.
-                    subject = re.split(
-                        r"\n\s*\n|\bfor each\b|\buse publicly accessible\b|"
-                        r"\brecord the urls\b|\bclearly distinguish\b|\bproduce a\b",
-                        objective, maxsplit=1, flags=re.IGNORECASE,
-                    )[0]
-                    subject = re.sub(r"^\s*(?:please\s+)?(?:research|investigate|find|compare|analyze)\s+", "", subject, flags=re.IGNORECASE)
-                    subject = " ".join(subject.split()).strip(" .:-")
-                    if len(subject) >= 8:
-                        research_queries = [subject[:180]]
-                homepage_price_lookup = bool(
-                    re.search(r"(?i)\b(?:cheapest|lowest[- ]priced|lowest price)\b", objective)
-                    and re.search(r"(?i)\bweylandts\.co\.za\b", objective)
-                    and re.search(r"(?i)\bhomepage\b", objective)
-                )
-                if homepage_price_lookup:
-                    initial_plan = DecisionPlan.model_validate({
-                        **initial_plan.model_dump(mode="python"),
-                        "status": "ready",
-                        "target_url": "https://www.weylandts.co.za/",
-                        "site_name": "Weylandts",
-                        "clarification_question": None,
-                        "summary": "Inspect the Weylandts homepage product listings and compare their displayed prices.",
-                        "steps": [
-                            {"step_id": "open-homepage", "capability": "navigate", "objective": "Open the Weylandts homepage."},
-                            {"step_id": "extract-homepage-products", "capability": "extract", "objective": "Extract every visible homepage product name, price and product URL."},
-                            {"step_id": "compare-prices", "capability": "extract", "objective": "Compare numeric prices and identify the minimum."}
-                        ],
-                    })
-                    research_queries = []
-                    record["max_rounds"] = 1
-                    self._log(task_id, "Focused homepage price lookup detected; bypassing search discovery and unrelated source exploration.")
+                    return
+
+                explicit_target = target_url_from_objective(objective)
+                if not explicit_target:
+                    question = "Which website URL should I audit or test?"
+                    record["status"] = "needs_clarification"
+                    record["plan"] = {
+                        "status": "needs_clarification",
+                        "summary": "An SEO or QA workflow requires a target website.",
+                        "clarification_question": question,
+                        "steps": [],
+                    }
+                    self._log(task_id, question, "warning")
+                    self._persist(task_id)
+                    return
+
+                self._log(task_id, "Preparing dedicated " + workflow.value.upper() + " workflow")
+                blueprint = build_workflow_blueprint(objective, workflow)
+                record["execution_blueprint"] = blueprint.model_dump(mode="json")
+                record["execution_plan"] = initialise_plan(record["execution_blueprint"])
+                record["workflow_summary"] = blueprint.interpretation
+                record["research_queries"] = []
+                from urllib.parse import urlsplit
+                first_subtask = blueprint.subtasks[0]
+                initial_plan = DecisionPlan.model_validate({
+                    "status": "ready",
+                    "summary": blueprint.interpretation,
+                    "site_name": urlsplit(explicit_target).hostname,
+                    "target_url": explicit_target,
+                    "steps": [{
+                        "step_id": first_subtask.subtask_id,
+                        "capability": first_subtask.capability.value,
+                        "objective": first_subtask.objective,
+                    }],
+                })
+                self._log(task_id, workflow.value.upper() + " workflow planned: " + str(len(blueprint.success_criteria)) + " acceptance criteria and " + str(len(blueprint.subtasks)) + " workflow steps")
+                self._persist(task_id)
+                research_queries = []
                 if initial_plan.status == DecisionStatus.READY and research_queries and not explicit_target:
                     from urllib.parse import quote
                     initial_plan = DecisionPlan.model_validate({
