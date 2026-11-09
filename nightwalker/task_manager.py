@@ -1349,7 +1349,8 @@ class TaskManager:
                     "finding_priority_counts": priority_counts,
                 }
                 limitations.append(
-                    f"Crawl visited {len(visited_urls)} pages from {coverage['discovered_url_count']} known discovered URLs "
+                    f"Crawl inspected {len(crawl_pages)} pages and visited {coverage['visited_url_count']} distinct URLs "
+                    f"from {coverage['discovered_url_count']} known discovered URLs "
                     f"({coverage['coverage_percent'] if coverage['coverage_percent'] is not None else 'not measurable'}% coverage). "
                     "This is bounded discovery coverage, not proof that every URL on the website was found."
                 )
