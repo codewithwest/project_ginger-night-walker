@@ -946,6 +946,28 @@ class BrowserRuntime:
                         "type": "broken_internal_link", "severity": "high",
                         "affected_urls": [check.get("url")], "source_url": page.url,
                     })
+            for journey in (audit_signals.get("qa_navigation_journeys") or {}).get("checks", [])[:20]:
+                if journey.get("ok") is False:
+                    audit_findings.append({
+                        "claim": f"Same-origin navigation journey failed for {journey.get('url')}: "
+                                 f"{journey.get('status') or journey.get('error') or 'off-origin redirect'}",
+                        "type": "qa_navigation_failure", "severity": "high",
+                        "affected_urls": [journey.get("url")],
+                    })
+            for interaction in (audit_signals.get("qa_interaction_journeys") or {}).get("checks", [])[:10]:
+                if interaction.get("ok") is False:
+                    audit_findings.append({
+                        "claim": f"Reversible disclosure interaction did not complete and restore cleanly: {interaction.get('label') or 'unnamed control'}",
+                        "type": "qa_interaction_issue", "severity": "low",
+                        "affected_urls": [page.url],
+                    })
+            for event in (audit_signals.get("qa_runtime_events") or [])[:20]:
+                if event.get("kind") in {"console_error", "page_error"}:
+                    audit_findings.append({
+                        "claim": f"Browser {event.get('kind')}: {event.get('message', '')[:240]}",
+                        "type": "qa_browser_error", "severity": "medium",
+                        "affected_urls": [event.get("url") or page.url],
+                    })
             for viewport in (audit_signals.get("qa_extended") or {}).get("responsive_viewports", []):
                 if viewport.get("horizontal_overflow"):
                     audit_findings.append({
