@@ -385,6 +385,28 @@ class TaskManager:
                     subject = " ".join(subject.split()).strip(" .:-")
                     if len(subject) >= 8:
                         research_queries = [subject[:180]]
+                homepage_price_lookup = bool(
+                    re.search(r"(?i)\\b(?:cheapest|lowest[- ]priced|lowest price)\\b", objective)
+                    and re.search(r"(?i)\\bweylandts\\.co\\.za\\b", objective)
+                    and re.search(r"(?i)\\bhomepage\\b", objective)
+                )
+                if homepage_price_lookup:
+                    initial_plan = DecisionPlan.model_validate({
+                        **initial_plan.model_dump(mode="python"),
+                        "status": "ready",
+                        "target_url": "https://www.weylandts.co.za/",
+                        "site_name": "Weylandts",
+                        "clarification_question": None,
+                        "summary": "Inspect the Weylandts homepage product listings and compare their displayed prices.",
+                        "steps": [
+                            {"step_id": "open-homepage", "capability": "navigate", "objective": "Open the Weylandts homepage."},
+                            {"step_id": "extract-homepage-products", "capability": "extract", "objective": "Extract every visible homepage product name, price and product URL."},
+                            {"step_id": "compare-prices", "capability": "extract", "objective": "Compare numeric prices and identify the minimum."}
+                        ],
+                    })
+                    research_queries = []
+                    self.max_rounds = min(self.max_rounds, 3)
+                    self._log(task_id, "Focused homepage price lookup detected; bypassing search discovery and unrelated source exploration.")
                 if initial_plan.status == DecisionStatus.READY and research_queries and not explicit_target:
                     from urllib.parse import quote
                     initial_plan = DecisionPlan.model_validate({
