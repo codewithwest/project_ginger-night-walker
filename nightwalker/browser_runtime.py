@@ -565,6 +565,11 @@ class BrowserRuntime:
                 body_text = await page.locator("body").evaluate(
                     "element => (element.innerText || '').slice(0, 20000)"
                 )
+            from nightwalker.page_signals import collect_page_signals, page_signal_findings
+            audit_signals = await collect_page_signals(page)
+            from nightwalker.workflows import classify_workflow
+            workflow_type = classify_workflow(objective).value
+            audit_findings = page_signal_findings(audit_signals, workflow_type)
             wants_products = bool(re.search(r"(?i)\b(product|products|item|items|price|pricing)\b", objective))
             products = self._extract_products_from_text(body_text, limit=200) if wants_products else []
             if wants_products:
@@ -608,7 +613,7 @@ class BrowserRuntime:
             retrieved_at = __import__("datetime").datetime.now(
                 __import__("datetime").UTC
             ).isoformat()
-            findings = []
+            findings = list(audit_findings)
             if title:
                 findings.append({
                     "claim": f"Page title: {title}",
@@ -643,11 +648,20 @@ class BrowserRuntime:
                 "retrieved_at": retrieved_at,
             }]
             structured_data = {"products": products} if products else {}
+            if workflow_type in {"seo", "seo_qa"}:
+                structured_data["seo_checks"] = audit_signals.get("seo", {})
+            if workflow_type in {"qa", "seo_qa"}:
+                structured_data["qa_checks"] = audit_signals.get("qa", {})
             limitations = list(issues)
+            if workflow_type in {"seo", "seo_qa"}:
+                limitations.append("Page-level SEO signals only: robots.txt, XML sitemap coverage, full-site crawl completeness, structured-data validation and field Core Web Vitals are not yet measured.")
+            if workflow_type in {"qa", "seo_qa"}:
+                limitations.append("Read-only QA smoke check only: interactive journeys, form submission, keyboard navigation, cross-viewport rendering and automated accessibility rules are not yet executed.")
             if not body_text.strip():
                 limitations.append("No visible page text was available to analyse.")
             report = {
                 "schema_version": "1.0",
+                "workflow_type": workflow_type,
                 "answer": answer or (
                     f"Captured the page “{title}” and its visible content."
                     if title else "Captured page content; no concise answer was inferred."
