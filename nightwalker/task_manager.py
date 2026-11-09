@@ -853,6 +853,7 @@ class TaskManager:
                                 plan_step_urls.setdefault(step["step_id"], result.get("final_url") or next_url)
                             if capability == "navigate" and (
                                 int(step.get("index") or 0) == 1
+                                or str(step.get("step_id", "")).endswith(("seo-discover", "qa-discover"))
                                 or any(term in objective_text for term in ("homepage", "home page", "starting page"))
                             ):
                                 verified_result = f"Captured {source.get('title') or final_url}"
