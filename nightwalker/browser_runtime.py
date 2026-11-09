@@ -951,7 +951,7 @@ class BrowserRuntime:
             )
             http_status = response.status if response else None
             product_search_requested = bool(re.search(
-                r'(?i)search\\s+for\\s+[“"\\'][^”"\\']{1,100}[”"\\']', objective
+                r'(?i)search\s+for\s+[“"\'][^”"\']{1,100}[”"\']', objective
             ))
             qa_product_search = (
                 await self._run_product_search_smoke(page, objective)
