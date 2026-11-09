@@ -100,6 +100,9 @@ _REMEDIATION = {
     "duplicate_meta_description": "Write a distinct summary for each indexable page that accurately describes its content.",
     "duplicate_content": "Consolidate near-identical pages or add genuinely distinct, useful content and clear canonical signals.",
     "qa_responsive_issue": "Inspect the reported viewport and remove the element or layout rule causing horizontal overflow.",
+    "qa_navigation_failure": "Repair the destination or redirect so the same-origin link reaches a valid page; confirm the final URL remains within the intended site boundary.",
+    "qa_interaction_issue": "Review the disclosure control's event handling and expanded/collapsed state so it responds predictably and can be restored.",
+    "qa_browser_error": "Reproduce the browser exception or console error, identify the responsible script/resource and correct the underlying failure.",
     "qa_accessibility_issue": "Provide a programmatic accessible name or label, and ensure hidden content is not keyboard-focusable.",
     "qa_accessibility_warning": "Review semantic landmarks and keyboard navigation, then validate with an automated WCAG testing tool.",
     "seo_issue": "Correct the affected page's technical or on-page SEO signal and verify the rendered page again.",
@@ -113,6 +116,9 @@ _IMPACT = {
     "duplicate_meta_description": "Repeated snippets reduce the uniqueness and relevance of search-result descriptions.",
     "duplicate_content": "Substantially repeated page content can dilute indexation and make page selection ambiguous.",
     "qa_responsive_issue": "Horizontal overflow can hide content or controls on smaller screens.",
+    "qa_navigation_failure": "Broken or off-origin navigation can strand users or move them outside the expected application flow.",
+    "qa_interaction_issue": "A non-responsive disclosure can hide content or leave a control in an inconsistent state.",
+    "qa_browser_error": "Uncaught browser errors may break page functionality or prevent important interactions from working.",
     "qa_accessibility_issue": "Assistive technology or keyboard users may not be able to identify or operate the affected control.",
 }
 
