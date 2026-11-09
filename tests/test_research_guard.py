@@ -69,3 +69,10 @@ def test_loop_guard_restores_attempt_counts_and_recent_diagnostics():
         [{"url": "https://example.com/retry"}], []
     ) == [{"url": "https://example.com/retry", "label": ""}]
     assert restored.snapshot()["recent_outcomes"][0]["reason"] == "timeout"
+
+
+def test_candidate_filter_supports_larger_bounded_audit_queues():
+    guard = ResearchLoopGuard()
+    candidates = [{"url": f"https://example.com/{index}"} for index in range(250)]
+    filtered = guard.filter_candidates(candidates, [], limit=200)
+    assert len(filtered) == 200
