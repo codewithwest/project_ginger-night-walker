@@ -1199,3 +1199,18 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
 .finding-urls { display: grid; gap: 4px; }
 .finding-urls a { overflow-wrap: anywhere; color: var(--green); font: 9px "JetBrains Mono", monospace; text-decoration: none; }
 .finding-urls a:hover { text-decoration: underline; }
+
+
+/* Per-job timing and bottleneck breakdown */
+.mission-item__duration { display: block; margin-top: 7px; color: var(--muted, #8ba3a0); font: 10px "JetBrains Mono", monospace; }
+.job-duration { color: var(--ink, #e8f1ef); font-family: "JetBrains Mono", monospace; }
+.timing-panel { margin: 14px 0 18px; padding: 15px 16px; border: 1px solid var(--line, rgba(130,160,150,.2)); border-radius: 12px; background: var(--panel, rgba(20,35,34,.55)); }
+.timing-panel__top { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 15px; }
+.timing-panel__top strong { display: block; margin-top: 4px; }
+.timing-panel__total { font: 600 21px "JetBrains Mono", monospace; white-space: nowrap; }
+.timing-panel__phases { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; }
+.timing-phase__meta { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px; color: var(--muted, #9bb0ac); font: 11px "JetBrains Mono", monospace; text-transform: capitalize; }
+.timing-phase__track { height: 5px; overflow: hidden; border-radius: 9px; background: var(--line, rgba(130,160,150,.2)); }
+.timing-phase__track span { display: block; height: 100%; border-radius: inherit; background: var(--accent, #67c9ad); transition: width .25s ease; }
+.timing-panel__active { margin-top: 12px; color: var(--muted, #9bb0ac); font-size: 11px; }
+@media (max-width: 700px) { .timing-panel__phases { grid-template-columns: 1fr; } }
