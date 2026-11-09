@@ -404,12 +404,22 @@ class TaskManager:
             resume_in_flight = bool(checkpoint.get("round_in_progress", False))
             record["low_information_rounds"] = int(record.get("low_information_rounds", 0))
             effective_objective = self._effective_objective(task_id, objective)
-            if next_url and not rank_research_candidates(
-                effective_objective, [{"url": next_url, "label": next_assignment}]
-            ):
-                self._log(task_id, "Checkpoint recovery skipped the previously selected off-topic URL", "warning")
-                next_url = ""
-                resume_in_flight = False
+            if next_url:
+                audit_workflow = str(record.get("workflow_type") or "") in {"seo", "qa", "seo_qa"}
+                valid_resume_url = (
+                    bool(rank_crawl_candidates(
+                        [{"url": next_url, "label": next_assignment}], visited_urls,
+                        workflow=str(record.get("workflow_type")), limit=1,
+                    ))
+                    if audit_workflow else
+                    bool(rank_research_candidates(
+                        effective_objective, [{"url": next_url, "label": next_assignment}]
+                    ))
+                )
+                if not valid_resume_url:
+                    self._log(task_id, "Checkpoint recovery skipped an invalid or already-covered URL", "warning")
+                    next_url = ""
+                    resume_in_flight = False
             if not next_url and not research_complete:
                 if str(record.get("workflow_type") or "") in {"seo", "qa", "seo_qa"}:
                     inspected_templates = {
