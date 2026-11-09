@@ -1349,11 +1349,26 @@ class TaskManager:
                     check for page_record in interaction_records if isinstance(page_record, dict)
                     for check in page_record.get("checks", [])
                 ]
-                responsive_overflows = sum(
-                    bool(viewport.get("horizontal_overflow"))
+                responsive_viewports = [
+                    viewport
                     for page_record in structured_data.get("qa_extended", [])
                     if isinstance(page_record, dict)
                     for viewport in page_record.get("responsive_viewports", [])
+                ]
+                responsive_overflows = sum(
+                    bool(viewport.get("horizontal_overflow")) for viewport in responsive_viewports
+                )
+                focus_sequences = [
+                    page_record.get("keyboard_focus_sequence", [])
+                    for page_record in structured_data.get("qa_extended", [])
+                    if isinstance(page_record, dict)
+                ]
+                focus_steps_sampled = sum(
+                    1 for sequence in focus_sequences for item in sequence if item
+                )
+                accessibility_finding_count = sum(
+                    item.get("type") in {"qa_accessibility_issue", "qa_accessibility_warning"}
+                    for item in findings
                 )
                 runtime_events = structured_data.get("qa_runtime_events", [])
                 structured_data["audit_report_summary"] = {
@@ -1372,6 +1387,9 @@ class TaskManager:
                     "duplicate_meta_description_groups": len(duplicate_analysis["duplicate_meta_description_groups"]),
                     "duplicate_content_groups": len(duplicate_analysis["duplicate_content_groups"]),
                     "internal_links_checked": len(flattened_checks),
+                    "internal_link_pages_truncated": sum(
+                        bool(item.get("truncated")) for item in link_records if isinstance(item, dict)
+                    ),
                     "broken_internal_links": sum(
                         item.get("ok") is False and not item.get("off_origin_redirect")
                         for item in flattened_checks
@@ -1385,7 +1403,10 @@ class TaskManager:
                     "qa_interaction_controls_checked": len(interaction_checks),
                     "qa_interaction_controls_passed": sum(item.get("ok") is True for item in interaction_checks),
                     "qa_interaction_controls_failed": sum(item.get("ok") is False for item in interaction_checks),
+                    "responsive_viewports_checked": len(responsive_viewports),
                     "responsive_viewport_overflows": responsive_overflows,
+                    "keyboard_focus_steps_sampled": focus_steps_sampled,
+                    "accessibility_findings": accessibility_finding_count,
                     "browser_console_errors": sum(item.get("kind") == "console_error" for item in runtime_events if isinstance(item, dict)),
                     "browser_page_errors": sum(item.get("kind") == "page_error" for item in runtime_events if isinstance(item, dict)),
                     "failed_network_requests": sum(item.get("kind") == "request_failed" for item in runtime_events if isinstance(item, dict)),
