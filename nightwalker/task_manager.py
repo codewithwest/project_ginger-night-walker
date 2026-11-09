@@ -745,7 +745,10 @@ class TaskManager:
                             capability = str(step.get("capability") or "").casefold()
                             objective_text = str(step.get("objective") or "").casefold()
                             verified_result = None
-                            if capability == "navigate":
+                            if capability == "navigate" and (
+                                int(step.get("index") or 0) == 1
+                                or any(term in objective_text for term in ("homepage", "home page", "starting page"))
+                            ):
                                 verified_result = f"Captured {source.get('title') or final_url}"
                             elif capability == "extract" and products:
                                 detail_lookup = any(term in objective_text for term in ("retrieve details", "open product", "product page", "visit product"))
