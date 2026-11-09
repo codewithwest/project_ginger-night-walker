@@ -61,7 +61,7 @@ class OllamaClient:
             setting = None
         if setting is not None and setting.strip():
             return setting.strip()
-        return self._keep_alive_for_model(model).strip() or "0"
+        return os.getenv("OLLAMA_KEEP_ALIVE", "0").strip() or "0"
 
     def _headers(
         self, *, agent: str = "night-walker", capability: str = "general",
