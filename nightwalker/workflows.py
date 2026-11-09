@@ -79,6 +79,7 @@ def build_workflow_blueprint(objective: str, workflow: WorkflowType) -> Executio
             ("seo-technical", "Inspect technical SEO signals on the target and discovered pages.", Capability.EXTRACT, ["seo-technical"]),
             ("seo-page", "Inspect page-level metadata, headings, content and image signals.", Capability.EXTRACT, ["seo-metadata", "seo-content"]),
             ("seo-links", "Inspect internal links and verify selected same-site destinations.", Capability.INTERACT, ["seo-links"]),
+            ("seo-crawl", "Continue the deterministic same-origin crawl until discovered URLs or the page budget are exhausted.", Capability.NAVIGATE, []),
             ("seo-synthesise", "Prioritise evidence-backed SEO issues and remediation.", Capability.EXTRACT, ["seo-report"]),
         ]
     elif workflow == WorkflowType.QA:
@@ -94,6 +95,7 @@ def build_workflow_blueprint(objective: str, workflow: WorkflowType) -> Executio
             ("qa-availability", "Check page availability and record navigation failures.", Capability.EXTRACT, ["qa-availability"]),
             ("qa-navigation", "Inspect internal navigation and verify selected destinations.", Capability.INTERACT, ["qa-navigation"]),
             ("qa-content", "Inspect page structure and visible content for observable defects.", Capability.EXTRACT, ["qa-content"]),
+            ("qa-crawl", "Continue the deterministic same-origin QA crawl until discovered URLs or the page budget are exhausted.", Capability.NAVIGATE, []),
             ("qa-synthesise", "Produce a QA report with evidence and tested/untested boundaries.", Capability.EXTRACT, ["qa-report"]),
         ]
     elif workflow == WorkflowType.SEO_QA:
@@ -106,7 +108,20 @@ def build_workflow_blueprint(objective: str, workflow: WorkflowType) -> Executio
         seo = build_workflow_blueprint(objective, WorkflowType.SEO)
         qa = build_workflow_blueprint(objective, WorkflowType.QA)
         criteria = [item.model_dump() for item in seo.success_criteria + qa.success_criteria]
-        tasks = [item.model_dump() for item in seo.subtasks + qa.subtasks]
+        seo_tasks = [
+            item for item in seo.subtasks
+            if item.subtask_id not in {"seo-crawl", "seo-synthesise"}
+        ]
+        qa_tasks = [
+            item for item in qa.subtasks
+            if item.subtask_id not in {"qa-crawl", "qa-synthesise"}
+        ]
+        seo_synthesis = next(item for item in seo.subtasks if item.subtask_id == "seo-synthesise")
+        qa_synthesis = next(item for item in qa.subtasks if item.subtask_id == "qa-synthesise")
+        tasks = [
+            item.model_dump()
+            for item in [*seo_tasks, *qa_tasks, seo_synthesis, qa_synthesis]
+        ]
         # Prefix IDs to keep both workstreams independent and the graph unambiguous.
         for item in criteria:
             item["criterion_id"] = "combined-" + item["criterion_id"]
@@ -114,7 +129,14 @@ def build_workflow_blueprint(objective: str, workflow: WorkflowType) -> Executio
             item["subtask_id"] = "combined-" + item["subtask_id"]
             item["success_criteria"] = ["combined-" + value for value in item["success_criteria"]]
             item["depends_on"] = ["combined-" + value for value in item["depends_on"]]
-        # Both workstreams begin from a shared discovery step; dependencies remain local.
+        # One long-running crawl step authorises every subsequent same-origin page.
+        tasks.insert(-2, {
+            "subtask_id": "combined-audit-crawl",
+            "objective": "Continue the deterministic same-origin crawl for both workstreams until discovered URLs or the page budget are exhausted.",
+            "capability": Capability.NAVIGATE,
+            "success_criteria": [],
+            "depends_on": [],
+        })
         criteria = criteria[:12]
         tasks = tasks[:20]
 
