@@ -114,22 +114,37 @@ def _support_for_type(
             or ("h1" in claim and int(r.get("h1_count") or 0) == 0)
         )]
     elif kind in {"qa_accessibility_issue", "qa_accessibility_warning"}:
-        matched = [r for r in records if (
-            r.get("dataset") == "qa_checks" and (
-                ("accessible name" in claim and int(r.get("controls_without_accessible_name") or 0) > 0)
-                or ("duplicate" in claim and bool(r.get("duplicate_ids")))
-            )
-        ) or (
-            r.get("dataset") == "qa_extended" and any(
-                isinstance(value, (int, float)) and value > 0
-                for key, value in (r.get("semantic_accessibility") or {}).items()
-                if key in {"visible_form_controls_without_label", "links_without_accessible_name",
-                           "buttons_without_accessible_name", "focusable_inside_aria_hidden",
-                           "broken_aria_labelledby_references", "generic_link_names",
-                           "nested_interactive_controls", "positive_tabindex_count",
-                           "tables_without_header_cells", "target_blank_without_noopener"}
-            )
-        )]
+        semantic_fields = {
+            "form control": "visible_form_controls_without_label",
+            "link": "links_without_accessible_name",
+            "button": "buttons_without_accessible_name",
+            "focusable": "focusable_inside_aria_hidden",
+            "aria-labelledby": "broken_aria_labelledby_references",
+            "generic": "generic_link_names",
+            "nested interactive": "nested_interactive_controls",
+            "positive tabindex": "positive_tabindex_count",
+            "table": "tables_without_header_cells",
+            "new-tab": "target_blank_without_noopener",
+        }
+        expected_field = next((field for phrase, field in semantic_fields.items() if phrase in claim), None)
+        for record in records:
+            if record.get("dataset") == "qa_checks":
+                if "accessible name" in claim and int(record.get("controls_without_accessible_name") or 0) > 0:
+                    matched.append(record)
+                elif "duplicate" in claim and bool(record.get("duplicate_ids")):
+                    matched.append(record)
+            if record.get("dataset") == "qa_extended":
+                semantic = record.get("semantic_accessibility") or {}
+                if expected_field and int(semantic.get(expected_field) or 0) > 0:
+                    matched.append(record)
+                elif "main landmark" in claim:
+                    main_count = int((semantic.get("landmark_counts") or {}).get("main") or 0)
+                    if main_count == 0 or ("multiple" in claim and main_count > 1):
+                        matched.append(record)
+                elif "document title" in claim and semantic.get("document_title_missing"):
+                    matched.append(record)
+                elif "document language" in claim and semantic.get("document_language_missing"):
+                    matched.append(record)
     elif kind == "qa_dom_issue":
         matched = [r for r in records if r.get("dataset") == "qa_checks" and bool(r.get("duplicate_ids"))]
     elif kind == "qa_interaction_issue":
