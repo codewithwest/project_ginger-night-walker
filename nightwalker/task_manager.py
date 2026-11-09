@@ -1389,6 +1389,14 @@ class TaskManager:
                     limitations.append(
                         f"{coverage['known_discovered_urls_remaining']} discovered same-origin URL(s) remained unvisited when the crawl ended."
                     )
+                if sitemap_urls_beyond_sample_cap:
+                    limitations.append(
+                        f"{sitemap_urls_beyond_sample_cap} allowed sitemap URL(s) were beyond the configured 1,000-URL sitemap sample cap."
+                    )
+                if robots_policy_blocked:
+                    limitations.append(
+                        "robots.txt could not be read reliably; further crawling was conservatively paused and crawl coverage remains unverified."
+                    )
             if round_count >= int(record.get("max_rounds", self.max_rounds)) and candidates:
                 limitations.append(f"Maximum page/crawl budget of {record.get('max_rounds', self.max_rounds)} reached.")
             if sources:
@@ -1414,6 +1422,7 @@ class TaskManager:
                             f"{summary.get('pages_inspected', 0)} page(s) inspected; "
                             f"{summary.get('crawl_coverage_percent') if summary.get('crawl_coverage_percent') is not None else 'unknown'}% "
                             "of known discovered URLs visited; "
+                            f"crawl completion={'complete' if summary.get('crawl_complete') else 'incomplete'}; "
                             f"{summary.get('broken_internal_links', 0)} broken internal destination(s) confirmed; "
                             f"{summary.get('duplicate_title_groups', 0)} duplicate-title group(s); "
                             f"{summary.get('duplicate_meta_description_groups', 0)} duplicate-description group(s); "
