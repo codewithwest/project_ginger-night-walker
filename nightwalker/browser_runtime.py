@@ -1155,6 +1155,9 @@ class BrowserRuntime:
                 }
                 structured_data["internal_link_checks"] = audit_signals.get("internal_link_checks", {})
             if workflow_type in {"qa", "seo_qa"}:
+                # Preserve the page-level DOM/image/title signals used to validate QA findings,
+                # including site-wide QA pages that do not use the single-page smoke contract.
+                structured_data["qa_page_signals"] = audit_signals.get("seo", {})
                 structured_data["qa_checks"] = audit_signals.get("qa", {})
                 if audit_signals.get("qa_page_smoke"):
                     structured_data["qa_page_smoke"] = audit_signals["qa_page_smoke"]
