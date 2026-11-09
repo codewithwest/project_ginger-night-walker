@@ -1516,9 +1516,11 @@ class TaskManager:
                             for item in crawl_pages if isinstance(item, dict)
                         })
                     },
-                    "budget_utilisation_percent": round(
-                        min(100, len(crawl_pages) / max(1, int(record.get("max_rounds", self.max_rounds))) * 100), 1
+                    "budget_utilisation_percent": (
+                        None if workflow_value == "qa" and record.get("qa_scope") == "single_page"
+                        else round(min(100, len(crawl_pages) / max(1, int(record.get("max_rounds", self.max_rounds))) * 100), 1)
                     ),
+                    "page_budget_applicable": not (workflow_value == "qa" and record.get("qa_scope") == "single_page"),
                     "known_discovered_url_count": coverage["discovered_url_count"],
                     "eligible_discovered_url_count": coverage["eligible_url_count"],
                     "excluded_url_count": coverage["excluded_url_count"],
