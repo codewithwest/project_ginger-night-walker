@@ -73,6 +73,9 @@ def test_page_smoke_qa_defaults_to_single_requested_url():
     assert "qa-coverage" not in criterion_ids
     assert "qa-page-smoke" in criterion_ids
     assert "qa-validation" in criterion_ids
+    product_step = next(item for item in blueprint.subtasks if item.subtask_id == "qa-content")
+    assert "If absent, discover a same-origin product/shop page" in product_step.objective
+    assert "Search for the requested product only when a usable control is found" in product_step.objective
 
 
 def test_explicit_site_wide_phrasing_enables_qa_crawl():
