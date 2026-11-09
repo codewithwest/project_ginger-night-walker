@@ -35,7 +35,7 @@ flowchart LR
     P --> B[Playwright Browser Runtime]
     B --> W[Public websites]
     B --> E[Evidence Store]
-    E --> R[Structured research report]
+    E --> R[Structured SEO / QA audit report]
     R --> UI[Control Centre]
     R -. suggested knowledge only .-> M[Ginger memory policy]
 ```
