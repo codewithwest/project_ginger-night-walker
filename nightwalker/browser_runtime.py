@@ -14,8 +14,8 @@ import httpx
 from playwright.async_api import Browser, BrowserContext, Page, Route, async_playwright
 
 from nightwalker.evidence import EvidenceStore
-from nightwalker.policy import PolicyEngine
 from nightwalker.execution_control import ElementResolver
+from nightwalker.policy import PolicyEngine
 
 
 class BrowserRuntime:
@@ -37,6 +37,7 @@ class BrowserRuntime:
         self.backend = os.getenv("BROWSER_BACKEND", "local").strip().lower()
         if self.backend not in {"local", "steel"}:
             raise ValueError("BROWSER_BACKEND must be 'local' or 'steel'")
+        self._allow_private_networks = os.getenv("ALLOW_PRIVATE_NETWORKS", "false").strip().lower() == "true"
         self.policy = PolicyEngine()
         self.element_resolver = ElementResolver()
         self.evidence = EvidenceStore()
@@ -334,7 +335,8 @@ class BrowserRuntime:
         async def guard_request(route: Route) -> None:
             try:
                 await asyncio.to_thread(
-                    self.policy.validate_url, route.request.url, allow_private_networks=False
+                    self.policy.validate_url, route.request.url,
+                    allow_private_networks=self._allow_private_networks,
                 )
             except (PermissionError, ValueError):
                 await route.abort("blockedbyclient")
@@ -487,8 +489,8 @@ class BrowserRuntime:
     ) -> dict:
         """Inspect robots.txt and bounded same-origin sitemap indexes/URL sets once per task origin."""
         from html import unescape
-        from urllib.robotparser import RobotFileParser
         from urllib.parse import urljoin
+        from urllib.robotparser import RobotFileParser
 
         origin = urlparse(page.url)
         base = f"{origin.scheme}://{origin.netloc}/"
@@ -564,13 +566,13 @@ class BrowserRuntime:
 
         def loc_values(xml_text: str) -> tuple[str, list[str]]:
             # Bounded tag extraction avoids expanding untrusted XML entities.
-            root_match = re.search(r"<\s*(?:[a-z0-9_-]+:)?(sitemapindex|urlset)\b", xml_text, re.I)
+            root_match = re.search(r"<\s*(?:[a-z0-9_-]+:)?(sitemapindex|urlset)\b", xml_text, re.IGNORECASE)
             root_name = root_match.group(1).casefold() if root_match else ""
             values = [
                 unescape(match).strip()
                 for match in re.findall(
                     r"<(?:[a-z0-9_-]+:)?loc\b[^>]*>\s*(.*?)\s*</(?:[a-z0-9_-]+:)?loc\s*>",
-                    xml_text, flags=re.I | re.S,
+                    xml_text, flags=re.IGNORECASE | re.DOTALL,
                 )
                 if match.strip()
             ]
@@ -931,11 +933,14 @@ class BrowserRuntime:
                 body_text = await page.locator("body").evaluate(
                     "element => (element.innerText || '').slice(0, 20000)"
                 )
-            from nightwalker.page_signals import (
-                collect_internal_link_checks, collect_page_signals,
-                collect_qa_extended_signals, page_signal_findings, qa_extended_findings,
-            )
             from nightwalker.audit_analysis import content_fingerprint
+            from nightwalker.page_signals import (
+                collect_internal_link_checks,
+                collect_page_signals,
+                collect_qa_extended_signals,
+                page_signal_findings,
+                qa_extended_findings,
+            )
             audit_signals = await collect_page_signals(page)
             x_robots_tag = (response.headers.get("x-robots-tag") if response else None)
             audit_signals.setdefault("seo", {})["x_robots_tag"] = x_robots_tag
@@ -1032,7 +1037,7 @@ class BrowserRuntime:
                         price_match = re.search(r'(?i)R\s*[\d,]+(?:\.\d{2})?', item["price"])
                         if price_match:
                             products.append({"name": item["name"][:180], "price": price_match.group(0), "url": item["url"]})
-                except Exception:
+                except Exception:  # noqa: BLE001 S110 - card product extraction is best-effort; silent skip is intentional
                     pass
                 deduped = {}
                 for item in products:
@@ -1159,7 +1164,7 @@ class BrowserRuntime:
                 finding["source_ids"] = ["s-001"]
                 finding["evidence_ids"] = [evidence_id]
             return {
-                "status": "completed" if body_text.strip() and not issues else "blocked",
+                "status": "completed" if body_text.strip() and http_status is not None and http_status < 400 else "blocked",
                 **report,
                 "final_url": page.url,
                 "http_status": http_status,

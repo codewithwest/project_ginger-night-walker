@@ -50,7 +50,7 @@ def classify_workflow(objective: str) -> WorkflowType:
 
 def target_url_from_objective(objective: str) -> str | None:
     match = re.search(
-        r"(?i)\bhttps?://[^\s<>\"']+|\bwww\.[a-z0-9.-]+\.[a-z]{2,}(?:/[^\s<>\"']*)?|\b[a-z0-9-]+(?:\.[a-z0-9-]+)+\b",
+        r"(?i)\bhttps?://[^\s<>\"']+|\bwww\.[a-z0-9.-]+\.[a-z]{2,}(?:/[^\s<>\"']*)?|\b[a-z0-9-]+(?:\.[a-z]{2,})(?:\.[a-z]{2,})?(?:/[^\s<>\"']*)?\b",
         objective,
     )
     if not match:
@@ -59,7 +59,12 @@ def target_url_from_objective(objective: str) -> str | None:
     if not value.startswith(("http://", "https://")):
         value = "https://" + value
     parsed = urlsplit(value)
-    if not parsed.hostname or "." not in parsed.hostname:
+    hostname = parsed.hostname or ""
+    if not hostname or "." not in hostname:
+        return None
+    # Reject purely numeric hostnames (e.g. version numbers like "1.0", "3.14")
+    tld = hostname.rsplit(".", 1)[-1]
+    if not tld or tld.isdigit() or len(tld) < 2:
         return None
     return value
 

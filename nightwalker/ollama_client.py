@@ -12,8 +12,8 @@ from pydantic import ValidationError
 from nightwalker.agent_headers import agent_headers
 from nightwalker.context_compiler import ContextCompiler
 from nightwalker.contracts import AgentResult, AgentTask, Capability
-from nightwalker.execution_control import DEFAULT_TOOL_REGISTRY, ToolSelection
 from nightwalker.decision_contracts import DecisionPlan
+from nightwalker.execution_control import DEFAULT_TOOL_REGISTRY, ToolSelection
 from nightwalker.goal_state import GoalCriteriaPlan, GoalProgressProposal
 from nightwalker.model_registry import ModelRegistry
 from nightwalker.planning_contracts import ExecutionBlueprint
@@ -50,6 +50,7 @@ class OllamaClient:
         self.registry = ModelRegistry()
         self.compiler = ContextCompiler()
         self.inference_events: list[dict[str, Any]] = []
+        self._inference_events_max = 500
         self.logger = logging.getLogger(__name__)
 
     async def _post_inference(self, client: httpx.AsyncClient, url: str, **kwargs: Any) -> httpx.Response:
@@ -71,8 +72,6 @@ class OllamaClient:
                 envelope = {}
             outcome = "success"
             return response
-        except Exception:
-            raise
         finally:
             elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
             def ms(key: str) -> float | None:
@@ -97,7 +96,7 @@ class OllamaClient:
                 "completion_tokens": envelope.get("eval_count"),
             }
             self.inference_events.append(event)
-            self.inference_events = self.inference_events[-500:]
+            self.inference_events = self.inference_events[-self._inference_events_max:]
             self.logger.info("ollama_inference %s", json.dumps(event, separators=(",", ":")))
 
     def inference_events_for_task(self, task_id: str, limit: int = 100) -> list[dict[str, Any]]:
@@ -257,7 +256,7 @@ class OllamaClient:
     async def decide_task(self, objective: str, task_id: str | None = None) -> DecisionPlan:
         """Turn one natural-language request into a bounded, capability-scoped plan."""
         base_url = self._require_base_url("DECIDER")
-        model = os.getenv("OLLAMA_MODEL_DEFAULT", "qwen3.5:9b")
+        model = self.registry.model_for(Capability.NAVIGATE)
         schema = DecisionPlan.model_json_schema()
         system_prompt = (
             "You are Ginger Night Walker's Decider. Convert the user's request into an "
@@ -385,7 +384,7 @@ class OllamaClient:
     async def create_execution_blueprint(self, objective: str, task_id: str | None = None) -> ExecutionBlueprint:
         """Plan measurable success, subtasks, dependencies and tool needs before allocation."""
         base_url = self._require_base_url("DECIDER")
-        model = os.getenv("OLLAMA_MODEL_DEFAULT", "qwen3.5:9b")
+        model = self.registry.model_for(Capability.NAVIGATE)
         schema = ExecutionBlueprint.model_json_schema()
         system_prompt = (
             "You are Ginger's goal analyst and execution architect. Before any agent is assigned, "
@@ -679,7 +678,7 @@ class OllamaClient:
     ) -> ResearchRoundPlan:
         """Choose only from browser-discovered URLs; context is a compact task packet."""
         base_url = self._require_base_url("DECIDER")
-        model = os.getenv("OLLAMA_MODEL_DEFAULT", "qwen3.5:9b")
+        model = self.registry.model_for(Capability.NAVIGATE)
         allowed = [
             item for item in candidates
             if item.get("url") and item["url"] not in set(visited_urls)
@@ -792,7 +791,7 @@ class OllamaClient:
     ) -> ResearchSynthesis:
         """Produce a concise synthesis from captured observations, not raw conversation history."""
         base_url = self._require_base_url("SYNTHESIS")
-        model = os.getenv("OLLAMA_MODEL_DEFAULT", "qwen3.5:9b")
+        model = self.registry.model_for(Capability.NAVIGATE)
         compact_findings = [
             {
                 "claim": item.get("claim", "")[:250],

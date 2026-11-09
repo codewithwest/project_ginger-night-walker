@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import uuid4
@@ -13,6 +14,8 @@ from nightwalker.contracts import AgentTask, BrowserExtractRequest
 from nightwalker.ollama_client import OllamaUnavailable
 from nightwalker.orchestrator import Orchestrator
 from nightwalker.task_manager import TaskManager
+
+logger = logging.getLogger(__name__)
 
 browser = BrowserRuntime()
 orchestrator = Orchestrator(browser)
@@ -37,8 +40,15 @@ class TaskFollowUpRequest(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await browser.start()
-    await task_manager.restore_and_resume()
+    try:
+        await browser.start()
+    except Exception as exc:
+        logger.critical("Browser runtime failed to start: %s", exc, exc_info=True)
+        raise
+    try:
+        await task_manager.restore_and_resume()
+    except Exception:
+        logger.exception("Task state restore failed (continuing with empty state)")
     try:
         yield
     finally:

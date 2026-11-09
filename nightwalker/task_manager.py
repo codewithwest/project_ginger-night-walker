@@ -9,25 +9,40 @@ from typing import Any
 from nightwalker.a2a import A2ABus
 from nightwalker.agent_allocator import AgentAllocator
 from nightwalker.contracts import AgentTask
+from nightwalker.crawl_intelligence import (
+    candidate_exclusion_reason,
+    crawl_candidate_metrics,
+    rank_crawl_candidates,
+)
 from nightwalker.decision_contracts import DecisionPlan, DecisionStatus, normalise_decision_plan
+from nightwalker.execution_control import ActionVerifier
 from nightwalker.goal_state import GoalStateManager
 from nightwalker.ollama_client import OllamaUnavailable
-from nightwalker.plan_execution import complete_step, fail_step, initialise_plan, ready_steps, start_step
 from nightwalker.orchestrator import Orchestrator
-from nightwalker.execution_control import ActionVerifier
-from nightwalker.run_trace import TaskRunTraceStore
+from nightwalker.plan_execution import (
+    complete_step,
+    fail_step,
+    initialise_plan,
+    ready_steps,
+    start_step,
+)
 from nightwalker.research_guard import ResearchLoopGuard, canonical_url_key
 from nightwalker.research_relevance import (
     focused_research_queries,
     rank_research_candidates,
     source_relevance,
 )
+from nightwalker.run_trace import TaskRunTraceStore
 from nightwalker.scratchpad import TaskScratchpad
 from nightwalker.task_checklist import TaskChecklist
 from nightwalker.task_state_store import TaskStateStore
 from nightwalker.task_timing import TaskTiming
-from nightwalker.crawl_intelligence import candidate_exclusion_reason, crawl_candidate_metrics, rank_crawl_candidates
-from nightwalker.workflows import WorkflowType, build_workflow_blueprint, classify_workflow, target_url_from_objective
+from nightwalker.workflows import (
+    WorkflowType,
+    build_workflow_blueprint,
+    classify_workflow,
+    target_url_from_objective,
+)
 
 
 class TaskManager:
@@ -325,7 +340,7 @@ class TaskManager:
             plan = record.get("execution_plan") or {}
             steps = plan.get("steps") or []
             summary["timing"] = self.timing.snapshot(record)
-            summary["inference_events"] = self.orchestrator.ollama.inference_events_for_task(task_id, limit=20)
+            summary["inference_events"] = self.orchestrator.ollama.inference_events_for_task(record["task_id"], limit=20)
             summary["plan_progress"] = {
                 "status": plan.get("status", "pending"),
                 "completed": sum(1 for step in steps if step.get("status") == "completed"),
@@ -486,6 +501,7 @@ class TaskManager:
                     }
                     record["error"] = None
                     self._log(task_id, "Task is outside the initial SEO/QA product scope; no general-research fallback was started.", "warning")
+                    self.timing.finish(record)
                     self._persist(task_id)
                     return
 
@@ -500,6 +516,7 @@ class TaskManager:
                         "steps": [],
                     }
                     self._log(task_id, question, "warning")
+                    self.timing.end(record)
                     self._persist(task_id)
                     return
 
@@ -525,30 +542,9 @@ class TaskManager:
                 })
                 self._log(task_id, workflow.value.upper() + " workflow planned: " + str(len(blueprint.success_criteria)) + " acceptance criteria and " + str(len(blueprint.subtasks)) + " workflow steps")
                 self._persist(task_id)
-                research_queries = []
-                if initial_plan.status == DecisionStatus.READY and research_queries and not explicit_target:
-                    from urllib.parse import quote
-                    initial_plan = DecisionPlan.model_validate({
-                        **initial_plan.model_dump(mode="python"),
-                        "target_url": "https://www.bing.com/search?q=" + quote(research_queries[0]),
-                        "site_name": "Web search",
-                        "summary": "Search using concise, objective-derived queries, then inspect independent sources.",
-                    })
-                    candidates.extend({
-                        "url": "https://www.bing.com/search?q=" + quote(query),
-                        "label": "Targeted research query: " + query[:180],
-                    } for query in research_queries[1:])
-                    self._log(task_id, f"Research planner generated {len(research_queries)} focused search queries; avoiding the full instruction prompt as a search term")
                 initial_plan = DecisionPlan.model_validate(initial_plan.__dict__)
-                record["research_queries"] = research_queries
+                record["research_queries"] = []
                 record["plan"] = initial_plan.model_dump(mode="json")
-                if blueprint is None:
-                    proposed_steps = [step.objective for step in initial_plan.steps]
-                    try:
-                        criteria = await self.orchestrator.ollama.initialise_goal_criteria(objective, proposed_steps, task_id=task_id)
-                    except (OllamaUnavailable, AttributeError) as exc:
-                        criteria = proposed_steps or [initial_plan.summary or objective]
-                        self._log(task_id, f"Goal criteria model unavailable; using planner steps: {exc}", "warning")
                 record["goal_state"] = GoalStateManager.initialise(objective, criteria)
                 if record.get("execution_plan") is None:
                     fallback_subtasks = []
@@ -1313,7 +1309,11 @@ class TaskManager:
             record["round"] = round_count
             workflow_value = str(record.get("workflow_type") or "")
             if workflow_value in {"seo", "qa", "seo_qa"}:
-                from nightwalker.audit_analysis import analyse_duplicate_pages, crawl_coverage, prioritise_findings
+                from nightwalker.audit_analysis import (
+                    analyse_duplicate_pages,
+                    crawl_coverage,
+                    prioritise_findings,
+                )
                 crawl_pages = structured_data.get("crawl_page", [])
                 duplicate_analysis = analyse_duplicate_pages(crawl_pages)
                 known_urls = list(record.get("discovered_urls") or [])
