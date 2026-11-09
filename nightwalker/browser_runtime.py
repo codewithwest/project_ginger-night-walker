@@ -589,17 +589,52 @@ class BrowserRuntime:
         # accidentally target newsletter/cart forms and is not evidence of search.
         form_info = await field.evaluate("""el => {
             const form = el.form || el.closest('form');
-            if (!form) return {has_form: false};
             window.__nwSearchSubmitObserved = false;
-            form.addEventListener('submit', () => {
-                window.__nwSearchSubmitObserved = true;
-            }, {capture: true, once: true});
-            return {has_form: true};
+            if (form) {
+                form.addEventListener('submit', () => {
+                    window.__nwSearchSubmitObserved = true;
+                }, {capture: true, once: true});
+            }
+            // Some storefronts use a JS-controlled search overlay: the input is
+            // not a form submitter and the adjacent magnifier button owns search.
+            let node = el.parentElement;
+            let iconButton = null;
+            for (let depth = 0; node && depth < 6; depth++, node = node.parentElement) {
+                const buttons = [...node.querySelectorAll('button, [role="button"], a')];
+                const visible = buttons.filter(b => {
+                    const s = getComputedStyle(b), r = b.getBoundingClientRect();
+                    return s.display !== 'none' && s.visibility !== 'hidden' &&
+                        r.width > 0 && r.height > 0 && !b.disabled;
+                });
+                const labelled = visible.filter(b =>
+                    /search|submit/i.test([
+                        b.getAttribute('aria-label'), b.getAttribute('title'),
+                        b.id, b.className, b.getAttribute('data-testid')
+                    ].join(' '))
+                );
+                if (labelled.length === 1) { iconButton = labelled[0]; break; }
+                const iconOnly = visible.filter(b =>
+                    b.querySelector('svg, i, [class*="icon"], [class*="search"]') &&
+                    !b.innerText.trim()
+                );
+                if (iconOnly.length === 1) { iconButton = iconOnly[0]; break; }
+                if (form && node === form) break;
+            }
+            if (iconButton) {
+                iconButton.setAttribute('data-nw-search-submit', 'true');
+            }
+            return {has_form: !!form, has_icon_button: !!iconButton};
         }""")
         submit_performed = False
         submit_method = None
         try:
-            if form_info.get("has_form"):
+            # Prefer the actual magnifier/search control when one is associated
+            # with this field, even if it is type=button rather than submit.
+            icon_submit = page.locator('[data-nw-search-submit="true"]')
+            if await icon_submit.count() == 1:
+                await icon_submit.click(timeout=5000)
+                submit_method = "search_icon_click"
+            elif form_info.get("has_form"):
                 form = field.locator("xpath=ancestor::form[1]")
                 submit = form.locator(
                     'button[type="submit"], input[type="submit"], '
@@ -617,8 +652,6 @@ class BrowserRuntime:
                     await visible_submit[0].click(timeout=5000)
                     submit_method = "form_submit_button"
                 elif len(visible_submit) == 0:
-                    # requestSubmit dispatches the form's real submit event and
-                    # honours validation; unlike fill(), it actually submits.
                     await form.evaluate("(form) => form.requestSubmit()")
                     submit_method = "form_request_submit"
                 else:
