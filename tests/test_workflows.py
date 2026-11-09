@@ -1,4 +1,7 @@
-from nightwalker.workflows import WorkflowType, build_workflow_blueprint, classify_workflow, target_url_from_objective
+from nightwalker.workflows import (
+    WorkflowType, build_workflow_blueprint, classify_workflow,
+    qa_requires_site_crawl, qa_scope_for_objective, target_url_from_objective,
+)
 
 
 def test_routes_seo_audit_to_seo_workflow():
@@ -41,13 +44,32 @@ def test_target_url_is_extracted_without_treating_entity_names_as_urls():
     assert target_url_from_objective('What is Velocity Knight Trainer?') is None
 
 
-def test_qa_blueprint_keeps_a_dedicated_crawl_step():
-    blueprint = build_workflow_blueprint('QA testing https://example.com', WorkflowType.QA)
+def test_explicit_site_wide_qa_blueprint_keeps_a_dedicated_crawl_step():
+    objective = 'Run full-site QA testing across every page at https://example.com'
+    blueprint = build_workflow_blueprint(objective, WorkflowType.QA)
     crawl_step = next(item for item in blueprint.subtasks if item.subtask_id == "qa-crawl")
     assert crawl_step.capability.value == "navigate"
     assert crawl_step.success_criteria == ["qa-coverage"]
 
 
-def test_qa_blueprint_requires_discovered_url_coverage():
-    blueprint = build_workflow_blueprint('QA testing https://example.com', WorkflowType.QA)
+def test_explicit_site_wide_qa_blueprint_requires_discovered_url_coverage():
+    blueprint = build_workflow_blueprint('Run a site-wide QA crawl for https://example.com', WorkflowType.QA)
     assert any(item.criterion_id == "qa-coverage" for item in blueprint.success_criteria)
+
+
+def test_page_smoke_qa_defaults_to_single_requested_url():
+    objective = 'Open https://example.com and check page title, H1 headings, broken images and console errors'
+    assert qa_scope_for_objective(objective) == "single_page"
+    assert not qa_requires_site_crawl(objective)
+    blueprint = build_workflow_blueprint(objective, WorkflowType.QA)
+    step_ids = [item.subtask_id for item in blueprint.subtasks]
+    criterion_ids = [item.criterion_id for item in blueprint.success_criteria]
+    assert step_ids == ["qa-discover", "qa-availability", "qa-content", "qa-synthesise"]
+    assert "qa-crawl" not in step_ids
+    assert "qa-coverage" not in criterion_ids
+    assert "qa-page-smoke" in criterion_ids
+
+
+def test_explicit_site_wide_phrasing_enables_qa_crawl():
+    assert qa_scope_for_objective("Test every page on https://example.com") == "site_wide"
+    assert qa_requires_site_crawl("Crawl the site at https://example.com")
