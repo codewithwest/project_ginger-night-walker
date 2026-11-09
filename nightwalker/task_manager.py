@@ -826,7 +826,6 @@ class TaskManager:
                     if not loop_guard.is_visited(next_url, visited_urls):
                         visited_urls.append(next_url)
                     # Search engines are discovery surfaces, never research evidence.
-                    from urllib.parse import urlsplit
                     search_host = (urlsplit(final_url).hostname or "").lower()
                     is_search_page = (
                         search_host in {"bing.com", "google.com", "duckduckgo.com"}
@@ -875,7 +874,6 @@ class TaskManager:
 
                     workflow_value = str(record.get("workflow_type") or "")
                     if workflow_value in {"seo", "qa", "seo_qa"}:
-                        from urllib.parse import urlsplit
                         target_parts = urlsplit(str(record.get("target_url") or ""))
                         source_parts = urlsplit(str(source.get("url") or final_url))
                         saved_origin = str(record.get("audit_origin") or "")
