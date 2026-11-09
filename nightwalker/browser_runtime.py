@@ -760,7 +760,7 @@ class BrowserRuntime:
             if workflow_type in {"seo", "seo_qa"}:
                 structured_data["seo_checks"] = audit_signals.get("seo", {})
                 structured_data["seo_discovery"] = audit_signals.get("seo_discovery", {})
-            if workflow_type in {"seo", "seo_qa"}:
+            if workflow_type in {"seo", "qa", "seo_qa"}:
                 structured_data["crawl_page"] = {
                     "url": page.url, "title": title,
                     "canonical_url": (audit_signals.get("seo") or {}).get("canonical_url"),
