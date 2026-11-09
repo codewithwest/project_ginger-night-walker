@@ -27,7 +27,7 @@ The current deterministic checks include:
 - robots noindex directive
 - document language and viewport metadata
 - H1 count and heading-level skips
-- image alt-attribute omissions
+- image alt-attribute omissions and HTTP `X-Robots-Tag` noindex directives
 - JSON-LD block JSON syntax
 - internal-link destination status checks (HEAD, with GET fallback only when HEAD is explicitly unsupported)
 - duplicate canonical, title, meta-description and exact visible-text groups
@@ -48,6 +48,8 @@ The read-only QA smoke checks include:
 - focusable elements inside `aria-hidden` content
 - landmark presence, visible image alt omissions and heading-level skips
 - a six-step keyboard Tab focus sample
+- reversible local disclosure-toggle checks (ARIA-expanded buttons and native details summaries)
+- browser console errors, uncaught page exceptions and failed network requests
 
 No forms are submitted and no state-changing controls are activated. SPA click handlers, authentication journeys, transactions, exhaustive keyboard paths, visual regression, screen-reader output, contrast conformance and automated WCAG certification are not claimed. Use an approved test account and explicit test authorization before expanding into stateful journeys.
 
