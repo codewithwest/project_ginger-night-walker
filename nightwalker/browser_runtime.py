@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import copy
 import ipaddress
 import os
 import re
@@ -461,9 +462,9 @@ class BrowserRuntime:
         return products
 
     async def _collect_seo_discovery_signals(
-        self, page: Page, candidate_urls: list[str] | None = None,
+        self, page: Page, candidate_urls: list[str] | None = None, task_id: str | None = None,
     ) -> dict:
-        """Inspect robots.txt and bounded same-origin sitemap indexes/URL sets."""
+        """Inspect robots.txt and bounded same-origin sitemap indexes/URL sets once per task origin."""
         from html import unescape
         from urllib.robotparser import RobotFileParser
         from urllib.parse import urljoin
@@ -471,6 +472,22 @@ class BrowserRuntime:
         origin = urlparse(page.url)
         base = f"{origin.scheme}://{origin.netloc}/"
         robots_url = urljoin(base, "robots.txt")
+        session = self._task_sessions.get(task_id or "", {})
+        cache = session.get("seo_discovery_cache") or {}
+        if cache.get("origin") == f"{origin.scheme}://{origin.netloc}":
+            cached_result = copy.deepcopy(cache.get("result") or {})
+            cached_text = str(cache.get("robots_text") or "")
+            if cached_text:
+                cached_parser = RobotFileParser(robots_url)
+                cached_parser.parse(cached_text.splitlines())
+                cached_result.setdefault("robots_txt", {})["target_url_allowed"] = cached_parser.can_fetch(
+                    "GingerNightWalker", page.url
+                )
+                cached_result["robots_txt"]["candidate_urls_disallowed"] = [
+                    url for url in (candidate_urls or [])
+                    if not cached_parser.can_fetch("GingerNightWalker", url)
+                ][:100]
+            return cached_result
         self.policy.validate_url(robots_url, allow_private_networks=False)
         result = {
             "robots_txt": {
@@ -594,6 +611,12 @@ class BrowserRuntime:
         })
         if sitemap_errors:
             result["sitemap"]["errors"] = sitemap_errors[:20]
+        if task_id:
+            session["seo_discovery_cache"] = {
+                "origin": f"{origin.scheme}://{origin.netloc}",
+                "result": copy.deepcopy(result),
+                "robots_text": robots_text,
+            }
         return result
 
     async def _run_readonly_navigation_smoke(self, page: Page, limit: int = 5) -> dict:
@@ -800,7 +823,7 @@ class BrowserRuntime:
             audit_signals["internal_link_checks"] = await collect_internal_link_checks(page, limit=40)
             if workflow_type in {"seo", "seo_qa"}:
                 audit_signals["seo_discovery"] = await self._collect_seo_discovery_signals(
-                    page, [item.get("url", "") for item in candidates]
+                    page, [item.get("url", "") for item in candidates], task_id=task_id
                 )
                 sitemap_urls = (audit_signals["seo_discovery"].get("sitemap") or {}).get("sample_urls", [])
                 robots = audit_signals["seo_discovery"].get("robots_txt") or {}
