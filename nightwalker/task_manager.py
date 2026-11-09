@@ -1026,6 +1026,25 @@ class TaskManager:
                                         "image_count", "images", "broken_image_count", "pending_image_count",
                                         "console_error_count", "page_error_count",
                                     ))
+                                    objective_text = str(record.get("objective") or record.get("original_objective") or "")
+                                    requested_product_search = bool(re.search(
+                                        r'(?i)search\\s+for\\s+[“"\\'][^”"\\']{1,100}[”"\\']',
+                                        objective_text,
+                                    ))
+                                    product_search = result_data.get("qa_product_search")
+                                    product_search_captured = (
+                                        isinstance(product_search, dict)
+                                        and bool(product_search.get("query"))
+                                        and (
+                                            product_search.get("performed") is True
+                                            or product_search.get("status") in {
+                                                "search_control_not_found", "ambiguous_search_control",
+                                                "ambiguous_search_submit",
+                                            }
+                                        )
+                                    )
+                                    if requested_product_search:
+                                        smoke_complete = smoke_complete and product_search_captured
                                     if smoke_complete and result.get("evidence_id"):
                                         verified_result = (
                                             f"Captured title, {page_smoke.get('h1_count')} H1 heading(s), "
