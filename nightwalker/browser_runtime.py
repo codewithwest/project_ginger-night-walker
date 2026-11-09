@@ -439,7 +439,7 @@ class BrowserRuntime:
 
     async def _run_product_search_smoke(self, page: Page, objective: str) -> dict[str, Any] | None:
         """Run a user-requested, read-only product search and capture the rendered result."""
-        match = re.search(r'(?i)search\\s+for\\s+[“"\\']([^”"\\']{1,100})[”"\\']', objective)
+        match = re.search(r'(?i)search\s+for\s+[“"\']([^”"\']{1,100})[”"\']', objective)
         if not match:
             return None
         query = match.group(1).strip()
@@ -509,7 +509,7 @@ class BrowserRuntime:
             text_value = str(item.get("text") or "")
             if query_lower not in text_value.casefold():
                 continue
-            price = re.search(r'(?i)(?:Rs\\.?\\s*|R\\s*)[\\d,]+(?:\\.\\d{1,2})?', text_value)
+            price = re.search(r'(?i)(?:Rs\.?\s*|R\s*)[\d,]+(?:\.\d{1,2})?', text_value)
             matched.append({
                 **item,
                 "name_match": query,
