@@ -16,7 +16,7 @@
 
 ## 2. Model budget and routing
 
-Night Walker uses two configured model names, not one model per agent role. `OLLAMA_MODEL_DEFAULT` is the main model (default `qwen3.5:9b`) for goal/task planning, research source selection, navigation and interaction proposals, and final synthesis. `OLLAMA_MODEL_LIGHT` is the smaller model (default `qwen3.5:4b`) for extraction, bounded recovery proposals, and goal-progress proposals. Both may be served by one remote Ollama instance. Capability workers do not load independent models. Python validates structured outputs and exact evidence quotes; the light model cannot independently mark criteria complete. Operators can point role endpoints at different trusted services, but the runtime model policy remains two-tier.
+Night Walker uses two configured model names, not one model per agent role. `OLLAMA_MODEL_DEFAULT` is the main model (default `qwen3.5:9b`) for goal/task planning, research source selection, navigation and interaction proposals, and final synthesis. `OLLAMA_MODEL_LIGHT` is the smaller model (default `qwen3.5:4b`) for extraction, bounded recovery proposals, and goal-progress proposals. Both may be served by one remote Ollama instance. Capability workers do not load independent models. Model residency is configured independently with `OLLAMA_KEEP_ALIVE_DEFAULT` and `OLLAMA_KEEP_ALIVE_LIGHT`; each falls back to the legacy `OLLAMA_KEEP_ALIVE` value when unset, then to Ollama's immediate-unload value `0`. Python validates structured outputs and exact evidence quotes; the light model cannot independently mark criteria complete. Operators can point role endpoints at different trusted services, but the runtime model policy remains two-tier.
 
 ## 2. Responsibility boundaries
 
