@@ -1088,7 +1088,7 @@ class TaskManager:
                                             product_search.get("performed") is True
                                             or product_search.get("status") in {
                                                 "search_control_not_found", "ambiguous_search_control",
-                                                "ambiguous_search_submit", "search_and_product_page_not_found",
+                                                "search_and_product_page_not_found",
                                                 "product_page_navigation_failed", "search_and_catalogue_not_found",
                                                 "catalogue_navigation_failed", "catalogue_discovery_failed",
                                             }
