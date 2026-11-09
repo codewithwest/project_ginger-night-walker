@@ -199,6 +199,7 @@ function ResearchReport({ result }: { result: BrowserResult }) {
     { label: "H1 headings", value: pageSmoke?.h1_count ?? "—" },
     { label: "Images checked", value: pageSmoke?.image_count ?? "—" },
     { label: "Broken images", value: pageSmoke?.broken_image_count ?? "—" },
+    { label: "Images pending", value: pageSmoke?.pending_image_count ?? "—" },
     { label: "Console errors", value: pageSmoke?.console_error_count ?? "—" },
     { label: "Page exceptions", value: pageSmoke?.page_error_count ?? "—" },
     { label: "Failed requests", value: pageSmoke?.request_failed_count ?? "—" },
