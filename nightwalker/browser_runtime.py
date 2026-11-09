@@ -601,16 +601,22 @@ class BrowserRuntime:
             except Exception as exc:  # noqa: BLE001
                 sitemap_errors.append(str(exc)[:160])
 
+        sitemap_disallowed_count = 0
         if robots_text and result["robots_txt"].get("status", 0) < 500:
+            sitemap_disallowed_count = sum(
+                not parser.can_fetch("GingerNightWalker", url) for url in page_urls
+            )
             page_urls = [
                 url for url in page_urls
                 if parser.can_fetch("GingerNightWalker", url)
             ]
         elif result["robots_txt"].get("status", 0) >= 500 or result["robots_txt"].get("crawl_policy") == "unknown":
+            sitemap_disallowed_count = len(page_urls)
             page_urls = []
 
         page_urls = list(dict.fromkeys(page_urls))
         result["sitemap"].update({
+            "disallowed_url_count": sitemap_disallowed_count,
             "url_count": len(page_urls),
             "sample_urls": page_urls[:1000],
             "child_sitemap_count": len(child_sitemaps),
