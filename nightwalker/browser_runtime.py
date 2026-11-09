@@ -1087,8 +1087,11 @@ class BrowserRuntime:
                 if not discovery_signals.get("cache_hit"):
                     structured_data["seo_discovery"] = discovery_signals
             if workflow_type in {"seo", "qa", "seo_qa"}:
+                from nightwalker.crawl_intelligence import classify_page_url, template_key_for_url
                 structured_data["crawl_page"] = {
                     "url": page.url, "title": title,
+                    "page_type": classify_page_url(page.url),
+                    "template_key": template_key_for_url(page.url),
                     "canonical_url": (audit_signals.get("seo") or {}).get("canonical_url"),
                     "meta_description": (audit_signals.get("seo") or {}).get("meta_description"),
                     "content_fingerprint": content_fingerprint(body_text),
