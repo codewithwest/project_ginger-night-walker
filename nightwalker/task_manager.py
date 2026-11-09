@@ -378,6 +378,8 @@ class TaskManager:
     ) -> None:
         record = self.tasks[task_id]
         record["status"] = "running"
+        self.timing.start(record, "planning")
+        self._persist(task_id)
         if not resume or not record.get("execution_objective"):
             record["execution_objective"] = objective
         checkpoint = record.get("checkpoint") if resume else None
@@ -1492,6 +1494,9 @@ class TaskManager:
                     )
             if round_count >= int(record.get("max_rounds", self.max_rounds)) and candidates:
                 limitations.append(f"Maximum page/crawl budget of {record.get('max_rounds', self.max_rounds)} reached.")
+            self.timing.end(record)
+            self.timing.start(record, "reporting")
+            self._persist(task_id)
             if sources:
                 self._log(task_id, "Research rounds resolved; synthesising the evidence-backed report")
                 record["progress_events"].append({
@@ -1633,6 +1638,10 @@ class TaskManager:
                 self._log(task_id, f"Browser session cleanup warning: {browser_close_error}", "warning")
             record["current_step"] = None
             record["updated_at"] = self._now()
+            if record.get("status") in {"completed", "blocked", "failed", "stopped", "planned", "needs_clarification"}:
+                self.timing.finish(record)
+            else:
+                self.timing.end(record)
             self._persist(task_id)
             self.running.pop(task_id, None)
 
