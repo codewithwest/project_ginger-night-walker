@@ -51,7 +51,7 @@ def classify_workflow(objective: str) -> WorkflowType:
     product_result_verification = (
         any(verb in value for verb in ("verify", "check", "confirm", "test"))
         and any(term in value for term in ("product appears", "product is shown", "product is displayed", "search for"))
-        and bool(re.search(r"\\bhttps?://|\\bwww\\.", value))
+        and bool(re.search(r"\bhttps?://|\bwww\.", value))
     )
     qa = qa or product_result_verification
     if seo and qa:
