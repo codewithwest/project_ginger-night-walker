@@ -1470,8 +1470,12 @@ class TaskManager:
                         if workflow_value in {"qa", "seo_qa"}:
                             answer += (
                                 f" QA sampled {summary.get('qa_navigation_destinations_checked', 0)} navigation destination(s) "
-                                f"and {summary.get('responsive_viewport_overflows', 0)} viewport overflow condition(s); "
+                                f"across {summary.get('responsive_viewports_checked', 0)} responsive viewport(s), "
+                                f"with {summary.get('responsive_viewport_overflows', 0)} overflow condition(s) "
+                                f"and {summary.get('accessibility_findings', 0)} accessibility finding(s); "
+                                f"{summary.get('keyboard_focus_steps_sampled', 0)} keyboard focus step(s) sampled; "
                                 f"{summary.get('qa_interaction_controls_passed', 0)} reversible local interaction(s) passed; "
+                                f"{summary.get('off_origin_internal_redirects', 0)} off-origin internal redirect(s), "
                                 f"{summary.get('browser_console_errors', 0)} console error(s), "
                                 f"{summary.get('browser_page_errors', 0)} page exception(s) and "
                                 f"{summary.get('failed_network_requests', 0)} failed request(s) captured."
