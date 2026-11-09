@@ -45,7 +45,7 @@ def test_qa_blueprint_keeps_a_dedicated_crawl_step():
     blueprint = build_workflow_blueprint('QA testing https://example.com', WorkflowType.QA)
     crawl_step = next(item for item in blueprint.subtasks if item.subtask_id == "qa-crawl")
     assert crawl_step.capability.value == "navigate"
-    assert crawl_step.success_criteria == []
+    assert crawl_step.success_criteria == ["qa-coverage"]
 
 
 def test_qa_blueprint_requires_discovered_url_coverage():
