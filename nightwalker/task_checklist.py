@@ -120,7 +120,30 @@ class TaskChecklist:
                     lines.append(f"- [!] Unknown completed criterion (review): {self._safe(criterion)}")
         else:
             lines.append("- [ ] Success criteria have not been defined yet.")
-        lines.extend(["", "## Planned work", ""])
+        decider_plan = task.get("decider_plan") or {}
+        decider_steps = decider_plan.get("steps") or []
+        lines.extend(["", "## Decider routing plan", ""])
+        if decider_steps:
+            lines.append(
+                f"- Source: {self._safe((task.get('planner_provenance') or {}).get('decider') or 'Decider agent', 100)}"
+            )
+            lines.append(f"- Interpretation: {self._safe(decider_plan.get('summary'), 500)}")
+            lines.append(f"- Target: {self._safe(decider_plan.get('target_url'), 500)}")
+            for index, step in enumerate(decider_steps, 1):
+                lines.append(
+                    f"{index}. **{self._safe(step.get('step_id'), 80)}** "
+                    f"({self._safe(step.get('capability'), 40)}) — "
+                    f"{self._safe(step.get('objective'), 400)}"
+                )
+        else:
+            lines.append("- No Decider routing plan is persisted for this task.")
+        lines.extend([
+            "",
+            "## Evidence acceptance workflow",
+            "",
+            "- Source: task-specific QA/SEO acceptance controls; these are verification gates, not the Decider's routing plan.",
+            "",
+        ])
         if subtasks:
             for item in subtasks:
                 subtask_id = self._safe(item.get("subtask_id"), 80)
