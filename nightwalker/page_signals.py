@@ -62,3 +62,138 @@ def page_signal_findings(signals: dict[str, Any], workflow_type: str) -> list[di
         if qa.get("controls_without_accessible_name", 0): findings.append({"claim": str(qa["controls_without_accessible_name"]) + " visible control(s) have no detectable accessible name.", "type": "qa_accessibility_warning", "severity": "medium"})
         if qa.get("duplicate_ids"): findings.append({"claim": "Duplicate HTML IDs were detected: " + ", ".join(qa["duplicate_ids"][:8]), "type": "qa_dom_issue", "severity": "low"})
     return findings
+
+
+
+async def collect_internal_link_checks(page: Any, limit: int = 40) -> dict[str, Any]:
+    """Verify same-origin anchor destinations with safe HEAD requests only."""
+    links = await page.locator("a[href]").evaluate_all(
+        """nodes => {
+          const seen = new Set();
+          return nodes.map(a => a.href).filter(href => {
+            try {
+              const u = new URL(href);
+              if (!/^https?:$/.test(u.protocol) || u.origin !== location.origin) return false;
+              u.hash = "";
+              const key = u.href;
+              if (seen.has(key)) return false;
+              seen.add(key);
+              return true;
+            } catch { return false; }
+          });
+        }"""
+    )
+    checks = []
+    for url in links[:max(1, min(100, limit))]:
+        item = {"url": url, "method": "HEAD", "status": None, "ok": None, "final_url": None}
+        try:
+            response = await page.request.head(url, timeout=8000, max_redirects=5)
+            item.update({
+                "status": response.status,
+                "ok": 200 <= response.status < 400,
+                "final_url": response.url,
+                "redirected": response.url.rstrip("/") != url.rstrip("/"),
+            })
+        except Exception as exc:  # noqa: BLE001 - preserve unknown as unknown, not broken
+            item["error"] = str(exc)[:180]
+        checks.append(item)
+    return {
+        "checked_count": len(checks),
+        "discovered_count": len(links),
+        "truncated": len(links) > len(checks),
+        "checks": checks,
+        "broken_count": sum(item.get("ok") is False for item in checks),
+        "unknown_count": sum(item.get("ok") is None for item in checks),
+    }
+
+
+async def collect_qa_extended_signals(page: Any) -> dict[str, Any]:
+    """Read-only responsive, semantics and keyboard-focus smoke checks."""
+    original = page.viewport_size
+    responsive = []
+    try:
+        for width, height, label in ((375, 812, "mobile"), (768, 1024, "tablet"), (1280, 900, "desktop")):
+            await page.set_viewport_size({"width": width, "height": height})
+            await page.wait_for_timeout(100)
+            measurement = await page.evaluate("""() => {
+              const root = document.documentElement;
+              const body = document.body;
+              const width = window.innerWidth;
+              const offenders = Array.from(document.querySelectorAll("body *"))
+                .filter(el => {
+                  const r = el.getBoundingClientRect();
+                  const s = getComputedStyle(el);
+                  return s.position !== "fixed" && s.position !== "absolute" &&
+                    r.width > 0 && (r.right > width + 2 || r.left < -2);
+                }).slice(0, 10).map(el => ({
+                  tag: el.tagName.toLowerCase(),
+                  selector: el.id ? "#" + el.id : el.className?.toString().split(" ")[0] || "",
+                  right: Math.round(el.getBoundingClientRect().right)
+                }));
+              return {
+                viewport_width: width,
+                document_width: Math.max(root.scrollWidth, body?.scrollWidth || 0),
+                horizontal_overflow: Math.max(root.scrollWidth, body?.scrollWidth || 0) > width + 2,
+                overflow_offenders: offenders
+              };
+            }""")
+            responsive.append({"viewport": label, **measurement})
+    finally:
+        if original:
+            await page.set_viewport_size(original)
+
+    semantic = await page.evaluate("""() => {
+      const visible = el => { const r=el.getBoundingClientRect(), s=getComputedStyle(el);
+        return r.width > 0 && r.height > 0 && s.display !== "none" && s.visibility !== "hidden"; };
+      const controls = Array.from(document.querySelectorAll("input:not([type=hidden]),select,textarea,button"));
+      const labels = controls.filter(el => visible(el) &&
+        !((el.getAttribute("aria-label") || "").trim() ||
+          (el.getAttribute("aria-labelledby") || "").trim() ||
+          (el.labels && Array.from(el.labels).some(x => (x.innerText || "").trim())) ||
+          (el.closest("label")?.innerText || "").trim() ||
+          (el.tagName === "BUTTON" && (el.innerText || "").trim())));
+      const images = Array.from(document.images).filter(visible);
+      const headings = Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6"))
+        .map(el => Number(el.tagName.slice(1)));
+      return {
+        landmark_counts: {
+          main: document.querySelectorAll("main,[role=main]").length,
+          navigation: document.querySelectorAll("nav,[role=navigation]").length,
+          banner: document.querySelectorAll("header,[role=banner]").length,
+          contentinfo: document.querySelectorAll("footer,[role=contentinfo]").length
+        },
+        visible_form_controls_without_label: labels.length,
+        visible_images_without_alt: images.filter(img => !img.hasAttribute("alt")).length,
+        heading_level_skips: headings.slice(1).filter((level, i) => level > headings[i] + 1).length,
+        forms: Array.from(document.forms).slice(0, 30).map(form => ({
+          method: (form.method || "get").toLowerCase(),
+          action: form.action,
+          control_count: form.querySelectorAll("input,select,textarea,button").length,
+          submission_tested: false
+        }))
+      };
+    }""")
+
+    focus = []
+    try:
+        for _ in range(6):
+            await page.keyboard.press("Tab")
+            focus.append(await page.evaluate("""() => {
+              const el = document.activeElement;
+              if (!el || el === document.body) return null;
+              return {
+                tag: el.tagName.toLowerCase(),
+                role: el.getAttribute("role"),
+                name: (el.getAttribute("aria-label") || el.innerText || el.getAttribute("title") || "").trim().slice(0,120),
+                disabled: Boolean(el.disabled)
+              };
+            }"""))
+    except Exception as exc:  # noqa: BLE001
+        focus.append({"error": str(exc)[:160]})
+
+    return {
+        "responsive_viewports": responsive,
+        "semantic_accessibility": semantic,
+        "keyboard_focus_sequence": focus,
+        "interaction_scope": "Read-only smoke checks; no forms submitted and no state-changing controls activated."
+    }
