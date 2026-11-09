@@ -37,16 +37,20 @@ def analyse_duplicate_pages(pages: list[dict[str, Any]]) -> dict[str, Any]:
     """Find exact canonical, title and visible-content duplicates in inspected pages."""
     canonical_groups: dict[str, list[str]] = defaultdict(list)
     title_groups: dict[str, list[str]] = defaultdict(list)
+    description_groups: dict[str, list[str]] = defaultdict(list)
     content_groups: dict[str, list[str]] = defaultdict(list)
     for page in pages:
         url = str(page.get("url") or "")
         canonical = normalise_page_url(str(page.get("canonical_url") or ""))
         title = re.sub(r"\s+", " ", str(page.get("title") or "")).strip().casefold()
+        description = re.sub(r"\s+", " ", str(page.get("meta_description") or "")).strip().casefold()
         fingerprint = str(page.get("content_fingerprint") or "")
         if canonical:
             canonical_groups[canonical].append(url)
         if title:
             title_groups[title].append(url)
+        if description:
+            description_groups[description].append(url)
         if fingerprint:
             content_groups[fingerprint].append(url)
 
@@ -60,6 +64,7 @@ def analyse_duplicate_pages(pages: list[dict[str, Any]]) -> dict[str, Any]:
         "pages_analysed": len(pages),
         "duplicate_canonical_groups": groups(canonical_groups),
         "duplicate_title_groups": groups(title_groups),
+        "duplicate_meta_description_groups": groups(description_groups),
         "duplicate_content_groups": groups(content_groups),
     }
 
