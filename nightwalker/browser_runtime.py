@@ -980,6 +980,22 @@ class BrowserRuntime:
                     self._task_sessions[task_id].get("qa_runtime_events", [])
                 )
                 self._task_sessions[task_id]["qa_runtime_events"] = []
+                if single_page_qa:
+                    page_seo = audit_signals.get("seo") or {}
+                    runtime_events = audit_signals["qa_runtime_events"]
+                    audit_signals["qa_page_smoke"] = {
+                        "url": page.url,
+                        "document_title": page_seo.get("title"),
+                        "h1_count": page_seo.get("h1_count"),
+                        "h1_headings": page_seo.get("h1_headings", []),
+                        "image_count": page_seo.get("image_count"),
+                        "images": page_seo.get("images", []),
+                        "broken_image_count": page_seo.get("broken_image_count"),
+                        "console_error_count": sum(item.get("kind") == "console_error" for item in runtime_events),
+                        "page_error_count": sum(item.get("kind") == "page_error" for item in runtime_events),
+                        "request_failed_count": sum(item.get("kind") == "request_failed" for item in runtime_events),
+                        "runtime_events": runtime_events,
+                    }
             audit_findings = page_signal_findings(audit_signals, workflow_type)
             for check in audit_signals["internal_link_checks"].get("checks", []):
                 if check.get("off_origin_redirect"):
