@@ -74,7 +74,7 @@ def qa_requires_site_crawl(objective: str) -> bool:
     """Only expand QA beyond the supplied URL when the user asks for site-wide coverage."""
     value = " ".join(objective.casefold().split())
     explicit_site_wide = (
-        r"\b(site[- ]wide|full[- ]site|entire site|whole site|all pages|every page|all urls|crawl (?:the )?site|site crawl|website-wide)\b"
+        r"\b(site[- ]wide|full[- ]site|full website|entire site|entire website|whole site|whole website|all pages|every page|all urls|all site pages|crawl (?:the )?site|site crawl|website[- ]wide|across the (?:whole )?site)\b"
     )
     return bool(re.search(explicit_site_wide, value))
 
