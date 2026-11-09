@@ -179,7 +179,7 @@ def build_workflow_blueprint(objective: str, workflow: WorkflowType) -> Executio
         original_objective=objective,
         interpretation={
             WorkflowType.SEO: "Website SEO audit",
-            WorkflowType.QA: "Website/application QA smoke audit",
+            WorkflowType.QA: ("Site-wide website/application QA audit" if qa_requires_site_crawl(objective) else "Single-page QA smoke test"),
             WorkflowType.SEO_QA: "Combined SEO and QA audit with separate workstreams",
         }[workflow],
         success_criteria=[SuccessCriterion(
