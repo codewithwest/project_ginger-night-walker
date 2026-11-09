@@ -171,6 +171,17 @@ async def collect_qa_extended_signals(page: Any) -> dict[str, Any]:
         visible_form_controls_without_label: labels.length,
         visible_images_without_alt: images.filter(img => !img.hasAttribute("alt")).length,
         heading_level_skips: headings.slice(1).filter((level, i) => level > headings[i] + 1).length,
+        links_without_accessible_name: Array.from(document.querySelectorAll("a[href]"))
+          .filter(el => visible(el) && !((el.getAttribute("aria-label") || "").trim() ||
+            (el.getAttribute("aria-labelledby") || "").trim() ||
+            (el.innerText || "").trim() || (el.querySelector("img[alt]")?.getAttribute("alt") || "").trim())).length,
+        buttons_without_accessible_name: Array.from(document.querySelectorAll("button,[role=button]"))
+          .filter(el => visible(el) && !((el.getAttribute("aria-label") || "").trim() ||
+            (el.getAttribute("aria-labelledby") || "").trim() || (el.innerText || "").trim() ||
+            (el.getAttribute("title") || "").trim())).length,
+        focusable_inside_aria_hidden: Array.from(document.querySelectorAll(
+          'a[href],button,input,select,textarea,[tabindex]:not([tabindex="-1"])'
+        )).filter(el => visible(el) && el.closest('[aria-hidden="true"]')).length,
         forms: Array.from(document.forms).slice(0, 30).map(form => ({
           method: (form.method || "get").toLowerCase(),
           action: form.action,
