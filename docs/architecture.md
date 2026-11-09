@@ -1,7 +1,7 @@
 # System architecture
 
 **Status:** current architecture with implementation gaps explicitly called out.  
-**Scope:** Ginger Night Walker is a general-purpose web browsing, research and evidence capture capability for Ginger OS. It is not a product scraper.
+**Product scope (initial phase):** SEO auditing and website/application QA. General-purpose and deep research are explicitly deferred. The current runtime still contains generic research-oriented components; see the implementation status table and `docs/product-scope.md` for the target scope and gaps.
 
 ## 1. Design principles
 
