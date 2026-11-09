@@ -459,7 +459,7 @@ class BrowserRuntime:
         self, page: Page, candidate_urls: list[str] | None = None,
     ) -> dict:
         """Inspect robots.txt and bounded same-origin sitemap indexes/URL sets."""
-        import xml.etree.ElementTree as ET
+        from html import unescape
         from urllib.robotparser import RobotFileParser
         from urllib.parse import urljoin
 
@@ -519,12 +519,16 @@ class BrowserRuntime:
             )
 
         def loc_values(xml_text: str) -> tuple[str, list[str]]:
-            root = ET.fromstring(xml_text)
-            root_name = root.tag.rsplit("}", 1)[-1].casefold()
+            # Bounded tag extraction avoids expanding untrusted XML entities.
+            root_match = re.search(r"<\\s*(?:[a-z0-9_-]+:)?(sitemapindex|urlset)\\b", xml_text, re.I)
+            root_name = root_match.group(1).casefold() if root_match else ""
             values = [
-                (node.text or "").strip()
-                for node in root.iter()
-                if node.tag.rsplit("}", 1)[-1].casefold() == "loc" and (node.text or "").strip()
+                unescape(match).strip()
+                for match in re.findall(
+                    r"<(?:[a-z0-9_-]+:)?loc\\b[^>]*>\\s*(.*?)\\s*</(?:[a-z0-9_-]+:)?loc\\s*>",
+                    xml_text, flags=re.I | re.S,
+                )
+                if match.strip()
             ]
             return root_name, values
 
