@@ -45,8 +45,10 @@ def _support_for_type(
                            for i in r.get("images", []) if isinstance(i, dict))]
     elif kind == "qa_browser_error":
         matched = [r for r in records if r.get("dataset") == "qa_runtime_events"
-                   and any(e.get("kind") in {"console_error", "page_error"}
-                           for e in (r.get("events") or r.get("runtime_events") or []) if isinstance(e, dict))]
+                   and r.get("kind") in {"console_error", "page_error"}]
+        matched += [r for r in records if r.get("dataset") == "qa_runtime_events"
+                    and any(e.get("kind") in {"console_error", "page_error"}
+                            for e in (r.get("events") or r.get("runtime_events") or []) if isinstance(e, dict))]
     elif kind in {"broken_internal_link", "qa_navigation_failure"}:
         matched = [r for r in records if r.get("dataset") in {"internal_link_checks", "qa_navigation_journeys"}
                    and any(c.get("ok") is False and not c.get("off_origin_redirect")
@@ -58,8 +60,12 @@ def _support_for_type(
             "duplicate_meta_description": "duplicate_meta_description_groups",
             "duplicate_content": "duplicate_content_groups",
         }.get(kind)
-        matched = [r for r in records if r.get("dataset") == "duplicate_analysis"
-                   and bool((r.get(group_key) or []))]
+        duplicate_data = structured_data.get("duplicate_analysis") or {}
+        groups = duplicate_data.get(group_key) or []
+        affected = set(finding.get("affected_urls") or [])
+        matched = [{"dataset": "duplicate_analysis", **duplicate_data, "matched_groups": [
+            group for group in groups if affected.intersection(group.get("urls") or [])
+        ]}] if any(affected.intersection(group.get("urls") or []) for group in groups) else []
     elif kind == "qa_responsive_issue":
         matched = [r for r in records if r.get("dataset") == "qa_extended"
                    and any(v.get("horizontal_overflow") for v in r.get("responsive_viewports", [])
@@ -104,6 +110,11 @@ def validate_findings(
             supported, reason, matched = _support_for_type(item, linked)
         verdict = "confirmed" if supported else "insufficient_evidence"
         counts[verdict] += 1
+        evidence_context = [
+            {"evidence_id": row.get("evidence_id"), "url": row.get("url"),
+             "description": row.get("description"), "captured_text": str(row.get("captured_text") or "")[:3000]}
+            for row in evidence if row.get("evidence_id") in evidence_ids
+        ]
         item["validation"] = {
             "status": "validated" if supported else "needs_more_evidence",
             "verdict": verdict,
@@ -116,6 +127,14 @@ def validate_findings(
                  "evidence_ids": record.get("evidence_ids", [])}
                 for record in matched
             ],
+            # Full matching browser/DOM/network observations plus evidence excerpts
+            # travel with the finding so downstream recommendation has source context.
+            "recommendation_context": {
+                "observations": matched[:20],
+                "evidence": evidence_context[:10],
+                "affected_urls": item.get("affected_urls") or [],
+                "original_claim": item.get("claim"),
+            },
             "contradictory_evidence": [],
             "limitations": [] if supported else [reason],
             "reason": reason,
