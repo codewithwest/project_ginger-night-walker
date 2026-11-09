@@ -62,7 +62,7 @@ class OllamaClient:
         response: httpx.Response | None = None
         envelope: dict[str, Any] = {}
         try:
-            response = await self._post_inference(client,url, **kwargs)
+            response = await client.post(url, **kwargs)
             response.raise_for_status()
             try:
                 payload = response.json()
