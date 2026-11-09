@@ -7,24 +7,12 @@ from collections import defaultdict
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from nightwalker.crawl_intelligence import url_identity
+
 
 def normalise_page_url(value: str) -> str:
-    """Remove fragments and common tracking parameters for page identity."""
-    try:
-        parts = urlsplit(str(value).strip())
-        if parts.scheme not in {"http", "https"} or not parts.hostname:
-            return str(value).strip()
-        tracking = {"gclid", "fbclid", "msclkid"}
-        query = [
-            (key, val) for key, val in parse_qsl(parts.query, keep_blank_values=True)
-            if not key.casefold().startswith("utm_") and key.casefold() not in tracking
-        ]
-        return urlunsplit((
-            parts.scheme.casefold(), parts.netloc.casefold(),
-            parts.path or "/", urlencode(sorted(query)), "",
-        ))
-    except (TypeError, ValueError):
-        return str(value).strip()
+    """Use crawler URL identity consistently for coverage and duplicate comparisons."""
+    return url_identity(value)
 
 
 def content_fingerprint(text: str) -> str:
@@ -69,19 +57,27 @@ def analyse_duplicate_pages(pages: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def crawl_coverage(discovered_urls: list[str], visited_urls: list[str]) -> dict[str, Any]:
-    """Report coverage against the known discovered URL set; never imply whole-web coverage."""
+def crawl_coverage(
+    discovered_urls: list[str], visited_urls: list[str],
+    excluded_urls: list[str] | None = None,
+) -> dict[str, Any]:
+    """Report eligible coverage while explicitly accounting for policy-excluded URL variants."""
     discovered = {normalise_page_url(url) for url in discovered_urls if url}
     visited = {normalise_page_url(url) for url in visited_urls if url}
-    covered = discovered & visited
+    excluded = {normalise_page_url(url) for url in (excluded_urls or []) if url} - visited
+    eligible = discovered - excluded
+    covered = eligible & visited
+    remaining = eligible - visited
     return {
         "discovered_url_count": len(discovered),
-        "visited_url_count": len(visited),
+        "eligible_url_count": len(eligible),
+        "excluded_url_count": len(excluded),
+        "visited_url_count": len(visited & eligible),
         "discovered_urls_visited": len(covered),
-        "known_discovered_urls_remaining": len(discovered - visited),
-        "coverage_percent": round((len(covered) / len(discovered)) * 100, 1) if discovered else None,
-        "coverage_basis": "URLs discovered from inspected internal links and parsed sitemap entries; not a claim of exhaustive site coverage.",
-        "unvisited_sample": sorted(discovered - visited)[:100],
+        "known_discovered_urls_remaining": len(remaining),
+        "coverage_percent": round((len(covered) / len(eligible)) * 100, 1) if eligible else None,
+        "coverage_basis": "Eligible URLs discovered from inspected internal links and parsed sitemap entries after explicit utility/filter exclusions; not a claim of exhaustive site coverage.",
+        "unvisited_sample": sorted(remaining)[:100],
     }
 
 
