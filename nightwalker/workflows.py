@@ -1,0 +1,144 @@
+"""First-phase product workflow routing and deterministic plans.
+
+SEO and QA are first-class workflows. Unknown/general research is deliberately
+not used as a fallback in this product phase.
+"""
+from __future__ import annotations
+
+import re
+from enum import StrEnum
+from urllib.parse import urlsplit
+
+from pydantic import BaseModel, ConfigDict
+
+from nightwalker.contracts import Capability
+from nightwalker.planning_contracts import ExecutionBlueprint, PlannedSubtask, SuccessCriterion
+
+
+class WorkflowType(StrEnum):
+    SEO = "seo"
+    QA = "qa"
+    SEO_QA = "seo_qa"
+    UNSUPPORTED = "unsupported"
+
+
+_SEO_TERMS = {
+    "seo", "search engine optimisation", "search engine optimization",
+    "technical seo", "on-page seo", "on page seo", "indexability",
+    "crawlability", "search visibility", "meta description", "structured data",
+    "robots.txt", "sitemap.xml", "core web vitals",
+}
+_QA_TERMS = {
+    "qa", "quality assurance", "test website", "test web app", "test web application",
+    "website testing", "web app testing", "functional testing", "regression testing",
+    "broken links", "user journey", "usability testing", "accessibility testing",
+    "responsive testing", "bug", "bugs", "defects",
+}
+
+
+def classify_workflow(objective: str) -> WorkflowType:
+    """Classify the requested outcome, not the nouns/entities in the objective."""
+    value = " ".join(objective.casefold().split())
+    seo = any(term in value for term in _SEO_TERMS)
+    qa = any(term in value for term in _QA_TERMS)
+    if seo and qa:
+        return WorkflowType.SEO_QA
+    if seo:
+        return WorkflowType.SEO
+    if qa:
+        return WorkflowType.QA
+    return WorkflowType.UNSUPPORTED
+
+
+def target_url_from_objective(objective: str) -> str | None:
+    match = re.search(
+        r"(?i)\bhttps?://[^\s<>\"']+|\bwww\.[a-z0-9.-]+\.[a-z]{2,}(?:/[^\s<>\"']*)?|\b[a-z0-9-]+(?:\.[a-z0-9-]+)+\b",
+        objective,
+    )
+    if not match:
+        return None
+    value = match.group(0).rstrip(".,;:!?)]}")
+    if not value.startswith(("http://", "https://")):
+        value = "https://" + value
+    parsed = urlsplit(value)
+    if not parsed.hostname or "." not in parsed.hostname:
+        return None
+    return value
+
+
+def build_workflow_blueprint(objective: str, workflow: WorkflowType) -> ExecutionBlueprint:
+    if workflow == WorkflowType.SEO:
+        criteria = [
+            ("seo-scope", "The target website and inspected URL scope are recorded.", "At least one target URL and its captured source are recorded."),
+            ("seo-technical", "Technical crawl and indexability signals are inspected.", "Evidence records observed HTTP outcome, canonical/robots directives when present, and sitemap/robots discovery outcome."),
+            ("seo-metadata", "Page titles, descriptions, headings and language/viewport metadata are inspected.", "Captured page evidence supports each reported metadata observation."),
+            ("seo-links", "Internal link structure and broken-link candidates are assessed.", "Observed internal links are recorded and any failed destination is evidenced."),
+            ("seo-content", "Visible content structure and image alternatives are assessed where observable.", "Evidence supports content/headings and image-alt observations; unavailable checks are marked untested."),
+            ("seo-report", "SEO findings are prioritised with affected URLs and actionable remediation.", "Every reported issue has evidence, affected URL, impact rationale and a recommended fix."),
+        ]
+        tasks = [
+            ("seo-discover", "Discover the target website and establish the crawl boundary.", Capability.NAVIGATE, ["seo-scope"]),
+            ("seo-technical", "Inspect technical SEO signals on the target and discovered pages.", Capability.EXTRACT, ["seo-technical"]),
+            ("seo-page", "Inspect page-level metadata, headings, content and image signals.", Capability.EXTRACT, ["seo-metadata", "seo-content"]),
+            ("seo-links", "Inspect internal links and verify selected same-site destinations.", Capability.INTERACT, ["seo-links"]),
+            ("seo-synthesise", "Prioritise evidence-backed SEO issues and remediation.", Capability.EXTRACT, ["seo-report"]),
+        ]
+    elif workflow == WorkflowType.QA:
+        criteria = [
+            ("qa-scope", "The target application and tested URL scope are recorded.", "At least one target URL and its captured source are recorded."),
+            ("qa-availability", "Target pages load and HTTP/navigation failures are recorded.", "Each tested page has a captured navigation outcome."),
+            ("qa-navigation", "Internal navigation destinations are inspected for broken-link candidates.", "Each reported broken destination has an observed failed navigation."),
+            ("qa-content", "Page structure and visible content are checked for obvious rendering/content failures.", "Evidence supports each reported page-level defect."),
+            ("qa-report", "QA observations are reported with reproducible URLs and honest test status.", "Each defect includes observed behaviour, URL and evidence; unexecuted interactions are marked untested."),
+        ]
+        tasks = [
+            ("qa-discover", "Discover the target application pages and establish test scope.", Capability.NAVIGATE, ["qa-scope"]),
+            ("qa-availability", "Check page availability and record navigation failures.", Capability.EXTRACT, ["qa-availability"]),
+            ("qa-navigation", "Inspect internal navigation and verify selected destinations.", Capability.INTERACT, ["qa-navigation"]),
+            ("qa-content", "Inspect page structure and visible content for observable defects.", Capability.EXTRACT, ["qa-content"]),
+            ("qa-synthesise", "Produce a QA report with evidence and tested/untested boundaries.", Capability.EXTRACT, ["qa-report"]),
+        ]
+    else:
+        raise ValueError("A dedicated SEO or QA workflow is required")
+
+    if workflow == WorkflowType.SEO_QA:
+        seo = build_workflow_blueprint(objective, WorkflowType.SEO)
+        qa = build_workflow_blueprint(objective, WorkflowType.QA)
+        criteria = [item.model_dump() for item in seo.success_criteria + qa.success_criteria]
+        tasks = [item.model_dump() for item in seo.subtasks + qa.subtasks]
+        # Prefix IDs to keep both workstreams independent and the graph unambiguous.
+        for item in criteria:
+            item["criterion_id"] = "combined-" + item["criterion_id"]
+        for item in tasks:
+            item["subtask_id"] = "combined-" + item["subtask_id"]
+            item["success_criteria"] = ["combined-" + value for value in item["success_criteria"]]
+            item["depends_on"] = ["combined-" + value for value in item["depends_on"]]
+        # Both workstreams begin from a shared discovery step; dependencies remain local.
+        criteria = criteria[:12]
+        tasks = tasks[:20]
+
+    return ExecutionBlueprint(
+        original_objective=objective,
+        interpretation={
+            WorkflowType.SEO: "Website SEO audit",
+            WorkflowType.QA: "Website/application QA smoke audit",
+            WorkflowType.SEO_QA: "Combined SEO and QA audit with separate workstreams",
+        }[workflow],
+        success_criteria=[SuccessCriterion(
+            criterion_id=item[0] if isinstance(item, tuple) else item["criterion_id"],
+            description=item[1] if isinstance(item, tuple) else item["description"],
+            evidence_required=True,
+            acceptance_test=item[2] if isinstance(item, tuple) else item["acceptance_test"],
+        ) for item in criteria],
+        subtasks=[PlannedSubtask(
+            subtask_id=item[0] if isinstance(item, tuple) else item["subtask_id"],
+            objective=item[1] if isinstance(item, tuple) else item["objective"],
+            capability=item[2] if isinstance(item, tuple) else item["capability"],
+            required_tools=["browser_navigate", "browser_snapshot", "browser_extract"],
+            success_criteria=item[3] if isinstance(item, tuple) else item["success_criteria"],
+            depends_on=[],
+            expected_output="Evidence-linked workflow observations; unsupported checks are explicitly untested.",
+        ) for item in tasks],
+        completion_policy="all_criteria_verified",
+        research_queries=[],
+    )
