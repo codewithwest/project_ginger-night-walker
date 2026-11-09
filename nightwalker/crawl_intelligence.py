@@ -100,6 +100,27 @@ def template_key_for_url(value: str) -> str:
     return _template_key(value, page_type)
 
 
+
+def candidate_exclusion_reason(value: str) -> str | None:
+    """Return a deterministic exclusion reason for URLs outside the default crawl scope."""
+    try:
+        parts = urlsplit(str(value))
+        if parts.scheme not in {"http", "https"} or not parts.hostname:
+            return "invalid_url"
+        segments = [segment.casefold() for segment in parts.path.split("/") if segment]
+        if any(segment in _UTILITY_SEGMENTS for segment in segments):
+            return "utility_route"
+        params = {key.casefold() for key, _ in parse_qsl(parts.query, keep_blank_values=True)}
+        if any(
+            key in _FACET_KEYS or key.startswith(("filter_", "filter[", "attribute_"))
+            for key in params
+        ):
+            return "filter_or_sort_variant"
+        return None
+    except ValueError:
+        return "invalid_url"
+
+
 def rank_crawl_candidates(
     candidates: list[dict[str, Any]],
     visited_urls: list[str],
