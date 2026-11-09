@@ -212,3 +212,20 @@ def test_qa_extended_findings_cover_responsive_and_deeper_semantic_failures():
     assert "positive tabindex" in claims
     assert "nested interactive" in claims
     assert all(item["affected_urls"] == ["https://example.com/contact"] for item in findings)
+
+
+def test_qa_reports_only_confirmed_broken_images_not_pending_images():
+    findings = page_signal_findings({
+        "seo": {
+            "images": [
+                {"src": "https://example.com/broken.jpg", "load_status": "broken"},
+                {"src": "https://example.com/pending.jpg", "load_status": "pending"},
+                {"src": "https://example.com/ok.jpg", "load_status": "loaded"},
+            ]
+        },
+        "qa": {},
+    }, "qa")
+    broken = [item for item in findings if item["type"] == "qa_broken_image"]
+    assert len(broken) == 1
+    assert "broken.jpg" in broken[0]["claim"]
+    assert broken[0]["image_url"] == "https://example.com/broken.jpg"
