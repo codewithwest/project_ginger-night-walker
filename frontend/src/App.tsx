@@ -191,8 +191,18 @@ function ResearchReport({ result }: { result: BrowserResult }) {
   const findings = result.findings || [];
   const sources = result.sources || (result.final_url ? [{ url: result.final_url, title: result.title }] : []);
   const structuredData = result.structured_data || {};
-  const auditSummary = structuredData.audit_report_summary as Record<string, number | boolean | undefined> | undefined;
-  const summaryMetrics = auditSummary ? [
+  const auditSummary = structuredData.audit_report_summary as Record<string, string | number | boolean | undefined> | undefined;
+  const pageSmoke = structuredData.qa_page_smoke as Record<string, any> | undefined;
+  const singlePageScope = auditSummary?.crawl_scope === "single_page";
+  const summaryMetrics = auditSummary ? singlePageScope ? [
+    { label: "Pages inspected", value: auditSummary.pages_inspected ?? 0 },
+    { label: "H1 headings", value: pageSmoke?.h1_count ?? "—" },
+    { label: "Images checked", value: pageSmoke?.image_count ?? "—" },
+    { label: "Broken images", value: pageSmoke?.broken_image_count ?? "—" },
+    { label: "Console errors", value: pageSmoke?.console_error_count ?? "—" },
+    { label: "Page exceptions", value: pageSmoke?.page_error_count ?? "—" },
+    { label: "Failed requests", value: pageSmoke?.request_failed_count ?? "—" },
+  ] : [
     { label: "Pages inspected", value: auditSummary.pages_inspected ?? 0 },
     { label: "Known URL coverage", value: auditSummary.crawl_coverage_percent == null ? "—" : String(auditSummary.crawl_coverage_percent) + "%" },
     { label: "Templates inspected", value: auditSummary.unique_templates_inspected ?? 0 },
@@ -230,7 +240,7 @@ function ResearchReport({ result }: { result: BrowserResult }) {
         })}</ul>
       </div>}
       {summaryMetrics.length > 0 && <div className="research-section">
-        <h3>Audit overview <span className="audit-completion">{auditSummary?.crawl_complete ? "Known discovery queue exhausted" : "Coverage incomplete"}</span></h3>
+        <h3>Audit overview <span className="audit-completion">{singlePageScope ? "Single-page scope · site-wide coverage not measured" : auditSummary?.crawl_complete ? "Known discovery queue exhausted" : "Coverage incomplete"}</span></h3>
         <div className="audit-summary-grid">{summaryMetrics.map((metric) => (
           <div className="audit-summary-metric" key={metric.label}>
             <strong>{metric.value}</strong><span>{metric.label}</span>
