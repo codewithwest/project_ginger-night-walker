@@ -1003,8 +1003,23 @@ class TaskManager:
                                 if result.get("http_status") is not None and result.get("http_status", 0) < 400 and result.get("evidence_id"):
                                     verified_result = f"Target page returned HTTP {result.get('http_status')}; visible-content issues are tracked separately"
                             elif capability == "extract" and str(step.get("step_id", "")).endswith("qa-content"):
-                                qa_checks = (result.get("structured_data") or {}).get("qa_checks") or {}
-                                if qa_checks and result.get("evidence_id"):
+                                result_data = result.get("structured_data") or {}
+                                qa_checks = result_data.get("qa_checks") or {}
+                                page_smoke = result_data.get("qa_page_smoke") or {}
+                                if record.get("qa_scope") == "single_page":
+                                    smoke_complete = all(key in page_smoke for key in (
+                                        "url", "document_title", "h1_count", "h1_headings",
+                                        "image_count", "images", "broken_image_count",
+                                        "console_error_count", "page_error_count",
+                                    ))
+                                    if smoke_complete and result.get("evidence_id"):
+                                        verified_result = (
+                                            f"Captured title, {page_smoke.get('h1_count')} H1 heading(s), "
+                                            f"{page_smoke.get('image_count')} image load states and "
+                                            f"{page_smoke.get('console_error_count')} console error(s); "
+                                            "page exceptions and failed requests recorded separately"
+                                        )
+                                elif qa_checks and result.get("evidence_id"):
                                     verified_result = "Captured visible DOM structure, controls, forms, links and duplicate-ID checks"
                             elif capability == "interact" and str(step.get("step_id", "")).endswith(("seo-links", "qa-navigation")):
                                 link_checks = (result.get("structured_data") or {}).get("internal_link_checks") or {}
