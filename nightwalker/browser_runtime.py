@@ -913,7 +913,7 @@ class BrowserRuntime:
                 )
             from nightwalker.page_signals import (
                 collect_internal_link_checks, collect_page_signals,
-                collect_qa_extended_signals, page_signal_findings,
+                collect_qa_extended_signals, page_signal_findings, qa_extended_findings,
             )
             from nightwalker.audit_analysis import content_fingerprint
             audit_signals = await collect_page_signals(page)
@@ -981,34 +981,10 @@ class BrowserRuntime:
                         "type": "qa_browser_error", "severity": "medium",
                         "affected_urls": [event.get("url") or page.url],
                     })
-            for viewport in (audit_signals.get("qa_extended") or {}).get("responsive_viewports", []):
-                if viewport.get("horizontal_overflow"):
-                    audit_findings.append({
-                        "claim": f"Horizontal overflow detected at {viewport.get('viewport')} viewport ({viewport.get('viewport_width')}px).",
-                        "type": "qa_responsive_issue", "severity": "medium",
-                        "affected_url": page.url,
-                    })
-            qa_semantic = (audit_signals.get("qa_extended") or {}).get("semantic_accessibility") or {}
-            for field, description, severity in (
-                ("visible_form_controls_without_label", "visible form control(s) lack a detectable programmatic label", "high"),
-                ("links_without_accessible_name", "visible link(s) lack a detectable accessible name", "medium"),
-                ("buttons_without_accessible_name", "visible button(s) lack a detectable accessible name", "high"),
-                ("focusable_inside_aria_hidden", "focusable element(s) are inside aria-hidden content", "high"),
-            ):
-                count = int(qa_semantic.get(field) or 0)
-                if count:
-                    audit_findings.append({
-                        "claim": f"{count} {description}.",
-                        "type": "qa_accessibility_issue", "severity": severity,
-                        "affected_url": page.url,
-                    })
-            landmark_counts = qa_semantic.get("landmark_counts") or {}
-            if not landmark_counts.get("main"):
-                audit_findings.append({
-                    "claim": "No main landmark was detected on the page.",
-                    "type": "qa_accessibility_warning", "severity": "low",
-                    "affected_url": page.url,
-                })
+            if workflow_type in {"qa", "seo_qa"}:
+                audit_findings.extend(qa_extended_findings(
+                    audit_signals.get("qa_extended") or {}, page.url
+                ))
             wants_products = bool(re.search(r"(?i)\b(product|products|item|items|price|pricing)\b", objective))
             products = self._extract_products_from_text(body_text, limit=200) if wants_products else []
             if wants_products:
