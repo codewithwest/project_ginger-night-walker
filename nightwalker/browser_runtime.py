@@ -1135,6 +1135,8 @@ class BrowserRuntime:
                 structured_data["internal_link_checks"] = audit_signals.get("internal_link_checks", {})
             if workflow_type in {"qa", "seo_qa"}:
                 structured_data["qa_checks"] = audit_signals.get("qa", {})
+                if audit_signals.get("qa_page_smoke"):
+                    structured_data["qa_page_smoke"] = audit_signals["qa_page_smoke"]
                 structured_data["qa_extended"] = audit_signals.get("qa_extended", {})
                 structured_data["qa_navigation_journeys"] = audit_signals.get("qa_navigation_journeys", {})
                 structured_data["qa_interaction_journeys"] = audit_signals.get("qa_interaction_journeys", {})
