@@ -1,6 +1,7 @@
 """Read-only page-level SEO and QA signals captured from the live DOM."""
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 
@@ -72,7 +73,7 @@ def page_signal_findings(signals: dict[str, Any], workflow_type: str) -> list[di
 
 
 async def collect_internal_link_checks(page: Any, limit: int = 40) -> dict[str, Any]:
-    """Verify same-origin anchor destinations with safe HEAD requests only."""
+    """Verify same-origin anchor destinations with bounded concurrent HEAD/GET requests."""
     links = await page.locator("a[href]").evaluate_all(
         """nodes => {
           const seen = new Set();
@@ -89,23 +90,28 @@ async def collect_internal_link_checks(page: Any, limit: int = 40) -> dict[str, 
           });
         }"""
     )
-    checks = []
-    for url in links[:max(1, min(100, limit))]:
+    semaphore = asyncio.Semaphore(8)
+
+    async def check(url: str) -> dict[str, Any]:
         item = {"url": url, "method": "HEAD", "status": None, "ok": None, "final_url": None}
-        try:
-            response = await page.request.head(url, timeout=8000, max_redirects=5)
-            if response.status in {405, 501}:
-                response = await page.request.get(url, timeout=8000, max_redirects=5)
-                item["method"] = "GET_fallback_after_HEAD_unsupported"
-            item.update({
-                "status": response.status,
-                "ok": 200 <= response.status < 400,
-                "final_url": response.url,
-                "redirected": response.url.rstrip("/") != url.rstrip("/"),
-            })
-        except Exception as exc:  # noqa: BLE001 - preserve unknown as unknown, not broken
-            item["error"] = str(exc)[:180]
-        checks.append(item)
+        async with semaphore:
+            try:
+                response = await page.request.head(url, timeout=8000, max_redirects=5)
+                if response.status in {405, 501}:
+                    response = await page.request.get(url, timeout=8000, max_redirects=5)
+                    item["method"] = "GET_fallback_after_HEAD_unsupported"
+                item.update({
+                    "status": response.status,
+                    "ok": 200 <= response.status < 400,
+                    "final_url": response.url,
+                    "redirected": response.url.rstrip("/") != url.rstrip("/"),
+                })
+            except Exception as exc:  # noqa: BLE001 - unknown is not a confirmed broken link
+                item["error"] = str(exc)[:180]
+        return item
+
+    selected = links[:max(1, min(100, limit))]
+    checks = await asyncio.gather(*(check(url) for url in selected))
     return {
         "checked_count": len(checks),
         "discovered_count": len(links),
