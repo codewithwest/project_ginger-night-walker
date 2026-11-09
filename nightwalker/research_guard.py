@@ -82,7 +82,7 @@ class ResearchLoopGuard:
         return any(canonical_url_key(item) == key for item in visited_urls)
 
     def filter_candidates(
-        self, candidates: list[dict[str, Any]], visited_urls: list[str]
+        self, candidates: list[dict[str, Any]], visited_urls: list[str], limit: int = 120
     ) -> list[dict[str, str]]:
         visited = {canonical_url_key(url) for url in visited_urls}
         selected: dict[str, dict[str, str]] = {}
@@ -100,7 +100,7 @@ class ResearchLoopGuard:
                 "url": url,
                 "label": str(item.get("label") or "")[:240],
             }
-        return list(selected.values())[:120]
+        return list(selected.values())[:max(1, min(1000, int(limit)))]
 
     def fallback_candidate(
         self, candidates: list[dict[str, Any]], visited_urls: list[str]
