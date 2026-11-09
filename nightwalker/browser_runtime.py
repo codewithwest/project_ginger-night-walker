@@ -726,7 +726,10 @@ class BrowserRuntime:
                     "status": response.status if response else None,
                     "final_url": page.url,
                     "title": (await page.title())[:240],
-                    "ok": bool(response is None or response.status < 400),
+                    "ok": bool(response is None or response.status < 400) and (
+                        (urlparse(page.url).scheme, urlparse(page.url).hostname, urlparse(page.url).port)
+                        == (origin.scheme, origin.hostname, origin.port)
+                    ),
                     "same_origin_after_redirect": (
                         (urlparse(page.url).scheme, urlparse(page.url).hostname, urlparse(page.url).port)
                         == (origin.scheme, origin.hostname, origin.port)
