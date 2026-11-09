@@ -13,7 +13,7 @@ from nightwalker.goal_state import GoalStateManager
 from nightwalker.ollama_client import OllamaUnavailable
 from nightwalker.plan_execution import complete_step, initialise_plan, ready_steps, start_step
 from nightwalker.orchestrator import Orchestrator
-from nightwalker.research_guard import ResearchLoopGuard
+from nightwalker.research_guard import ResearchLoopGuard, canonical_url_key
 from nightwalker.research_relevance import (
     focused_research_queries,
     rank_research_candidates,
