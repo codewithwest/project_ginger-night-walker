@@ -819,8 +819,9 @@ class BrowserRuntime:
                         lambda opened: asyncio.create_task(self._enforce_tab_limit(task_id, opened)),
                     )
                     self._tab_listener_contexts.add(id(context))
-            from nightwalker.workflows import classify_workflow
+            from nightwalker.workflows import classify_workflow, qa_requires_site_crawl
             workflow_type = classify_workflow(objective).value
+            single_page_qa = workflow_type == "qa" and not qa_requires_site_crawl(objective)
             if workflow_type in {"qa", "seo_qa"} and id(page) not in self._qa_listener_pages:
                 runtime_events = self._task_sessions[task_id].setdefault("qa_runtime_events", [])
 
@@ -889,7 +890,7 @@ class BrowserRuntime:
             # does not cause every discovered page to be excluded.
             target_parts = urlparse(page.url)
             target_origin = (target_parts.scheme, target_parts.hostname, target_parts.port)
-            candidate_links = await page.locator("a[href]").evaluate_all(
+            candidate_links = [] if single_page_qa else await page.locator("a[href]").evaluate_all(
                 """nodes => nodes.slice(0, 2000).map(a => ({
                     label: (a.innerText || a.getAttribute('aria-label') || '').trim().slice(0, 240),
                     url: a.href,
@@ -946,7 +947,10 @@ class BrowserRuntime:
             audit_signals.setdefault("seo", {})["x_robots_tag"] = x_robots_tag
             if x_robots_tag and re.search(r"(?i)\bnoindex\b", x_robots_tag):
                 audit_signals["seo"]["noindex"] = True
-            audit_signals["internal_link_checks"] = await collect_internal_link_checks(page, limit=40, policy=self.policy)
+            audit_signals["internal_link_checks"] = (
+                await collect_internal_link_checks(page, limit=40, policy=self.policy)
+                if not single_page_qa else {"checks": [], "checked_count": 0, "broken_count": 0, "unknown_count": 0, "scope": "not_requested_single_page_qa"}
+            )
             if workflow_type in {"seo", "seo_qa"}:
                 audit_signals["seo_discovery"] = await self._collect_seo_discovery_signals(
                     page, [item.get("url", "") for item in candidates], task_id=task_id
@@ -964,8 +968,14 @@ class BrowserRuntime:
                 candidates = candidates[:1000]
             if workflow_type in {"qa", "seo_qa"}:
                 audit_signals["qa_extended"] = await collect_qa_extended_signals(page)
-                audit_signals["qa_navigation_journeys"] = await self._run_readonly_navigation_smoke(page, limit=5)
-                audit_signals["qa_interaction_journeys"] = await self._run_safe_interaction_smoke(page, limit=5)
+                audit_signals["qa_navigation_journeys"] = (
+                    await self._run_readonly_navigation_smoke(page, limit=5)
+                    if not single_page_qa else {"checks": [], "checked_count": 0, "scope": "not_requested_single_page_qa"}
+                )
+                audit_signals["qa_interaction_journeys"] = (
+                    await self._run_safe_interaction_smoke(page, limit=5)
+                    if not single_page_qa else {"checks": [], "checked_count": 0, "scope": "not_requested_single_page_qa"}
+                )
                 audit_signals["qa_runtime_events"] = list(
                     self._task_sessions[task_id].get("qa_runtime_events", [])
                 )
