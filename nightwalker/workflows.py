@@ -92,7 +92,8 @@ def build_workflow_blueprint(objective: str, workflow: WorkflowType) -> Executio
             ("seo-page", "Page metadata, headings, visible content and image alternatives are inspected.", "Captured page evidence supports each reported title, description, canonical, heading, language, viewport and image-alt observation."),
             ("seo-links", "Internal link structure and broken-link candidates are assessed.", "Observed internal links are recorded and any failed destination is evidenced."),
             ("seo-coverage", "Discovered same-origin URLs are visited or explicitly accounted for.", "The report records discovered, visited, robots-excluded and budget-excluded URL counts; incomplete coverage remains blocked."),
-            ("seo-report", "SEO findings are prioritised with affected URLs and actionable remediation.", "Every reported issue has evidence, affected URL, impact rationale and a recommended fix."),
+            ("seo-validation", "Every candidate SEO finding is validated against captured structured evidence before recommendations.", "Each candidate has a persisted confirmed or insufficient-evidence verdict and linked validation context."),
+            ("seo-report", "Only confirmed SEO findings receive remediation recommendations.", "Recommendations reference confirmed findings and include verification steps."),
         ]
         tasks = [
             ("seo-discover", "Discover the target website and establish the crawl boundary.", Capability.NAVIGATE, ["seo-scope"]),
@@ -100,7 +101,8 @@ def build_workflow_blueprint(objective: str, workflow: WorkflowType) -> Executio
             ("seo-page", "Inspect page-level metadata, headings, content and image signals.", Capability.EXTRACT, ["seo-page"]),
             ("seo-links", "Inspect internal links and verify selected same-site destinations.", Capability.INTERACT, ["seo-links"]),
             ("seo-crawl", "Continue the deterministic same-origin crawl until discovered URLs or the page budget are exhausted.", Capability.NAVIGATE, ["seo-coverage"]),
-            ("seo-synthesise", "Prioritise evidence-backed SEO issues and remediation.", Capability.EXTRACT, ["seo-report"]),
+            ("seo-validate", "Validate every candidate finding against its linked browser, DOM, network and crawl evidence.", Capability.EXTRACT, ["seo-validation"]),
+            ("seo-synthesise", "Prepare recommendations only for confirmed SEO findings.", Capability.EXTRACT, ["seo-report"]),
         ]
     elif workflow == WorkflowType.QA:
         if qa_requires_site_crawl(objective):
@@ -110,7 +112,8 @@ def build_workflow_blueprint(objective: str, workflow: WorkflowType) -> Executio
                 ("qa-navigation", "Internal navigation destinations are inspected for broken-link candidates.", "Each reported broken destination has an observed failed navigation."),
                 ("qa-content", "Page structure and visible content are checked for observable defects.", "Evidence supports each reported page-level defect."),
                 ("qa-coverage", "Discovered same-origin QA URLs are visited or explicitly accounted for.", "The report records discovered and visited URL counts; remaining URLs keep coverage incomplete."),
-                ("qa-report", "QA observations are reported with reproducible URLs and honest test status.", "Each defect includes observed behaviour, URL and evidence; unexecuted interactions are marked untested."),
+                ("qa-validation", "Every candidate QA defect is validated against captured browser evidence before recommendations.", "Each candidate has a persisted confirmed or insufficient-evidence verdict and linked validation context."),
+                ("qa-report", "Only confirmed QA defects receive remediation recommendations.", "Recommendations reference confirmed defects and include reproducible verification steps."),
             ]
             tasks = [
                 ("qa-discover", "Discover the target application pages and establish site-wide test scope.", Capability.NAVIGATE, ["qa-scope"]),
@@ -118,20 +121,23 @@ def build_workflow_blueprint(objective: str, workflow: WorkflowType) -> Executio
                 ("qa-navigation", "Inspect internal navigation and verify selected destinations.", Capability.INTERACT, ["qa-navigation"]),
                 ("qa-content", "Inspect page structure and visible content for observable defects.", Capability.EXTRACT, ["qa-content"]),
                 ("qa-crawl", "Continue the deterministic same-origin QA crawl until discovered URLs or the page budget are exhausted.", Capability.NAVIGATE, ["qa-coverage"]),
-                ("qa-synthesise", "Produce a QA report with evidence and tested/untested boundaries.", Capability.EXTRACT, ["qa-report"]),
+                ("qa-validate", "Validate each candidate QA defect against the linked DOM, image, network and runtime observations.", Capability.EXTRACT, ["qa-validation"]),
+                ("qa-synthesise", "Produce a QA report with confirmed defects and tested/untested boundaries.", Capability.EXTRACT, ["qa-report"]),
             ]
         else:
             criteria = [
                 ("qa-scope", "The requested page and single-page test boundary are recorded.", "Evidence identifies the supplied target URL; unrelated same-origin pages are not required."),
                 ("qa-availability", "The requested page loads and its HTTP/navigation outcome is recorded.", "The target page has a captured navigation outcome."),
                 ("qa-page-smoke", "The requested page title, H1 headings, image load status and browser console errors are inspected.", "Evidence records the document title, all H1 texts/count, each image load outcome and captured console/page errors."),
-                ("qa-report", "Confirmed page-level defects are reported with reproducible evidence and recommendations.", "Each defect includes the target URL, observed result, evidence and recommendation; unverified checks are marked untested."),
+                ("qa-validation", "Every candidate page-level defect is validated against captured browser evidence before recommendations.", "Each candidate has a persisted confirmed or insufficient-evidence verdict and linked validation context."),
+                ("qa-report", "Only confirmed page-level defects receive recommendations.", "Recommendations reference confirmed defects and include reproducible verification steps."),
             ]
             tasks = [
                 ("qa-discover", "Open the supplied page and establish a single-page QA boundary.", Capability.NAVIGATE, ["qa-scope"]),
                 ("qa-availability", "Record the requested page's HTTP and navigation outcome.", Capability.EXTRACT, ["qa-availability"]),
                 ("qa-content", "Inspect the document title, H1 headings, broken images and browser console/page errors on this page only.", Capability.EXTRACT, ["qa-page-smoke"]),
-                ("qa-synthesise", "Report confirmed defects and recommendations for the requested page only.", Capability.EXTRACT, ["qa-report"]),
+                ("qa-validate", "Validate each candidate page defect against the captured page, image and runtime evidence.", Capability.EXTRACT, ["qa-validation"]),
+                ("qa-synthesise", "Report only confirmed defects and recommendations for the requested page.", Capability.EXTRACT, ["qa-report"]),
             ]
     elif workflow == WorkflowType.SEO_QA:
         criteria = []
