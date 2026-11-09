@@ -1195,6 +1195,35 @@ class TaskManager:
                 known_urls = list(record.get("discovered_urls") or [])
                 known_urls.extend(str(item.get("url") or "") for item in crawl_pages if isinstance(item, dict))
                 coverage = crawl_coverage(known_urls, visited_urls)
+                discovery_records = structured_data.get("seo_discovery", [])
+                sitemap_by_url = {}
+                for discovery in discovery_records:
+                    if not isinstance(discovery, dict):
+                        continue
+                    sitemap = discovery.get("sitemap") or {}
+                    sitemap_url = str(sitemap.get("url") or "")
+                    if sitemap_url:
+                        sitemap_by_url[sitemap_url] = sitemap
+                sitemap_total = max(
+                    (int(item.get("url_count") or 0) for item in sitemap_by_url.values()),
+                    default=0,
+                )
+                sitemap_sample_urls = list(dict.fromkeys(
+                    url for item in sitemap_by_url.values()
+                    for url in item.get("sample_urls", []) if url
+                ))
+                sitemap_sample_visited = {
+                    canonical_url_key(url) for url in sitemap_sample_urls
+                } & {canonical_url_key(url) for url in visited_urls}
+                coverage.update({
+                    "sitemap_url_count": sitemap_total,
+                    "sitemap_urls_sampled": len(sitemap_sample_urls),
+                    "sitemap_sample_urls_visited": len(sitemap_sample_visited),
+                    "sitemap_sample_coverage_percent": round(
+                        len(sitemap_sample_visited) / len(sitemap_sample_urls) * 100, 1
+                    ) if sitemap_sample_urls else None,
+                    "sitemap_urls_beyond_sample_cap": max(0, sitemap_total - len(sitemap_sample_urls)),
+                })
                 structured_data["crawl_coverage"] = coverage
                 structured_data["duplicate_analysis"] = duplicate_analysis
                 link_records = structured_data.get("internal_link_checks", [])
@@ -1265,6 +1294,10 @@ class TaskManager:
                     "pages_inspected": len(visited_urls),
                     "known_discovered_url_count": coverage["discovered_url_count"],
                     "crawl_coverage_percent": coverage["coverage_percent"],
+                    "sitemap_url_count": coverage["sitemap_url_count"],
+                    "sitemap_sample_urls_visited": coverage["sitemap_sample_urls_visited"],
+                    "sitemap_sample_coverage_percent": coverage["sitemap_sample_coverage_percent"],
+                    "sitemap_urls_beyond_sample_cap": coverage["sitemap_urls_beyond_sample_cap"],
                     "duplicate_canonical_groups": len(duplicate_analysis["duplicate_canonical_groups"]),
                     "duplicate_title_groups": len(duplicate_analysis["duplicate_title_groups"]),
                     "duplicate_content_groups": len(duplicate_analysis["duplicate_content_groups"]),
