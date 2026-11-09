@@ -576,7 +576,10 @@ class TaskManager:
                         record["active_plan_step_id"] = active_plan_step["step_id"]
                         plan_step_urls = record.setdefault("plan_step_urls", {})
                         saved_step_url = plan_step_urls.get(active_plan_step["step_id"])
-                        if saved_step_url:
+                        long_running_crawl_step = str(active_plan_step["step_id"]).endswith(
+                            ("seo-crawl", "qa-crawl", "audit-crawl")
+                        )
+                        if saved_step_url and not long_running_crawl_step:
                             next_url = saved_step_url
                             resume_plan_source = active_plan_step.get("status") == "in_progress"
                         next_assignment = active_plan_step["objective"]
@@ -926,8 +929,11 @@ class TaskManager:
                                     )
                             if verified_result is None:
                                 workflow_value = str(record.get("workflow_type") or "")
-                                if workflow_value in {"seo", "qa", "seo_qa"} and str(step.get("step_id", "")).endswith(("seo-synthesise", "qa-synthesise")):
-                                    # Report acceptance is deferred until crawl aggregation and prioritisation.
+                                if workflow_value in {"seo", "qa", "seo_qa"} and str(step.get("step_id", "")).endswith(
+                                    ("seo-crawl", "qa-crawl", "audit-crawl", "seo-synthesise", "qa-synthesise")
+                                ):
+                                    # Long-running crawl and final synthesis are completed only after
+                                    # the deterministic page queue has been exhausted.
                                     break
                                 if workflow_value in {"seo", "qa", "seo_qa"} and str(step.get("step_id", "")).startswith(("seo-", "qa-", "combined-")):
                                     fail_step(
@@ -1288,7 +1294,9 @@ class TaskManager:
                 ))
                 if isinstance(execution_plan, dict) and all_evidence_refs:
                     for step in execution_plan.get("steps", []):
-                        if str(step.get("step_id", "")).endswith(("seo-synthesise", "qa-synthesise")) and step.get("status") not in {"completed", "blocked", "failed", "skipped"}:
+                        if str(step.get("step_id", "")).endswith(
+                            ("seo-crawl", "qa-crawl", "audit-crawl", "seo-synthesise", "qa-synthesise")
+                        ) and step.get("status") not in {"completed", "blocked", "failed", "skipped"}:
                             start_step(execution_plan, step["step_id"])
                             complete_step(
                                 execution_plan, step["step_id"],
