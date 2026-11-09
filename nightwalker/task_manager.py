@@ -637,7 +637,9 @@ class TaskManager:
                         # action; leave it pending until the crawl is exhausted.
                         available_plan_steps = [
                             step for step in available_plan_steps
-                            if not str(step.get("step_id", "")).endswith(("seo-synthesise", "qa-synthesise"))
+                            if not str(step.get("step_id", "")).endswith((
+                                "seo-validate", "qa-validate", "seo-synthesise", "qa-synthesise",
+                            ))
                         ]
                     if available_plan_steps:
                         active_plan_step = start_step(execution_plan, available_plan_steps[0]["step_id"])
@@ -1046,7 +1048,7 @@ class TaskManager:
                             if verified_result is None:
                                 workflow_value = str(record.get("workflow_type") or "")
                                 if workflow_value in {"seo", "qa", "seo_qa"} and str(step.get("step_id", "")).endswith(
-                                    ("seo-crawl", "qa-crawl", "audit-crawl", "seo-synthesise", "qa-synthesise")
+                                    ("seo-crawl", "qa-crawl", "audit-crawl", "seo-validate", "qa-validate", "seo-synthesise", "qa-synthesise")
                                 ):
                                     # Long-running crawl and final synthesis are completed only after
                                     # the deterministic page queue has been exhausted.
@@ -1476,9 +1478,10 @@ class TaskManager:
                     for step in execution_plan.get("steps", []):
                         step_id = str(step.get("step_id", ""))
                         is_crawl_step = step_id.endswith(("seo-crawl", "qa-crawl", "audit-crawl"))
+                        is_validation_step = step_id.endswith(("seo-validate", "qa-validate"))
                         is_synthesis_step = step_id.endswith(("seo-synthesise", "qa-synthesise"))
                         if (
-                            (is_crawl_step and crawl_complete or is_synthesis_step)
+                            (is_crawl_step and crawl_complete or is_validation_step or is_synthesis_step)
                             and step.get("status") not in {"completed", "blocked", "failed", "skipped"}
                         ):
                             start_step(execution_plan, step_id)
@@ -1488,7 +1491,11 @@ class TaskManager:
                                 result=(
                                     "Crawl coverage acceptance satisfied; all known discovered and sampled sitemap URLs were visited or explicitly excluded."
                                     if is_crawl_step else
-                                    "Aggregated crawl coverage, duplicate analysis, verified link checks and prioritised evidence-backed findings."
+                                    (
+                                        "Validated every candidate finding against linked structured browser evidence; persisted verdicts and recommendation context."
+                                        if is_validation_step else
+                                        "Aggregated crawl coverage, duplicate analysis, finding validation and recommendations gated to confirmed findings."
+                                    )
                                 ),
                             )
                     if record.get("goal_state"):
