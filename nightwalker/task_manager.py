@@ -544,6 +544,10 @@ class TaskManager:
                     if available_plan_steps:
                         active_plan_step = start_step(execution_plan, available_plan_steps[0]["step_id"])
                         record["active_plan_step_id"] = active_plan_step["step_id"]
+                        plan_step_urls = record.setdefault("plan_step_urls", {})
+                        saved_step_url = plan_step_urls.get(active_plan_step["step_id"])
+                        if saved_step_url:
+                            next_url = saved_step_url
                         next_assignment = active_plan_step["objective"]
                         self._log(task_id, f"Plan step started: {active_plan_step['step_id']} — {active_plan_step['objective']}")
                 record["current_step"] = {
@@ -774,6 +778,7 @@ class TaskManager:
                             step = ready[0]
                             if step.get("status") != "in_progress":
                                 start_step(execution_plan, step["step_id"])
+                            record.setdefault("plan_step_urls", {}).setdefault(step["step_id"], result.get("final_url") or next_url)
                             capability = str(step.get("capability") or "").casefold()
                             objective_text = str(step.get("objective") or "").casefold()
                             verified_result = None
