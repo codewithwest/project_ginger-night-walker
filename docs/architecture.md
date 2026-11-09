@@ -1,7 +1,7 @@
 # System architecture
 
 **Status:** current architecture with implementation gaps explicitly called out.  
-**Product scope (initial phase):** SEO auditing and website/application QA. General-purpose and deep research are explicitly deferred. The current runtime still contains generic research-oriented components; see the implementation status table and `docs/product-scope.md` for the target scope and gaps.
+**Product scope (initial phase):** SEO auditing and website/application QA. General-purpose and deep research are explicitly deferred. Legacy generic research-oriented components remain for compatibility, but new task routing is specialised to SEO and QA; see the implementation status table and `docs/product-scope.md` for current boundaries.
 
 ## 1. Design principles
 
@@ -145,21 +145,21 @@ Website text, metadata, links and embedded instructions are untrusted input. The
 | Capability | Status | Notes |
 |---|---|---|
 | Natural-language task intake | Implemented | `POST /tasks` |
-| Structured Decider plan | Implemented | Remote Ollama; general research defaults to public search discovery when no site is specified; clarifies only for essential missing scope |
+| Structured Decider plan | Implemented | SEO/QA route to deterministic target-site workflows; unsupported objectives are blocked rather than falling back to general research |
 | Goal-first execution blueprint | Initial implementation | Model defines measurable criteria, subtasks, dependencies, required tool names and expected outputs before capability assignment; Pydantic validates acyclic dependencies |
 | Plan execution ledger | Initial implementation | One mission-scoped plan per task; dependency-aware step scheduling, durable lifecycle/history, evidence-required completion, Markdown rendering and mission-list progress counts. Orchestrator rejects browser runs without an active step and checks that the requested step ID, capability and objective exactly match the authorised step. Dependent extraction steps remain pinned to the source captured by their navigation step. Capability workers are not yet independent executors. |\n| Capability agent allocation | Initial implementation | Deterministic capability-to-agent mapping; assignments are persisted with task state |\n| A2A coordination | Initial transport | Task-scoped typed assignment/assistance/result/handoff/blocker/status messages; in-process bus and API endpoints; no durable multi-worker broker yet |\n| Goal State Manager | Initial implementation | Uses blueprint criteria and evidence quotes; Python verifies exact quote and evidence ID before completion |
 | Markdown goal checklist | Implemented | Atomically persisted per task under `EVIDENCE_DIR/checklists`; included in task snapshots/API responses and seeded into research planning, optional Strands selection and final synthesis; checkboxes derive from the evidence-gated goal ledger |
 | Strands Decider integration | Optional | `STRANDS_DECIDER_URL` selects only among discovered source candidates; falls back to Ollama planner; no direct browser tools |
-| Task-scoped Playwright context | Implemented | Context closed after each run |
+| Task-scoped Playwright context | Implemented | Context is reused across page rounds and closed when the task reaches a terminal state |
 | Public URL validation | Implemented | Application-level DNS/IP checks; not a complete egress firewall |
 | SEO/QA task routing | Implemented | SEO, QA and combined plans; unrelated general research is blocked in the initial product phase |
 | Same-origin SEO/QA crawl | Initial implementation | Breadth-first discovered links and bounded sitemap samples; default 200 pages, configurable to 1,000; coverage remains bounded, not exhaustive |
 | robots.txt and sitemap discovery | Initial implementation | Robots policy, sitemap endpoint and bounded sitemap-index expansion; same-origin URLs only |
 | SEO duplicate analysis | Initial implementation | Duplicate canonical, title, meta description and exact visible-text fingerprints across inspected pages |
-| Internal-link destination verification | Initial implementation | Same-origin HEAD checks with GET fallback when HEAD is explicitly unsupported; unknown responses are not reported as broken |
+| Internal-link destination verification | Initial implementation | Same-origin HEAD checks with GET fallback when HEAD is explicitly unsupported; redirects are followed manually with per-hop origin and URL-policy validation; off-origin redirects are distinct from broken destinations |
 | SEO report prioritisation | Initial implementation | P0-P4 priority, impact score/rationale, effort and remediation guidance; ranking/performance metrics are not inferred |
 | QA navigation and interactions | Initial implementation | Sampled same-origin GET journeys and reversible local disclosure toggles; no forms or business actions |
-| QA responsive/accessibility smoke checks | Initial implementation | 375/768/1280px overflow, accessible-name/landmark/ARIA heuristics and six-step keyboard focus sample; not WCAG certification |
+| QA responsive/accessibility smoke checks | Initial implementation | 375/768/1280px overflow, accessible-name and broken ARIA-reference checks, nested controls, positive tabindex, table headers, landmarks, document title/language and six-step keyboard focus sample; not WCAG certification |
 | QA browser diagnostics | Initial implementation | Console errors, uncaught page exceptions and failed network requests captured during sampled runs |
 | Same-origin anchor navigation | Partial | Heuristic relevant-link following is retained for legacy paths; audit crawling uses deterministic discovery |
 | Visible text and heading capture | Implemented | Bounded capture on each inspected source page |
@@ -169,7 +169,7 @@ Website text, metadata, links and embedded instructions are untrusted input. The
 | Operator cancellation | Implemented | DELETE `/tasks/{task_id}` cancels active work and marks queued/clarification-waiting tasks stopped |
 | Durable task snapshots | Implemented | Atomic per-task JSON snapshots under the persistent evidence volume |
 | Restart recovery | Initial implementation | Startup restores queued/running tasks; resumes from the last saved round checkpoint; an interrupted in-flight page may be retried once |
-| Generic report envelope | Partial | Aggregated multi-source findings, source/evidence references and synthesis; richer claim validation remains |
+| Generic report envelope | Partial | Aggregated multi-source findings, source/evidence references, P0-P4 impact/effort/remediation fields and a UI audit overview for crawl, duplicate, link, responsive and accessibility metrics; richer claim validation remains |
 | Product name/price extraction | Legacy partial capability | One task-specific structured-data adapter; not a first-phase workflow |
 | General-purpose multi-source research | Deferred for initial product phase | Legacy implementation remains for compatibility; new unsupported objectives are blocked rather than routed to general research |
 | Research loop detection and recovery | Initial implementation | Canonical URL deduplication; maximum two attempts per URL; duplicate/ exhausted URLs skipped; deterministic fallback to another discovered candidate; bounded recent outcome history |
