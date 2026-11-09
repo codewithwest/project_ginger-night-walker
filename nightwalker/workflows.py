@@ -69,17 +69,17 @@ def build_workflow_blueprint(objective: str, workflow: WorkflowType) -> Executio
         criteria = [
             ("seo-scope", "The target website and inspected URL scope are recorded.", "At least one target URL and its captured source are recorded."),
             ("seo-technical", "Technical crawl and indexability signals are inspected.", "Evidence records observed HTTP outcome, canonical/robots directives when present, and sitemap/robots discovery outcome."),
-            ("seo-metadata", "Page titles, descriptions, headings and language/viewport metadata are inspected.", "Captured page evidence supports each reported metadata observation."),
+            ("seo-page", "Page metadata, headings, visible content and image alternatives are inspected.", "Captured page evidence supports each reported title, description, canonical, heading, language, viewport and image-alt observation."),
             ("seo-links", "Internal link structure and broken-link candidates are assessed.", "Observed internal links are recorded and any failed destination is evidenced."),
-            ("seo-content", "Visible content structure and image alternatives are assessed where observable.", "Evidence supports content/headings and image-alt observations; unavailable checks are marked untested."),
+            ("seo-coverage", "Discovered same-origin URLs are visited or explicitly accounted for.", "The report records discovered, visited, robots-excluded and budget-excluded URL counts; incomplete coverage remains blocked."),
             ("seo-report", "SEO findings are prioritised with affected URLs and actionable remediation.", "Every reported issue has evidence, affected URL, impact rationale and a recommended fix."),
         ]
         tasks = [
             ("seo-discover", "Discover the target website and establish the crawl boundary.", Capability.NAVIGATE, ["seo-scope"]),
             ("seo-technical", "Inspect technical SEO signals on the target and discovered pages.", Capability.EXTRACT, ["seo-technical"]),
-            ("seo-page", "Inspect page-level metadata, headings, content and image signals.", Capability.EXTRACT, ["seo-metadata", "seo-content"]),
+            ("seo-page", "Inspect page-level metadata, headings, content and image signals.", Capability.EXTRACT, ["seo-page"]),
             ("seo-links", "Inspect internal links and verify selected same-site destinations.", Capability.INTERACT, ["seo-links"]),
-            ("seo-crawl", "Continue the deterministic same-origin crawl until discovered URLs or the page budget are exhausted.", Capability.NAVIGATE, []),
+            ("seo-crawl", "Continue the deterministic same-origin crawl until discovered URLs or the page budget are exhausted.", Capability.NAVIGATE, ["seo-coverage"]),
             ("seo-synthesise", "Prioritise evidence-backed SEO issues and remediation.", Capability.EXTRACT, ["seo-report"]),
         ]
     elif workflow == WorkflowType.QA:
@@ -88,6 +88,7 @@ def build_workflow_blueprint(objective: str, workflow: WorkflowType) -> Executio
             ("qa-availability", "Target pages load and HTTP/navigation failures are recorded.", "Each tested page has a captured navigation outcome."),
             ("qa-navigation", "Internal navigation destinations are inspected for broken-link candidates.", "Each reported broken destination has an observed failed navigation."),
             ("qa-content", "Page structure and visible content are checked for obvious rendering/content failures.", "Evidence supports each reported page-level defect."),
+            ("qa-coverage", "Discovered same-origin QA URLs are visited or explicitly accounted for.", "The report records discovered and visited URL counts; any remaining URLs at the page budget keep coverage incomplete."),
             ("qa-report", "QA observations are reported with reproducible URLs and honest test status.", "Each defect includes observed behaviour, URL and evidence; unexecuted interactions are marked untested."),
         ]
         tasks = [
@@ -95,7 +96,7 @@ def build_workflow_blueprint(objective: str, workflow: WorkflowType) -> Executio
             ("qa-availability", "Check page availability and record navigation failures.", Capability.EXTRACT, ["qa-availability"]),
             ("qa-navigation", "Inspect internal navigation and verify selected destinations.", Capability.INTERACT, ["qa-navigation"]),
             ("qa-content", "Inspect page structure and visible content for observable defects.", Capability.EXTRACT, ["qa-content"]),
-            ("qa-crawl", "Continue the deterministic same-origin QA crawl until discovered URLs or the page budget are exhausted.", Capability.NAVIGATE, []),
+            ("qa-crawl", "Continue the deterministic same-origin QA crawl until discovered URLs or the page budget are exhausted.", Capability.NAVIGATE, ["qa-coverage"]),
             ("qa-synthesise", "Produce a QA report with evidence and tested/untested boundaries.", Capability.EXTRACT, ["qa-report"]),
         ]
     elif workflow == WorkflowType.SEO_QA:
@@ -134,7 +135,7 @@ def build_workflow_blueprint(objective: str, workflow: WorkflowType) -> Executio
             "subtask_id": "combined-audit-crawl",
             "objective": "Continue the deterministic same-origin crawl for both workstreams until discovered URLs or the page budget are exhausted.",
             "capability": Capability.NAVIGATE,
-            "success_criteria": [],
+            "success_criteria": ["combined-seo-coverage", "combined-qa-coverage"],
             "depends_on": [],
         })
         criteria = criteria[:12]
