@@ -437,6 +437,93 @@ class BrowserRuntime:
         )
         return page.url
 
+    async def _run_product_search_smoke(self, page: Page, objective: str) -> dict[str, Any] | None:
+        """Run a user-requested, read-only product search and capture the rendered result."""
+        match = re.search(r'(?i)search\\s+for\\s+[“"\\']([^”"\\']{1,100})[”"\\']', objective)
+        if not match:
+            return None
+        query = match.group(1).strip()
+        search_inputs = page.locator(
+            'input[type="search"], input[name*="search" i], input[id*="search" i], '
+            'input[placeholder*="search" i], input[aria-label*="search" i]'
+        )
+        input_count = await search_inputs.count()
+        if input_count == 0:
+            return {"query": query, "performed": False, "status": "search_control_not_found",
+                    "result_count": 0, "matches": []}
+        # Prefer a visible enabled field; do not guess among multiple indistinguishable controls.
+        candidates = []
+        for index in range(min(input_count, 8)):
+            field = search_inputs.nth(index)
+            try:
+                if await field.is_visible() and await field.is_enabled():
+                    candidates.append(field)
+            except Exception:
+                continue
+        if len(candidates) != 1:
+            return {"query": query, "performed": False, "status": "ambiguous_search_control",
+                    "visible_search_controls": len(candidates), "result_count": 0, "matches": []}
+        field = candidates[0]
+        await field.fill(query)
+        submit = page.locator(
+            'button#submit_search, button[type="submit"], input[type="submit"], '
+            'button[aria-label*="search" i]'
+        )
+        visible_submit = []
+        for index in range(min(await submit.count(), 8)):
+            button = submit.nth(index)
+            try:
+                if await button.is_visible() and await button.is_enabled():
+                    visible_submit.append(button)
+            except Exception:
+                continue
+        if len(visible_submit) == 1:
+            await visible_submit[0].click()
+        elif len(visible_submit) == 0:
+            await field.press("Enter")
+        else:
+            return {"query": query, "performed": False, "status": "ambiguous_search_submit",
+                    "result_count": 0, "matches": []}
+        try:
+            await page.wait_for_load_state("domcontentloaded", timeout=5000)
+        except Exception:
+            pass
+        await page.wait_for_timeout(min(2500, max(500, int(os.getenv("QA_PRODUCT_RESULT_SETTLE_MS", "1500")))))
+        matches = await page.locator(
+            '.productinfo, .product-image-wrapper, .single-products, .product-card, [data-product-id]'
+        ).evaluate_all(
+            """nodes => nodes.slice(0, 80).map(node => {
+                const image = node.querySelector('img');
+                return {
+                    text: (node.innerText || '').trim().slice(0, 1200),
+                    image_src: image ? (image.currentSrc || image.src || image.getAttribute('src') || '') : '',
+                    image_alt: image ? (image.getAttribute('alt') || '') : '',
+                    image_complete: image ? !!image.complete : false,
+                    image_natural_width: image ? (image.naturalWidth || 0) : 0
+                };
+            })"""
+        )
+        query_lower = query.casefold()
+        matched = []
+        for item in matches:
+            text_value = str(item.get("text") or "")
+            if query_lower not in text_value.casefold():
+                continue
+            price = re.search(r'(?i)(?:Rs\\.?\\s*|R\\s*)[\\d,]+(?:\\.\\d{1,2})?', text_value)
+            matched.append({
+                **item,
+                "name_match": query,
+                "price": price.group(0).strip() if price else None,
+                "image_present": bool(item.get("image_src")),
+                "image_loaded": bool(item.get("image_complete") and item.get("image_natural_width", 0) > 0),
+            })
+        return {
+            "query": query, "performed": True,
+            "status": "matched" if matched else "no_matching_product_card",
+            "result_count": len(matches), "matches": matched[:12],
+            "searched_url": page.url,
+        }
+
     @staticmethod
     def _extract_products_from_text(text: str, limit: int = 12) -> list[dict[str, str]]:
         """Extract ordered product names and prices from visible page text."""
@@ -863,6 +950,18 @@ class BrowserRuntime:
                 timeout=int(os.getenv("NAVIGATION_TIMEOUT_MS", "20000")),
             )
             http_status = response.status if response else None
+            product_search_requested = bool(re.search(
+                r'(?i)search\\s+for\\s+[“"\\'][^”"\\']{1,100}[”"\\']', objective
+            ))
+            qa_product_search = (
+                await self._run_product_search_smoke(page, objective)
+                if workflow_type == "qa" and product_search_requested else None
+            )
+            if qa_product_search:
+                self._browser_event(
+                    task_id, "Executed requested product search and captured matching product cards",
+                    url=page.url, title=(await page.title())[:500],
+                )
             self._browser_event(task_id, "Navigated to target page", url=page.url, title=(await page.title())[:500])
             if response and response.status >= 400:
                 return {
@@ -955,6 +1054,16 @@ class BrowserRuntime:
                 page_signal_findings,
                 qa_extended_findings,
             )
+            if workflow_type in {"qa", "seo_qa"}:
+                # Give ordinary image requests a short bounded settle window; never
+                # wait indefinitely for lazy, blocked or third-party assets.
+                try:
+                    await page.wait_for_function(
+                        "() => Array.from(document.images).every(img => img.complete)",
+                        timeout=int(os.getenv("QA_IMAGE_SETTLE_TIMEOUT_MS", "4000")),
+                    )
+                except Exception:
+                    pass
             audit_signals = await collect_page_signals(page)
             x_robots_tag = (response.headers.get("x-robots-tag") if response else None)
             audit_signals.setdefault("seo", {})["x_robots_tag"] = x_robots_tag
@@ -1161,6 +1270,8 @@ class BrowserRuntime:
                 structured_data["qa_checks"] = audit_signals.get("qa", {})
                 if audit_signals.get("qa_page_smoke"):
                     structured_data["qa_page_smoke"] = audit_signals["qa_page_smoke"]
+                if qa_product_search is not None:
+                    structured_data["qa_product_search"] = qa_product_search
                 structured_data["qa_extended"] = audit_signals.get("qa_extended", {})
                 structured_data["qa_navigation_journeys"] = audit_signals.get("qa_navigation_journeys", {})
                 structured_data["qa_interaction_journeys"] = audit_signals.get("qa_interaction_journeys", {})
@@ -1199,6 +1310,7 @@ class BrowserRuntime:
                 "objective": objective[:2000],
                 **report,
                 "products": products,
+                "qa_product_search": qa_product_search,
                 "final_url": page.url,
                 "http_status": http_status,
                 "title": title,
@@ -1224,6 +1336,7 @@ class BrowserRuntime:
                 "headings": headings,
                 "text": body_text,
                 "products": products,
+                "qa_product_search": qa_product_search,
                 "visited_urls": visited[:10],
                 "candidate_urls": candidates,
                 "issues": issues,
