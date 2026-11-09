@@ -38,7 +38,12 @@ class ContextCompiler:
         capability = task.capability.value
         allowed_inputs = self.INPUT_ALLOWLIST[capability]
         allowed_requirements = self.REQUIREMENT_ALLOWLIST[capability]
-        input_data = self.working_memory.compact_value({k: v for k, v in task.input_data.items() if k in allowed_inputs})
+        input_data = self.working_memory.compact_value(
+            {k: v for k, v in task.input_data.items() if k in allowed_inputs}
+        )
+        requirements = self.working_memory.compact_value(
+            {k: v for k, v in task.requirements.items() if k in allowed_requirements}
+        )
         if task.target_url and capability in {"navigate", "extract"}:
             input_data["url"] = str(task.target_url)
         return CompiledContext(
@@ -46,7 +51,7 @@ class ContextCompiler:
             capability=capability,
             objective=task.objective,
             input_data=input_data,
-            requirements={k: v for k, v in task.requirements.items() if k in allowed_requirements},
+            requirements=requirements,
             # Permissions are deliberately absent until a trusted broker issues task-scoped grants.
             permissions=frozenset(),
         )
