@@ -27,9 +27,9 @@ def test_seo_blueprint_has_measurable_acceptance_criteria():
 
 def test_combined_blueprint_has_unique_ids_and_valid_dependencies():
     blueprint = build_workflow_blueprint('SEO and QA audit https://example.com', WorkflowType.SEO_QA)
-    assert len(blueprint.success_criteria) == 11
+    assert len(blueprint.success_criteria) == 12
     assert len(blueprint.subtasks) == 11
-    assert len({item.criterion_id for item in blueprint.success_criteria}) == 11
+    assert len({item.criterion_id for item in blueprint.success_criteria}) == 12
     assert len({item.subtask_id for item in blueprint.subtasks}) == 11
     assert [item.subtask_id for item in blueprint.subtasks].count("combined-audit-crawl") == 1
     assert "combined-audit-crawl" in [item.subtask_id for item in blueprint.subtasks]
@@ -46,3 +46,8 @@ def test_qa_blueprint_keeps_a_dedicated_crawl_step():
     crawl_step = next(item for item in blueprint.subtasks if item.subtask_id == "qa-crawl")
     assert crawl_step.capability.value == "navigate"
     assert crawl_step.success_criteria == []
+
+
+def test_qa_blueprint_requires_discovered_url_coverage():
+    blueprint = build_workflow_blueprint('QA testing https://example.com', WorkflowType.QA)
+    assert any(item.criterion_id == "qa-coverage" for item in blueprint.success_criteria)
