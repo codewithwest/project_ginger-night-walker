@@ -539,6 +539,7 @@ class TaskManager:
                 record["round"] = round_count
                 execution_plan = record.get("execution_plan")
                 active_plan_step = None
+                resume_plan_source = False
                 if isinstance(execution_plan, dict):
                     available_plan_steps = ready_steps(execution_plan)
                     if available_plan_steps:
@@ -548,6 +549,7 @@ class TaskManager:
                         saved_step_url = plan_step_urls.get(active_plan_step["step_id"])
                         if saved_step_url:
                             next_url = saved_step_url
+                            resume_plan_source = active_plan_step.get("status") == "in_progress"
                         next_assignment = active_plan_step["objective"]
                         self._log(task_id, f"Plan step started: {active_plan_step['step_id']} — {active_plan_step['objective']}")
                 record["current_step"] = {
@@ -559,7 +561,7 @@ class TaskManager:
                 self._persist(task_id)
                 self._log(task_id, f"Round {round_count}/{self.max_rounds}: {next_assignment}")
                 attempt = loop_guard.begin(next_url, next_assignment)
-                already_visited = loop_guard.is_visited(next_url, visited_urls)
+                already_visited = loop_guard.is_visited(next_url, visited_urls) and not resume_plan_source
                 self._save_checkpoint(
                     task_id, initial_plan, sources=sources, findings=findings,
                     evidence=evidence, visited_urls=visited_urls, candidates=candidates,
