@@ -84,3 +84,13 @@ def test_page_title_image_and_console_smoke_request_routes_to_qa():
     objective = "Check the page title, H1 headings, broken images and console errors on https://example.com"
     assert classify_workflow(objective) == WorkflowType.QA
     assert qa_scope_for_objective(objective) == "single_page"
+
+
+def test_routes_product_search_result_verification_to_qa():
+    objective = 'Open https://www.automationexercise.com/products. Search for "Blue Top". Verify the product appears with its name, image, and price. Report any issues.'
+    assert classify_workflow(objective) == WorkflowType.QA
+    assert qa_scope_for_objective(objective) == "single_page"
+
+
+def test_product_noun_without_testing_intent_is_not_qa():
+    assert classify_workflow('Tell me about Blue Top on https://example.com/products') == WorkflowType.UNSUPPORTED
