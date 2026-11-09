@@ -122,10 +122,12 @@ def _support_for_type(
         ) or (
             r.get("dataset") == "qa_extended" and any(
                 isinstance(value, (int, float)) and value > 0
-                for key, value in r.items()
-                if key in {"controls_without_label", "links_without_accessible_name",
+                for key, value in (r.get("semantic_accessibility") or {}).items()
+                if key in {"visible_form_controls_without_label", "links_without_accessible_name",
                            "buttons_without_accessible_name", "focusable_inside_aria_hidden",
-                           "broken_aria_labelledby_references"}
+                           "broken_aria_labelledby_references", "generic_link_names",
+                           "nested_interactive_controls", "positive_tabindex_count",
+                           "tables_without_header_cells", "target_blank_without_noopener"}
             )
         )]
     elif kind == "qa_dom_issue":
