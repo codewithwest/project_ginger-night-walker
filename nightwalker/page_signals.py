@@ -28,6 +28,9 @@ async def collect_page_signals(page: Any) -> dict[str, Any]:
           heading_count: document.querySelectorAll("h1,h2,h3,h4,h5,h6").length,
           heading_levels: Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6")).slice(0, 100).map(h => Number(h.tagName.slice(1))),
           image_count: images.length, images_missing_alt: images.filter(img => !img.hasAttribute("alt")).length,
+          h1_headings: Array.from(document.querySelectorAll("h1")).map(h => (h.innerText || h.textContent || "").trim()).slice(0, 100),
+          images: images.map(img => ({src: img.currentSrc || img.src || "", alt: img.getAttribute("alt"), complete: img.complete, natural_width: img.naturalWidth, natural_height: img.naturalHeight, load_status: img.complete ? (img.naturalWidth > 0 ? "loaded" : "broken") : "pending"})).slice(0, 500),
+          broken_image_count: images.filter(img => img.complete && img.naturalWidth === 0).length,
           images_empty_alt: images.filter(img => img.hasAttribute("alt") && !img.getAttribute("alt").trim()).length,
           internal_link_count: links.filter(a => { try { return new URL(a.href).origin === location.origin; } catch { return false; } }).length,
           external_link_count: links.filter(a => { try { return new URL(a.href).origin !== location.origin; } catch { return false; } }).length,
@@ -66,6 +69,14 @@ def page_signal_findings(signals: dict[str, Any], workflow_type: str) -> list[di
         levels = seo.get("heading_levels", [])
         if any(current > previous + 1 for previous, current in zip(levels, levels[1:])): findings.append({"claim": "Heading levels skip one or more ranks; review document outline.", "type": "seo_warning", "severity": "low"})
     if workflow_type in {"qa", "seo_qa"}:
+        broken_images = [item for item in seo.get("images", []) if item.get("load_status") == "broken"]
+        for image in broken_images:
+            findings.append({
+                "claim": "Image failed to load: " + str(image.get("src") or "(empty image source)")[:300],
+                "type": "qa_broken_image", "severity": "medium",
+                "affected_urls": [page.url if hasattr(page, "url") else ""],
+                "image_url": image.get("src"),
+            })
         if qa.get("controls_without_accessible_name", 0): findings.append({"claim": str(qa["controls_without_accessible_name"]) + " visible control(s) have no detectable accessible name.", "type": "qa_accessibility_warning", "severity": "medium"})
         if qa.get("duplicate_ids"): findings.append({"claim": "Duplicate HTML IDs were detected: " + ", ".join(qa["duplicate_ids"][:8]), "type": "qa_dom_issue", "severity": "low"})
     return findings
