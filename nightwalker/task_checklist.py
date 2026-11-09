@@ -40,6 +40,12 @@ class TaskChecklist:
             item.get("subtask_id"): item
             for item in task.get("agent_assignments") or []
         }
+        execution_plan = task.get("execution_plan") or {}
+        execution_steps = {
+            item.get("step_id"): item
+            for item in execution_plan.get("steps") or []
+            if isinstance(item, dict)
+        }
         result = task.get("result") or {}
         sources = result.get("sources") or []
         findings = result.get("findings") or []
@@ -110,16 +116,32 @@ class TaskChecklist:
             for item in subtasks:
                 subtask_id = self._safe(item.get("subtask_id"), 80)
                 assignment = assignments.get(item.get("subtask_id"), {})
-                state = self._safe(assignment.get("status") or "planned", 40).lower()
-                done = state in {"completed", "verified"}
+                execution = execution_steps.get(item.get("subtask_id"), {})
+                state = self._safe(execution.get("status") or assignment.get("status") or "pending", 40).lower()
+                done = state == "completed"
                 deps = ", ".join(item.get("depends_on") or []) or "none"
                 criteria_ids = ", ".join(item.get("success_criteria") or []) or "not mapped"
+                evidence_refs = execution.get("evidence_refs") or []
+                evidence_suffix = ("; evidence: " + ", ".join(self._safe(ref, 80) for ref in evidence_refs[:8])) if evidence_refs else ""
                 lines.append(
                     f"- {self._checkbox(done)} **{subtask_id}** ({state}) — "
                     f"{self._safe(item.get('objective'), 300)}; "
                     f"capability: {self._safe(item.get('capability'), 40)}; "
                     f"depends on: {self._safe(deps, 180)}; criteria: {self._safe(criteria_ids, 180)}"
+                    f"{evidence_suffix}"
                 )
+                if execution.get("result"):
+                    lines.append(f"  - Verified result: {self._safe(execution.get('result'), 500)}")
+            history = execution_plan.get("history") or []
+            if history:
+                lines.extend(["", "### Plan execution history", ""])
+                for event in history[-20:]:
+                    lines.append(
+                        f"- {self._safe(event.get('at'), 40)} · "
+                        f"**{self._safe(event.get('step_id'), 80)}** → "
+                        f"{self._safe(event.get('status'), 40)}: "
+                        f"{self._safe(event.get('message'), 300)}"
+                    )
         else:
             lines.append("- [ ] Execution plan/subtasks not available.")
         lines.extend(["", "## Research log", ""])
