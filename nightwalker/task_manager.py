@@ -1821,4 +1821,7 @@ class TaskManager:
                 "status": "stopped", "remaining_work": ["Task cancelled before completion"],
                 "seed_for_next_round": [],
             })
+        if record.get("status") == "stopped":
+            self.timing.finish(record)
+            self._persist(task_id)
         return self.snapshot(task_id)
