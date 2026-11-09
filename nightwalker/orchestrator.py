@@ -43,10 +43,35 @@ class Orchestrator:
             cleanup["mode"] = "fallback"
         return cleanup
 
-    async def run_browser_workflow(self, task_id: str, objective: str, plan: DecisionPlan) -> dict:
+    async def run_browser_workflow(
+        self,
+        task_id: str,
+        objective: str,
+        plan: DecisionPlan,
+        *,
+        authorized_step: dict | None = None,
+    ) -> dict:
         if not plan.target_url:
             raise ValueError("The Decider plan has no target URL")
+        if not isinstance(authorized_step, dict):
+            raise PermissionError("No active mission plan step authorises browser execution")
+        if authorized_step.get("status") != "in_progress":
+            raise PermissionError("Browser execution requires an in-progress mission plan step")
+        step_id = str(authorized_step.get("step_id") or "")
+        capability = str(authorized_step.get("capability") or "")
+        step_objective = str(authorized_step.get("objective") or "").strip()
+        if not step_id or not step_objective or capability not in {"navigate", "interact", "extract", "recover"}:
+            raise PermissionError("The active mission plan step is invalid or requests an unsupported capability")
         steps = [step.model_dump(mode="json") for step in plan.steps]
+        if len(steps) != 1:
+            raise PermissionError("A browser run must be scoped to exactly one active mission plan step")
+        requested = steps[0]
+        if (
+            str(requested.get("step_id") or "") != step_id
+            or str(requested.get("capability") or "") != capability
+            or str(requested.get("objective") or "").strip() != step_objective
+        ):
+            raise PermissionError("Browser instructions do not match the active mission plan step")
         try:
             before_cleanup = await self._cleanup_browser_tabs(task_id, objective)
             result = await self.browser.run_plan(
@@ -55,6 +80,11 @@ class Orchestrator:
                 steps=steps,
                 objective=objective,
             )
+            result["authorised_plan_step"] = {
+                "step_id": step_id,
+                "capability": capability,
+                "objective": step_objective,
+            }
             after_cleanup = await self._cleanup_browser_tabs(task_id, objective)
             cleanup = after_cleanup or before_cleanup
             if cleanup:
