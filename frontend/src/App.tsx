@@ -90,6 +90,12 @@ type Task = {
   scratchpad?: { round?: number; assignment?: string; status?: string; findings?: unknown[]; evidence_ids?: string[] }[];
   goal_state?: { original_goal: string; criteria: string[]; completed: string[]; remaining: string[]; evidence_by_criterion: Record<string, { evidence_id: string; quote: string }> } | null;
   checklist_markdown?: string;
+  execution_plan?: {
+    version: number;
+    status: string;
+    steps: { step_id: string; index: number; objective: string; capability: string; status: string; depends_on: string[]; evidence_refs: string[]; result?: string | null }[];
+    history: { at: string; step_id: string; status: string; message: string }[];
+  } | null;
   browser?: BrowserSession | null;
 };
 
@@ -671,6 +677,33 @@ export default function App() {
                     <span>{selected.error}</span>
                   </div>
                 )}
+
+                {selected.execution_plan?.steps?.length ? (
+                  <details className="report-details" open>
+                    <summary>
+                      <span><Check size={15} /> Mission plan · {selected.execution_plan.steps.filter((step) => step.status === "completed").length}/{selected.execution_plan.steps.length} verified</span>
+                      <ArrowDownRight size={15} />
+                    </summary>
+                    <div className="report-details__body">
+                      <div className="plan-step-list">
+                        {selected.execution_plan.steps.map((step) => (
+                          <article className="plan-step" key={step.step_id}>
+                            <div className="plan-step__heading">
+                              <strong>{step.index}. {step.objective}</strong>
+                              <Status value={step.status} />
+                            </div>
+                            <div className="plan-step__meta">
+                              <span>{step.capability}</span>
+                              {step.depends_on.length > 0 && <span>Depends on: {step.depends_on.join(", ")}</span>}
+                            </div>
+                            {step.result && <p>{step.result}</p>}
+                            {step.evidence_refs.length > 0 && <div className="plan-step__evidence">Evidence: {step.evidence_refs.join(", ")}</div>}
+                          </article>
+                        ))}
+                      </div>
+                    </div>
+                  </details>
+                ) : null}
 
                 {selected.checklist_markdown && (
                   <details className="report-details" open>
