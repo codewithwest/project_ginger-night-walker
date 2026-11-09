@@ -73,3 +73,9 @@ def test_page_smoke_qa_defaults_to_single_requested_url():
 def test_explicit_site_wide_phrasing_enables_qa_crawl():
     assert qa_scope_for_objective("Test every page on https://example.com") == "site_wide"
     assert qa_requires_site_crawl("Crawl the site at https://example.com")
+
+
+def test_page_title_image_and_console_smoke_request_routes_to_qa():
+    objective = "Check the page title, H1 headings, broken images and console errors on https://example.com"
+    assert classify_workflow(objective) == WorkflowType.QA
+    assert qa_scope_for_objective(objective) == "single_page"
