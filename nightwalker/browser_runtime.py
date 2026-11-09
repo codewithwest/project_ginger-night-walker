@@ -825,21 +825,33 @@ class BrowserRuntime:
             if workflow_type in {"qa", "seo_qa"} and id(page) not in self._qa_listener_pages:
                 runtime_events = self._task_sessions[task_id].setdefault("qa_runtime_events", [])
 
-                def record_qa_event(kind: str, message: str, event_url: str | None = None) -> None:
+                def record_qa_event(
+                    kind: str, message: str, event_url: str | None = None,
+                    details: dict[str, Any] | None = None,
+                ) -> None:
                     runtime_events.append({
-                        "kind": kind, "message": str(message)[:500],
-                        "url": event_url, "captured_at": datetime.now(UTC).isoformat(),
+                        "kind": kind, "message": str(message)[:1000],
+                        "url": event_url, "details": details or {},
+                        "captured_at": datetime.now(UTC).isoformat(),
                     })
                     if len(runtime_events) > 500:
                         del runtime_events[:-500]
 
                 page.on("console", lambda message: (
-                    record_qa_event("console_error", message.text, page.url)
+                    record_qa_event(
+                        "console_error", message.text, page.url,
+                        {"location": message.location},
+                    )
                     if message.type == "error" and not message.text.startswith("[Recorder]") else None
                 ))
-                page.on("pageerror", lambda error: record_qa_event("page_error", str(error), page.url))
+                page.on("pageerror", lambda error: record_qa_event(
+                    "page_error", str(error), page.url,
+                    {"stack": str(getattr(error, "stack", "") or "")[:3000]},
+                ))
                 page.on("requestfailed", lambda request: record_qa_event(
-                    "request_failed", f"{request.method} {request.url}: {request.failure}", request.url
+                    "request_failed", f"{request.method} {request.url}: {request.failure}",
+                    request.url, {"method": request.method, "failure": str(request.failure or ""),
+                                  "resource_type": request.resource_type},
                 ))
                 self._qa_listener_pages.add(id(page))
             # Secondary pages are reviewed by the AI janitor in Orchestrator;
