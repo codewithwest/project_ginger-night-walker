@@ -845,6 +845,10 @@ class TaskManager:
                                 checklist_markdown=self.checklist.write(record),
                             )
                             GoalStateManager.apply_proposal(record["goal_state"], proposal, round_evidence)
+                            GoalStateManager.apply_verified_plan_results(
+                                record["goal_state"], record.get("execution_plan"), evidence,
+                                record.get("plan_outputs"), structured_data,
+                            )
                             self._log(task_id, f"Goal progress: {len(record['goal_state']['completed'])}/{len(record['goal_state']['criteria'])} criteria have verified evidence.")
                         except (OllamaUnavailable, AttributeError) as exc:
                             self._log(task_id, f"Goal progress evaluation unavailable: {exc}", "warning")
@@ -1074,7 +1078,9 @@ class TaskManager:
                 remaining_criteria = (record.get("goal_state") or {}).get("remaining", [])
                 if remaining_criteria:
                     limitations.append("Success criteria still lacking directly quoted evidence: " + "; ".join(remaining_criteria))
-                final_status = "completed" if sources and not limitations and not remaining_criteria else "blocked"
+                # Caveats and non-blocking synthesis gaps remain visible in the report.
+                # Task status reflects whether the user's verified success criteria were met.
+                final_status = "completed" if sources and not remaining_criteria else "blocked"
             else:
                 answer = "No usable sources could be inspected. Review the limitations and execution log."
                 final_status = "blocked"
