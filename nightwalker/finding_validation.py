@@ -71,12 +71,68 @@ def _support_for_type(
         matched = [r for r in records if r.get("dataset") == "qa_extended"
                    and any(v.get("horizontal_overflow") for v in r.get("responsive_viewports", [])
                            if isinstance(v, dict))]
-    elif kind in {"seo_issue", "seo_warning", "qa_page_issue", "qa_accessibility_issue",
-                  "qa_accessibility_warning", "qa_dom_issue", "qa_interaction_issue"}:
-        # Require the finding to be tied to a captured signal record, not just a prose claim.
-        matched = [r for r in records if r.get("dataset") in {
-            "seo_checks", "qa_checks", "qa_page_smoke", "qa_extended", "page_signals",
-        }]
+    elif kind in {"seo_issue", "seo_warning"}:
+        for record in records:
+            if record.get("dataset") != "seo_checks":
+                continue
+            if "title" in claim and ("missing" in claim or "no " in claim):
+                ok = not str(record.get("title") or "").strip()
+            elif "title" in claim and "60 characters" in claim:
+                ok = int(record.get("title_length") or 0) > 60
+            elif "meta description" in claim and "missing" in claim:
+                ok = not str(record.get("meta_description") or "").strip()
+            elif "meta description" in claim and "160 characters" in claim:
+                ok = len(str(record.get("meta_description") or "")) > 160
+            elif "meta description" in claim and "short" in claim:
+                ok = 0 < len(str(record.get("meta_description") or "").strip()) < 70
+            elif "canonical" in claim and "missing" in claim:
+                ok = not record.get("canonical_url")
+            elif "canonical" in claim and "different origin" in claim:
+                ok = record.get("canonical_is_same_origin") is False
+            elif "language" in claim:
+                ok = not str(record.get("language") or "").strip()
+            elif "viewport" in claim:
+                ok = not str(record.get("viewport") or "").strip()
+            elif "h1" in claim:
+                ok = int(record.get("h1_count") or 0) == 0 if "no h1" in claim or "no h1 heading" in claim else int(record.get("h1_count") or 0) > 1
+            elif "alt" in claim:
+                ok = int(record.get("images_missing_alt") or 0) > 0
+            elif "noindex" in claim:
+                ok = bool(record.get("noindex"))
+            elif "json-ld" in claim:
+                ok = any(block.get("valid_json") is False for block in record.get("json_ld_blocks", []) if isinstance(block, dict))
+            elif "heading levels" in claim:
+                levels = record.get("heading_levels") or []
+                ok = any(current > previous + 1 for previous, current in zip(levels, levels[1:]))
+            else:
+                ok = False
+            if ok:
+                matched.append(record)
+    elif kind == "qa_page_issue":
+        matched = [r for r in records if r.get("dataset") == "qa_page_smoke" and (
+            ("title" in claim and not str(r.get("document_title") or "").strip())
+            or ("h1" in claim and int(r.get("h1_count") or 0) == 0)
+        )]
+    elif kind in {"qa_accessibility_issue", "qa_accessibility_warning"}:
+        matched = [r for r in records if (
+            r.get("dataset") == "qa_checks" and (
+                ("accessible name" in claim and int(r.get("controls_without_accessible_name") or 0) > 0)
+                or ("duplicate" in claim and bool(r.get("duplicate_ids")))
+            )
+        ) or (
+            r.get("dataset") == "qa_extended" and any(
+                isinstance(value, (int, float)) and value > 0
+                for key, value in r.items()
+                if key in {"controls_without_label", "links_without_accessible_name",
+                           "buttons_without_accessible_name", "focusable_inside_aria_hidden",
+                           "broken_aria_labelledby_references"}
+            )
+        )]
+    elif kind == "qa_dom_issue":
+        matched = [r for r in records if r.get("dataset") == "qa_checks" and bool(r.get("duplicate_ids"))]
+    elif kind == "qa_interaction_issue":
+        matched = [r for r in records if r.get("dataset") == "qa_interaction_journeys"
+                   and any(c.get("ok") is False for c in r.get("checks", []) if isinstance(c, dict))]
     else:
         # Unknown finding types remain unverified until a dedicated validator exists.
         return False, "No type-specific validator exists for this finding type.", []
