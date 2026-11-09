@@ -33,6 +33,7 @@ def _linked_records(finding: dict[str, Any], structured_data: dict[str, Any]) ->
 
 def _support_for_type(
     finding: dict[str, Any], records: list[dict[str, Any]],
+    structured_data: dict[str, Any],
 ) -> tuple[bool, str, list[dict[str, Any]]]:
     kind = str(finding.get("type") or "")
     claim = str(finding.get("claim") or "").casefold()
@@ -107,7 +108,7 @@ def validate_findings(
                 else "One or more referenced evidence IDs are absent from the captured evidence store."
             ), []
         else:
-            supported, reason, matched = _support_for_type(item, linked)
+            supported, reason, matched = _support_for_type(item, linked, structured_data)
         verdict = "confirmed" if supported else "insufficient_evidence"
         counts[verdict] += 1
         evidence_context = [
