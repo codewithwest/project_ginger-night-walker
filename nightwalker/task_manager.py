@@ -847,7 +847,8 @@ class TaskManager:
                             GoalStateManager.apply_proposal(record["goal_state"], proposal, round_evidence)
                             GoalStateManager.apply_verified_plan_results(
                                 record["goal_state"], record.get("execution_plan"), evidence,
-                                record.get("plan_outputs"), structured_data,
+                                record.get("plan_outputs"),
+                                {**structured_data, "products": products or structured_data.get("products", [])},
                             )
                             self._log(task_id, f"Goal progress: {len(record['goal_state']['completed'])}/{len(record['goal_state']['criteria'])} criteria have verified evidence.")
                         except (OllamaUnavailable, AttributeError) as exc:
