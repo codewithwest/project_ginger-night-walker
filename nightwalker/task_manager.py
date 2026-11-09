@@ -211,6 +211,26 @@ class TaskManager:
                 )
                 restored += 1
             else:
+                # Re-evaluate completed/blocked historical tasks against the current
+                # deterministic verifier after an upgrade; do not re-browse their sources.
+                saved_result = record.get("result") or {}
+                if status == "blocked" and isinstance(saved_result, dict) and record.get("goal_state"):
+                    GoalStateManager.apply_verified_plan_results(
+                        record["goal_state"], record.get("execution_plan"),
+                        saved_result.get("evidence") or [],
+                        record.get("plan_outputs"),
+                        saved_result.get("structured_data") or {},
+                    )
+                    saved_result["goal_state"] = record["goal_state"]
+                    remaining = record["goal_state"].get("remaining", [])
+                    if not remaining and saved_result.get("sources"):
+                        saved_result["limitations"] = [
+                            item for item in saved_result.get("limitations", [])
+                            if not str(item).startswith("Success criteria still lacking directly quoted evidence:")
+                        ]
+                        record["status"] = "completed"
+                        record["error"] = None
+                        self._log(task_id, "Historical task re-verified from its captured evidence and completed mission plan.")
                 self._persist(task_id)
         return restored
 
