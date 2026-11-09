@@ -910,8 +910,9 @@ class BrowserRuntime:
                     candidates.append({
                         "url": candidate_url,
                         "label": str(item.get("label", ""))[:240],
+                        "discovery_context": str(item.get("context", "body")),
                     })
-                if len(candidates) >= 40:
+                if len(candidates) >= 200:
                     break
             headings = [
                 text.strip()[:300]
