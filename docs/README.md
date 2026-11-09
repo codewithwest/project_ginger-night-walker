@@ -2,6 +2,11 @@
 
 This documentation is the engineering source of truth for Ginger Night Walker.
 
+## Product workflows
+
+- [Product scope](product-scope.md) — initial SEO/QA focus and deferred general research.
+- [SEO/QA audit engine](seo-qa-audit-engine.md) — crawl behavior, checks, report priorities and verification boundaries.
+
 ## Standards and architecture
 
 - [System architecture](architecture.md) — responsibilities, component boundaries, lifecycle and diagrams.
