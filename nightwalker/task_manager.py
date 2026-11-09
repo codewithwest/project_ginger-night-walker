@@ -710,22 +710,44 @@ class TaskManager:
                     for captured in round_evidence:
                         captured["source_id"] = source_id
                     evidence.extend(round_evidence)
-                    active_plan_step_id = record.get("active_plan_step_id")
                     execution_plan = record.get("execution_plan")
-                    if active_plan_step_id and isinstance(execution_plan, dict):
-                        active_step = next((item for item in execution_plan.get("steps", []) if item.get("step_id") == active_plan_step_id), None)
-                        evidence_refs = [item.get("evidence_id") for item in round_evidence if item.get("evidence_id")]
-                        # Navigation is complete only after a real page capture.
-                        # Extraction remains open until structured output is available.
-                        if active_step and active_step.get("capability") == "navigate" and evidence_refs:
-                            complete_step(execution_plan, active_plan_step_id, evidence_refs=evidence_refs, result=f"Captured {source.get('title') or final_url}")
-                            self._log(task_id, f"Plan step verified: {active_plan_step_id}")
-                        elif active_step and active_step.get("capability") == "extract":
-                            extracted = result.get("structured_data") or {}
-                            has_records = any(isinstance(value, list) and value for value in extracted.values())
-                            if has_records and evidence_refs:
-                                complete_step(execution_plan, active_plan_step_id, evidence_refs=evidence_refs, result="Structured records extracted from the captured source")
-                                self._log(task_id, f"Plan step verified: {active_plan_step_id}")
+                    evidence_refs = [item.get("evidence_id") for item in round_evidence if item.get("evidence_id")]
+                    products = result.get("products") or (result.get("structured_data") or {}).get("products") or []
+                    if isinstance(execution_plan, dict) and evidence_refs:
+                        # Advance all sequential steps that this single captured page
+                        # can actually satisfy. The trusted runtime performs extraction
+                        # and numeric comparison; models cannot self-tick the checklist.
+                        while True:
+                            ready = ready_steps(execution_plan)
+                            if not ready:
+                                break
+                            step = ready[0]
+                            if step.get("status") != "in_progress":
+                                start_step(execution_plan, step["step_id"])
+                            capability = str(step.get("capability") or "").casefold()
+                            objective_text = str(step.get("objective") or "").casefold()
+                            verified_result = None
+                            if capability == "navigate":
+                                verified_result = f"Captured {source.get('title') or final_url}"
+                            elif capability == "extract" and products:
+                                if any(term in objective_text for term in ("cheapest", "lowest", "minimum", "compare", "identify")):
+                                    def _price_value(product):
+                                        value = product.get("price_value")
+                                        if isinstance(value, (int, float)):
+                                            return float(value)
+                                        match = re.search(r"[\\d,]+(?:\\.\\d{1,2})?", str(product.get("price") or ""))
+                                        return float(match.group(0).replace(",", "")) if match else None
+                                    priced = [(amount, product) for product in products if (amount := _price_value(product)) is not None]
+                                    if priced:
+                                        amount, cheapest_product = min(priced, key=lambda item: item[0])
+                                        record.setdefault("plan_outputs", {})["cheapest_product"] = cheapest_product
+                                        verified_result = f"Lowest extracted homepage price: {cheapest_product.get('name')} — {cheapest_product.get('price')} (R {amount:,.2f}); compared {len(priced)} priced products"
+                                else:
+                                    verified_result = f"Extracted {len(products)} product records with displayed prices"
+                            if verified_result is None:
+                                break
+                            complete_step(execution_plan, step["step_id"], evidence_refs=evidence_refs, result=verified_result)
+                            self._log(task_id, f"Plan step verified: {step['step_id']}")
                         record["active_plan_step_id"] = None
                         self._persist(task_id)
                     if record.get("goal_state") and round_evidence:
