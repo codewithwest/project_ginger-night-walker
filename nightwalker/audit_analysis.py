@@ -141,7 +141,7 @@ def prioritise_findings(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
             item.setdefault("remediation", _REMEDIATION.get(kind, "Correct the confirmed underlying issue and re-run the affected check."))
             item.setdefault("recommendation", {
                 "status": "ready",
-                "root_cause": validation.get("reason", "Confirmed by linked structured browser evidence."),
+                "root_cause": "The observed condition is confirmed; its underlying causal mechanism is not established by this capture.",
                 "action": item["remediation"],
                 "expected_outcome": "The validated defect is no longer reproducible.",
                 "verification_steps": ["Re-run the same check on the affected URL and compare fresh browser evidence."],
