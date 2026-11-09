@@ -578,32 +578,84 @@ class BrowserRuntime:
 
         field = fields[0]
         await field.fill(query)
-        submit = page.locator(
-            'button#submit_search, button[type="submit"], input[type="submit"], '
-            'button[aria-label*="search" i], form[role="search"] button'
+        before_url = page.url
+        before_cards = await page.locator(
+            '.productinfo, .product-image-wrapper, .single-products, .product-card, '
+            '.product-item, [data-product-id], [data-product]'
+        ).evaluate_all(
+            "nodes => nodes.slice(0, 100).map(node => (node.innerText || '').trim().slice(0, 500))"
         )
-        visible_submit = []
-        for index in range(min(await submit.count(), 12)):
-            button = submit.nth(index)
-            try:
-                if await button.is_visible() and await button.is_enabled():
-                    visible_submit.append(button)
-            except Exception:
-                continue
-        if len(visible_submit) == 1:
-            await visible_submit[0].click()
-        elif len(visible_submit) == 0:
-            await field.press("Enter")
-        else:
+        # Bind submission to the field's own form. A page-wide submit selector can
+        # accidentally target newsletter/cart forms and is not evidence of search.
+        form_info = await field.evaluate("""el => {
+            const form = el.form || el.closest('form');
+            if (!form) return {has_form: false};
+            window.__nwSearchSubmitObserved = false;
+            form.addEventListener('submit', () => {
+                window.__nwSearchSubmitObserved = true;
+            }, {capture: true, once: true});
+            return {has_form: true};
+        }""")
+        submit_performed = False
+        submit_method = None
+        try:
+            if form_info.get("has_form"):
+                form = field.locator("xpath=ancestor::form[1]")
+                submit = form.locator(
+                    'button[type="submit"], input[type="submit"], '
+                    'button#submit_search, button[aria-label*="search" i]'
+                )
+                visible_submit = []
+                for index in range(min(await submit.count(), 8)):
+                    button = submit.nth(index)
+                    try:
+                        if await button.is_visible() and await button.is_enabled():
+                            visible_submit.append(button)
+                    except Exception:
+                        continue
+                if len(visible_submit) == 1:
+                    await visible_submit[0].click(timeout=5000)
+                    submit_method = "form_submit_button"
+                elif len(visible_submit) == 0:
+                    # requestSubmit dispatches the form's real submit event and
+                    # honours validation; unlike fill(), it actually submits.
+                    await form.evaluate("(form) => form.requestSubmit()")
+                    submit_method = "form_request_submit"
+                else:
+                    return {
+                        "query": query, "performed": False, "status": "ambiguous_search_submit",
+                        "route": route, "result_count": 0, "matches": [],
+                        "reason": "The search form contains multiple possible submit controls."
+                    }
+            else:
+                await field.press("Enter", timeout=5000)
+                submit_method = "enter_key"
+        except Exception as exc:
             return {
-                "query": query, "performed": False, "status": "ambiguous_search_submit",
-                "route": route, "result_count": 0, "matches": []
+                "query": query, "performed": False, "status": "search_submit_failed",
+                "route": route, "result_count": 0, "matches": [],
+                "submit_method": submit_method, "error": str(exc)[:300],
             }
         try:
             await page.wait_for_load_state("domcontentloaded", timeout=5000)
         except Exception:
             pass
-        await page.wait_for_timeout(min(2500, max(500, int(os.getenv("QA_PRODUCT_RESULT_SETTLE_MS", "1500")))))
+        settle_ms = min(4000, max(1000, int(os.getenv("QA_PRODUCT_RESULT_SETTLE_MS", "2000"))))
+        try:
+            await page.wait_for_function(
+                "(oldUrl) => location.href !== oldUrl", arg=before_url, timeout=1500
+            )
+        except Exception:
+            pass
+        await page.wait_for_timeout(settle_ms)
+        submit_event_observed = False
+        try:
+            submit_event_observed = bool(await page.evaluate(
+                "() => window.__nwSearchSubmitObserved === true"
+            ))
+        except Exception:
+            pass
+        after_url = page.url
         matches = await page.locator(
             '.productinfo, .product-image-wrapper, .single-products, .product-card, '
             '.product-item, [data-product-id], [data-product]'
@@ -632,9 +684,25 @@ class BrowserRuntime:
                 "image_present": bool(item.get("image_src")),
                 "image_loaded": bool(item.get("image_complete") and item.get("image_natural_width", 0) > 0),
             })
+        after_cards = [str(item.get("text") or "")[:500] for item in matches]
+        no_results = await page.locator(
+            'text=/no products found|no results found|no items found|0 results/i'
+        ).count() > 0
+        results_changed = after_url != before_url or after_cards != before_cards or no_results
+        performed = submit_event_observed or results_changed
+        if not performed:
+            status = "search_submission_unconfirmed"
+        elif matched:
+            status = "matched"
+        elif no_results:
+            status = "no_results"
+        else:
+            status = "submitted_results_unconfirmed"
         return {
-            "query": query, "performed": True,
-            "status": "matched" if matched else "no_matching_product_card",
+            "query": query, "performed": performed, "status": status,
+            "submit_method": submit_method,
+            "submit_event_observed": submit_event_observed,
+            "results_changed": results_changed,
             "result_count": len(matches), "matches": matched[:12],
             "searched_url": page.url, "route": route,
         }
