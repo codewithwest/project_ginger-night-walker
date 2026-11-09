@@ -820,6 +820,10 @@ class BrowserRuntime:
             )
             from nightwalker.audit_analysis import content_fingerprint
             audit_signals = await collect_page_signals(page)
+            x_robots_tag = (response.headers.get("x-robots-tag") if response else None)
+            audit_signals.setdefault("seo", {})["x_robots_tag"] = x_robots_tag
+            if x_robots_tag and re.search(r"(?i)\\bnoindex\\b", x_robots_tag):
+                audit_signals["seo"]["noindex"] = True
             audit_signals["internal_link_checks"] = await collect_internal_link_checks(page, limit=40)
             if workflow_type in {"seo", "seo_qa"}:
                 audit_signals["seo_discovery"] = await self._collect_seo_discovery_signals(
