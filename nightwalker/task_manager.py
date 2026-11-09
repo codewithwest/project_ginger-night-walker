@@ -939,8 +939,16 @@ class TaskManager:
                                 }
                             structured_data.setdefault(key, []).append(value)
                     candidates.extend(result.get("candidate_urls", []))
-                    # Deduplicate candidates while preserving browser discovery order.
-                    candidates = loop_guard.filter_candidates(rank_research_candidates(self._effective_objective(task_id, objective), candidates), visited_urls)
+                    # Audit crawls use deterministic same-origin breadth-first discovery.
+                    # General research retains its relevance-ranked candidate selection.
+                    workflow_value = str(record.get("workflow_type") or "")
+                    if workflow_value in {"seo", "qa", "seo_qa"}:
+                        candidates = loop_guard.filter_candidates(candidates, visited_urls)
+                    else:
+                        candidates = loop_guard.filter_candidates(
+                            rank_research_candidates(self._effective_objective(task_id, objective), candidates),
+                            visited_urls,
+                        )
                     round_findings = [
                         item["claim"][:300] for item in findings[-12:]
                         if source_id in item.get("source_ids", [])
@@ -987,7 +995,7 @@ class TaskManager:
                     str(item.get("captured_text") or "") for item in round_evidence
                 )
                 substantive_tokens = set(re.findall(r"[a-z0-9]{3,}", latest_text.casefold()))
-                if result.get("status") in {"completed", "blocked"} and (len(latest_text.strip()) < 120 or len(substantive_tokens) < 12):
+                if workflow_value not in {"seo", "qa", "seo_qa"} and result.get("status") in {"completed", "blocked"} and (len(latest_text.strip()) < 120 or len(substantive_tokens) < 12):
                     record["low_information_rounds"] = int(record.get("low_information_rounds", 0)) + 1
                     limitations.append(
                         f"Round {round_count} yielded insufficient substantive page text; "
@@ -1019,7 +1027,7 @@ class TaskManager:
                     loop_guard=loop_guard, round_count=round_count,
                     next_url="", next_assignment=next_assignment,
                 )
-                if record.get("low_information_rounds", 0) >= 3:
+                if workflow_value not in {"seo", "qa", "seo_qa"} and record.get("low_information_rounds", 0) >= 3:
                     limitations.append(
                         "Research stopped after three consecutive low-information sources. "
                         "No further search-navigation pages will be counted as progress."
@@ -1045,6 +1053,32 @@ class TaskManager:
                         next_url="", next_assignment=next_assignment, research_complete=True,
                     )
                     break
+                if workflow_value in {"seo", "qa", "seo_qa"}:
+                    available = loop_guard.filter_candidates(candidates, visited_urls)
+                    if not available:
+                        next_url = ""
+                        research_complete = True
+                        self._save_checkpoint(
+                            task_id, initial_plan, sources=sources, findings=findings,
+                            evidence=evidence, visited_urls=visited_urls, candidates=candidates,
+                            structured_data=structured_data, limitations=limitations,
+                            loop_guard=loop_guard, round_count=round_count,
+                            next_url="", next_assignment="Same-origin crawl exhausted",
+                            research_complete=True,
+                        )
+                        break
+                    next_url = available[0]["url"]
+                    next_assignment = "Deterministic same-origin crawl: inspect discovered URL"
+                    self._save_checkpoint(
+                        task_id, initial_plan, sources=sources, findings=findings,
+                        evidence=evidence, visited_urls=visited_urls, candidates=candidates,
+                        structured_data=structured_data, limitations=limitations,
+                        loop_guard=loop_guard, round_count=round_count,
+                        next_url=next_url, next_assignment=next_assignment,
+                    )
+                    self._log(task_id, f"Audit crawl queued next same-origin URL: {next_url}")
+                    continue
+
                 try:
                     round_plan = await self.orchestrator.ollama.plan_research_round(
                         objective=self._effective_objective(task_id, objective),
@@ -1122,6 +1156,55 @@ class TaskManager:
                 self._log(task_id, f"Next source selected: {next_url}")
 
             record["round"] = round_count
+            workflow_value = str(record.get("workflow_type") or "")
+            if workflow_value in {"seo", "qa", "seo_qa"}:
+                from nightwalker.audit_analysis import analyse_duplicate_pages, crawl_coverage, prioritise_findings
+                crawl_pages = structured_data.get("crawl_page", [])
+                duplicate_analysis = analyse_duplicate_pages(crawl_pages)
+                known_urls = [str(item.get("url") or "") for item in candidates if isinstance(item, dict)]
+                known_urls.extend(str(item.get("url") or "") for item in crawl_pages if isinstance(item, dict))
+                coverage = crawl_coverage(known_urls, visited_urls)
+                structured_data["crawl_coverage"] = coverage
+                structured_data["duplicate_analysis"] = duplicate_analysis
+                link_records = structured_data.get("internal_link_checks", [])
+                flattened_checks = []
+                for record_item in link_records:
+                    if isinstance(record_item, dict):
+                        flattened_checks.extend(record_item.get("checks", []))
+                structured_data["internal_link_audit"] = {
+                    "pages_with_link_checks": len(link_records),
+                    "checked_destination_count": len(flattened_checks),
+                    "broken_destination_count": sum(item.get("ok") is False for item in flattened_checks),
+                    "unknown_destination_count": sum(item.get("ok") is None for item in flattened_checks),
+                    "checks": flattened_checks[:2000],
+                }
+                for group_type, groups in (
+                    ("duplicate_canonical", duplicate_analysis["duplicate_canonical_groups"]),
+                    ("duplicate_title", duplicate_analysis["duplicate_title_groups"]),
+                    ("duplicate_content", duplicate_analysis["duplicate_content_groups"]),
+                ):
+                    for group in groups:
+                        page_map = {str(item.get("url")): item for item in crawl_pages if isinstance(item, dict)}
+                        matched = [page_map[url] for url in group["urls"] if url in page_map]
+                        findings.append({
+                            "finding_id": f"f-{len(findings) + 1:03d}",
+                            "claim": f"{group_type.replace('_', ' ').title()} detected across {group['count']} inspected pages.",
+                            "type": group_type, "severity": "medium",
+                            "affected_urls": group["urls"],
+                            "source_ids": list(dict.fromkeys(item.get("source_id") for item in matched if item.get("source_id"))),
+                            "evidence_ids": list(dict.fromkeys(eid for item in matched for eid in item.get("evidence_ids", []))),
+                            "remediation": "Review whether these pages should have distinct canonical URLs, titles and substantive content.",
+                        })
+                findings = prioritise_findings(findings)
+                limitations.append(
+                    f"Crawl visited {len(visited_urls)} pages from {coverage['discovered_url_count']} known discovered URLs "
+                    f"({coverage['coverage_percent'] if coverage['coverage_percent'] is not None else 'not measurable'}% coverage). "
+                    "This is bounded discovery coverage, not proof that every URL on the website was found."
+                )
+                if coverage["known_discovered_urls_remaining"]:
+                    limitations.append(
+                        f"{coverage['known_discovered_urls_remaining']} discovered same-origin URL(s) remained unvisited when the crawl ended."
+                    )
             if round_count >= self.max_rounds and candidates:
                 limitations.append(f"Maximum research budget of {self.max_rounds} rounds reached.")
             if sources:
