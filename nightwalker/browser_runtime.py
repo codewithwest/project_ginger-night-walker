@@ -392,6 +392,11 @@ class BrowserRuntime:
             candidate_origin = (parsed.scheme, parsed.hostname, parsed.port)
             if parsed.scheme not in {"http", "https"} or candidate_origin != current_origin:
                 continue
+            if re.search(
+                r"(?i)(logout|log-out|delete|remove|checkout|add-to-cart|cart/add|purchase|order|subscribe|unsubscribe|signout|sign-out)",
+                parsed.path + "?" + parsed.query,
+            ):
+                continue
             score = self._link_score(str(item.get("text", "")), objective)
             if score >= 0.25:
                 ranked.append((score, href))
