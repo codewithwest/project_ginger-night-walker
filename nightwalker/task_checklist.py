@@ -35,7 +35,16 @@ class TaskChecklist:
             for item in blueprint.get("success_criteria") or []
             if isinstance(item, dict)
         }
-        subtasks = blueprint.get("subtasks") or []
+        subtasks = blueprint.get("subtasks") or [
+            {
+                "subtask_id": item.get("step_id"),
+                "objective": item.get("objective"),
+                "capability": item.get("capability"),
+                "depends_on": item.get("depends_on") or [],
+                "success_criteria": item.get("success_criteria") or [],
+            }
+            for item in (task.get("execution_plan") or {}).get("steps") or []
+        ]
         assignments = {
             item.get("subtask_id"): item
             for item in task.get("agent_assignments") or []
