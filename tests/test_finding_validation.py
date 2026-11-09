@@ -58,3 +58,32 @@ def test_skip_recommendations_env_keeps_validation(monkeypatch):
     assert summary["recommendations_skipped"] is True
     assert "remediation" not in prioritised[0]
     assert prioritised[0]["recommendation_status"] == "skipped_by_configuration"
+
+
+def test_seo_warning_requires_the_claimed_signal_not_just_any_seo_record():
+    evidence = [{"evidence_id": "ev-2", "source_url": "https://example.com"}]
+    base = {"source_id": "s-2", "evidence_ids": ["ev-2"], "title": "A useful page title",
+            "title_length": 21, "meta_description": "A valid description"}
+    finding = {"claim": "Page title exceeds 60 characters; review truncation risk.",
+               "type": "seo_warning", "source_ids": ["s-2"], "evidence_ids": ["ev-2"]}
+    findings, _ = validate_findings([finding], evidence, {"seo_checks": [base]})
+    assert findings[0]["validation"]["verdict"] == "insufficient_evidence"
+    base["title"] = "A" * 70
+    base["title_length"] = 70
+    findings, _ = validate_findings([finding], evidence, {"seo_checks": [base]})
+    assert findings[0]["validation"]["verdict"] == "confirmed"
+
+
+def test_browser_error_must_match_a_captured_console_or_page_error():
+    evidence = [{"evidence_id": "ev-3"}]
+    finding = {"claim": "Console error: TypeError: missing function", "type": "qa_browser_error",
+               "source_ids": ["s-3"], "evidence_ids": ["ev-3"]}
+    structured = {"qa_runtime_events": [
+        {"source_id": "s-3", "evidence_ids": ["ev-3"], "kind": "console_error",
+         "message": "TypeError: missing function"},
+    ]}
+    findings, _ = validate_findings([finding], evidence, structured)
+    assert findings[0]["validation"]["verdict"] == "confirmed"
+    structured["qa_runtime_events"][0]["message"] = "A different error"
+    findings, _ = validate_findings([finding], evidence, structured)
+    assert findings[0]["validation"]["verdict"] == "insufficient_evidence"
