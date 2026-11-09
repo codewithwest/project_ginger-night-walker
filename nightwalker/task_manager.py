@@ -229,11 +229,19 @@ class TaskManager:
         fields = (
             "task_id", "objective", "capability", "status", "created_at",
             "updated_at", "site_name", "current_step", "round", "max_rounds",
+            "plan_progress",
         )
-        summaries = [
-            {key: record.get(key) for key in fields}
-            for record in self.tasks.values()
-        ]
+        summaries = []
+        for record in self.tasks.values():
+            summary = {key: record.get(key) for key in fields if key != "plan_progress"}
+            plan = record.get("execution_plan") or {}
+            steps = plan.get("steps") or []
+            summary["plan_progress"] = {
+                "status": plan.get("status", "pending"),
+                "completed": sum(1 for step in steps if step.get("status") == "completed"),
+                "total": len(steps),
+            } if steps else None
+            summaries.append(summary)
         return sorted(
             summaries, key=lambda item: item.get("created_at", ""), reverse=True
         )
