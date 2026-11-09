@@ -80,6 +80,7 @@ Vite proxies API requests to the local FastAPI service on port 8000.
 | `STEEL_SESSION_TIMEOUT_MS` | Steel session lifetime in milliseconds | Defaults to 300000 (5 minutes); keep bounded |
 | `EVIDENCE_DIR` | Evidence, scratchpad and default task-state root | Docker default `/app/evidence`; must be on persistent storage |
 | `TASK_STATE_DIR` | Optional override for atomic task JSON snapshots | Defaults to `EVIDENCE_DIR/tasks` |
+| `AUDIT_MAX_PAGES` | Maximum page inspections for SEO/QA/combined audits | Defaults to 200; accepted range 1-1,000 |
 
 Night Walker intentionally routes across two model names only: `OLLAMA_MODEL_DEFAULT` (main) and `OLLAMA_MODEL_LIGHT` (small). Planning and synthesis use the main model; extraction, recovery and goal-progress proposals use the light model. The two tiers may share one Ollama endpoint. Do not set role-specific model overrides. Role-specific endpoint URLs remain optional for deployments that serve the same two models from different trusted endpoints. The experimental standalone integration has its own settings and is not part of this two-model runtime.
 
@@ -106,7 +107,7 @@ FastAPI's OpenAPI schema is available at `/openapi.json`; Swagger UI is availabl
 
 ## 8. Quality gates and coding standards
 
-CI currently runs:
+The GitHub Actions CI workflow is intentionally disabled during beta. Before deployment, run locally:
 - Python 3.11 dependency resolution with uv;
 - Ruff lint;
 - pytest;
@@ -155,7 +156,7 @@ Common diagnoses:
 ## 11. Known limitations
 
 - Task snapshots and research checkpoints are durable and restart-resumable for the single-process service. This is atomic JSON storage, not a transactional multi-worker queue; do not run multiple Night Walker workers against the same task directory. A crash during a page inspection can retry that one source, bounded by the loop guard. Terminal and clarification-waiting tasks are restored but not auto-resumed.
-- Research runs up to 30 bounded page-inspection rounds, starting from Bing search results or a user-supplied URL; discovered links are the candidate source pool. The Research Loop Guard canonicalises URL comparisons, deduplicates candidates, permits at most two attempts per URL, records bounded recent outcomes in task state/scratchpad, skips repeated or already visited sources, and falls back to another discovered candidate when a selected source is exhausted.
+- SEO/QA/combined tasks use deterministic same-origin crawling with a default 200-page budget (`AUDIT_MAX_PAGES`, maximum 1,000), robots.txt enforcement, bounded sitemap-index discovery, duplicate-page analysis and evidence-backed internal-link checks. Coverage is reported against discovered and sampled sitemap URLs; it is not exhaustive site coverage. General research remains deferred in the initial product phase, although legacy research code remains in the repository for compatibility.
 - Source selection is model-assisted but constrained to URLs actually observed by the browser. Discovery quality depends on search results and page links. Repeat detection is deterministic and task-local; it is not a general-purpose model-action verifier.
 - The Goal State Manager tracks an immutable objective and up to twelve success criteria. The small model can propose completion only with an exact quote and evidence ID; Python verifies both against the current captured evidence. This is evidence linkage, not proof that the source itself is truthful.
 - An optional Strands Decider can select only among browser-discovered source URLs. If unavailable or misconfigured, the Ollama planner remains the fallback. The integrated Strands adapter has no browser tools.
