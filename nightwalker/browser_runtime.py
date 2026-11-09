@@ -574,7 +574,7 @@ class BrowserRuntime:
                 url for url in page_urls
                 if parser.can_fetch("GingerNightWalker", url)
             ]
-        elif result["robots_txt"].get("status", 0) >= 500:
+        elif result["robots_txt"].get("status", 0) >= 500 or result["robots_txt"].get("crawl_policy") == "unknown":
             page_urls = []
 
         page_urls = list(dict.fromkeys(page_urls))
@@ -799,7 +799,7 @@ class BrowserRuntime:
                 for sitemap_url in sitemap_urls:
                     if sitemap_url != page.url and not any(item.get("url") == sitemap_url for item in candidates):
                         candidates.append({"url": sitemap_url, "label": "URL discovered in XML sitemap"})
-                if robots.get("crawl_policy") == "temporarily_unavailable_conservatively_blocked":
+                if robots.get("crawl_policy") in {"temporarily_unavailable_conservatively_blocked", "unknown"}:
                     candidates = []
                 else:
                     candidates = [item for item in candidates if item.get("url") not in disallowed]
