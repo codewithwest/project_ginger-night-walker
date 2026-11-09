@@ -99,6 +99,6 @@ def ready_steps(plan: dict[str, Any]) -> list[dict[str, Any]]:
     by_id = {s["step_id"]: s for s in plan.get("steps", [])}
     return [
         s for s in plan.get("steps", [])
-        if s["status"] in {"pending", "ready"}
+        if s["status"] in {"pending", "ready", "in_progress"}
         and all(by_id.get(dep, {}).get("status") == "completed" for dep in s.get("depends_on", []))
     ]
