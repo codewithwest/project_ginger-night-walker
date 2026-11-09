@@ -40,7 +40,7 @@ def _support_for_type(
     matched: list[dict[str, Any]] = []
 
     if kind == "qa_broken_image":
-        matched = [r for r in records if r.get("dataset") in {"qa_page_smoke", "seo_checks", "page_signals"}
+        matched = [r for r in records if r.get("dataset") in {"qa_page_smoke", "qa_page_signals", "seo_checks", "page_signals"}
                    and any(i.get("load_status") == "broken" and
                            (not finding.get("image_url") or i.get("src") == finding.get("image_url"))
                            for i in r.get("images", []) if isinstance(i, dict))]
@@ -122,9 +122,16 @@ def _support_for_type(
             if ok:
                 matched.append(record)
     elif kind == "qa_page_issue":
-        matched = [r for r in records if r.get("dataset") == "qa_page_smoke" and (
-            ("title" in claim and not str(r.get("document_title") or "").strip())
-            or ("h1" in claim and int(r.get("h1_count") or 0) == 0)
+        matched = [r for r in records if (
+            r.get("dataset") == "qa_page_smoke" and (
+                ("title" in claim and not str(r.get("document_title") or "").strip())
+                or ("h1" in claim and int(r.get("h1_count") or 0) == 0)
+            )
+        ) or (
+            r.get("dataset") == "qa_page_signals" and (
+                ("title" in claim and not str(r.get("title") or "").strip())
+                or ("h1" in claim and int(r.get("h1_count") or 0) == 0)
+            )
         )]
     elif kind in {"qa_accessibility_issue", "qa_accessibility_warning"}:
         semantic_fields = {
@@ -206,7 +213,7 @@ def _recommendation_observations(
                 "images": images[:10],
                 "runtime_events": record.get("runtime_events", [])[:30],
             })
-        elif dataset == "seo_checks":
+        elif dataset in {"seo_checks", "qa_page_signals"}:
             keys = (
                 "title", "title_length", "meta_description", "canonical_url",
                 "canonical_is_same_origin", "robots_directive", "noindex", "language",
