@@ -20,6 +20,18 @@ async def collect_page_signals(page: Any) -> dict[str, Any]:
       const duplicates = Array.from(new Set(ids.filter((id, i) => ids.indexOf(id) !== i)));
       const visible = el => { const s=getComputedStyle(el), r=el.getBoundingClientRect();
         return s.visibility !== "hidden" && s.display !== "none" && r.width > 0 && r.height > 0; };
+      const selectorFor = el => {
+        if (el.id) return "#" + CSS.escape(el.id);
+        const parts = [];
+        for (let node=el; node && node.nodeType===1 && parts.length<4; node=node.parentElement) {
+          let part=node.tagName.toLowerCase();
+          if (node.classList?.length) part += "." + Array.from(node.classList).slice(0,2).map(CSS.escape).join(".");
+          const siblings=node.parentElement ? Array.from(node.parentElement.children).filter(x=>x.tagName===node.tagName) : [];
+          if (siblings.length>1) part += ":nth-of-type(" + (siblings.indexOf(node)+1) + ")";
+          parts.unshift(part);
+        }
+        return parts.join(" > ");
+      };
       return {
         seo: { title: document.title || null, title_length: (document.title || "").length,
           meta_description: meta("description"), canonical_url: document.querySelector('link[rel="canonical"]')?.href || null,
@@ -27,9 +39,19 @@ async def collect_page_signals(page: Any) -> dict[str, Any]:
           viewport: meta("viewport"), h1_count: document.querySelectorAll("h1").length,
           heading_count: document.querySelectorAll("h1,h2,h3,h4,h5,h6").length,
           heading_levels: Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6")).slice(0, 100).map(h => Number(h.tagName.slice(1))),
+          heading_outline: Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6")).slice(0, 150).map(h => ({
+            level: Number(h.tagName.slice(1)), text: (h.innerText || h.textContent || "").trim().slice(0,300),
+            selector: selectorFor(h), id: h.id || null, outer_html: h.outerHTML.slice(0,1200)
+          })),
           image_count: images.length, images_missing_alt: images.filter(img => !img.hasAttribute("alt")).length,
           h1_headings: Array.from(document.querySelectorAll("h1")).map(h => (h.innerText || h.textContent || "").trim()).slice(0, 100),
-          images: images.map(img => ({src: img.currentSrc || img.src || "", alt: img.getAttribute("alt"), complete: img.complete, natural_width: img.naturalWidth, natural_height: img.naturalHeight, load_status: img.complete ? (img.naturalWidth > 0 ? "loaded" : "broken") : "pending"})).slice(0, 500),
+          images: images.map(img => { const r=img.getBoundingClientRect(); return {
+            src: img.currentSrc || img.src || "", alt: img.getAttribute("alt"), complete: img.complete,
+            natural_width: img.naturalWidth, natural_height: img.naturalHeight,
+            rendered_width: Math.round(r.width), rendered_height: Math.round(r.height),
+            visible: visible(img), selector: selectorFor(img), outer_html: img.outerHTML.slice(0,1600),
+            load_status: img.complete ? (img.naturalWidth > 0 ? "loaded" : "broken") : "pending"
+          }; }).slice(0, 500),
           broken_image_count: images.filter(img => img.complete && img.naturalWidth === 0).length,
           images_empty_alt: images.filter(img => img.hasAttribute("alt") && !img.getAttribute("alt").trim()).length,
           internal_link_count: links.filter(a => { try { return new URL(a.href).origin === location.origin; } catch { return false; } }).length,
@@ -41,7 +63,18 @@ async def collect_page_signals(page: Any) -> dict[str, Any]:
         },
         qa: { page_ready_state: document.readyState, visible_control_count: controls.filter(visible).length,
           controls_without_accessible_name: controls.filter(el => visible(el) && !named(el)).length,
-          duplicate_ids: duplicates.slice(0, 30), form_count: document.forms.length, link_count: links.length }
+          controls_without_accessible_name_details: controls.filter(el => visible(el) && !named(el)).slice(0,100).map(el => ({
+            tag: el.tagName.toLowerCase(), type: el.getAttribute("type"), role: el.getAttribute("role"),
+            id: el.id || null, selector: selectorFor(el), aria_label: el.getAttribute("aria-label"),
+            aria_labelledby: el.getAttribute("aria-labelledby"), title: el.getAttribute("title"),
+            text: (el.innerText || el.value || "").trim().slice(0,300), outer_html: el.outerHTML.slice(0,1800)
+          })),
+          duplicate_ids: duplicates.slice(0, 30),
+          duplicate_id_details: duplicates.slice(0,30).map(id => ({
+            id, elements: Array.from(document.querySelectorAll("[id]")).filter(el=>el.id===id).slice(0,10)
+              .map(el=>({tag:el.tagName.toLowerCase(),selector:selectorFor(el),outer_html:el.outerHTML.slice(0,1600)}))
+          })),
+          form_count: document.forms.length, link_count: links.length }
       };
     }""")
 
