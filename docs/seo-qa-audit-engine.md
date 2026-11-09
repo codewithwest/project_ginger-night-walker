@@ -5,12 +5,17 @@
 SEO, QA and combined audit tasks use deterministic same-origin discovery rather than the general-research planner.
 
 - The requested URL is the crawl seed.
-- Same-origin HTML links and same-origin sitemap URLs are added to a breadth-first candidate queue.
+- Same-origin HTML links and same-origin sitemap URLs enter a bounded candidate queue. SEO/QA candidates are classified and priority-ranked rather than inspected in discovery order.
 - `robots.txt` is read before discovered URLs are followed. Disallowed URLs are excluded. If the robots endpoint fails unexpectedly or returns a server error, further discovery is paused conservatively.
 - Sitemap indexes are parsed with bounded tag extraction. Up to 5 sitemap endpoints and 20 child sitemap files are inspected once per task origin and cached for the remainder of that task.
 - At most 1,000 sitemap page URLs are admitted from a sitemap response.
 - The default audit page budget is 200. Set `AUDIT_MAX_PAGES` to a value from 1 to 1,000 to change it.
 - Redirected pages are checked against the established origin. External destinations are not added to the audit crawl. Internal-link HEAD/GET checks disable automatic redirects, validate every redirect hop against the origin and URL policy, and classify off-origin redirects separately from HTTP failures.
+- URL identity removes fragments, common tracking/session parameters, default ports and trailing-slash variations for comparison while preserving the original URL used for evidence and navigation.
+- Filter/sort/facet URLs and utility routes (cart, checkout, account, login, search, API/admin) are excluded from the standard crawl queue; pagination remains eligible at lower priority.
+- Candidates are classified into homepage, category, detail, editorial, informational, utility or other page types. The deterministic scheduler scores workflow relevance, template novelty, pagination and path depth, with different weighting for SEO and QA.
+- Inspected pages record their page type and URL-derived template key. The scheduler boosts candidates from templates not yet represented in inspected pages.
+- The queue retains up to 1,000 eligible candidates independently of the inspection budget, so lower-ranked discovered URLs remain available and can be reported as unvisited rather than silently discarded.
 - URL and content fingerprints are used to report canonical, title, meta-description and exact visible-text duplicate groups.
 
 Coverage is reported against URLs discovered from inspected internal links and parsed sitemap samples. The crawl acceptance step remains incomplete if discovered URLs remain unvisited, the sitemap sample cap is exceeded, or robots policy cannot be read reliably; the task is then blocked rather than marked complete. This is not a guarantee that every URL on a site was found. Orphaned pages, JavaScript-only routes, unlinked content and URLs beyond the sitemap sample/page budget may remain undiscovered.
@@ -63,4 +68,11 @@ The browser execution layer separates tool selection, argument validation, eleme
 
 A finding is only emitted from captured page or destination observations. Failed or unsupported requests remain distinguishable from confirmed HTTP failures. Crawl coverage, duplicate groups, link-check totals, QA navigation samples and priority counts are included in the structured report summary.
 
-The audit is bounded by `AUDIT_MAX_PAGES`, per-page link-check limits and sitemap sample limits. A report must preserve remaining/unvisited URL counts and untested QA scope; it must not label an incomplete crawl as exhaustive. The crawl success criterion is evidence-gated, so reaching the page budget with remaining discovered URLs produces a blocked/incomplete task rather than a false completed status.
+The audit is bounded by `AUDIT_MAX_PAGES`, per-page link-check limits and sitemap sample limits. Priority scheduling improves the value of inspected pages but does not make a budget-limited crawl exhaustive; deferred and unvisited URLs remain part of the coverage calculation. A report must preserve remaining/unvisited URL counts and untested QA scope; it must not label an incomplete crawl as exhaustive. The crawl success criterion is evidence-gated, so reaching the page budget with remaining discovered URLs produces a blocked/incomplete task rather than a false completed status.
+
+
+## Priority crawl scheduling
+
+The scheduler is deterministic and does not ask an LLM to choose crawl URLs. It prioritises homepage/category/detail and important informational templates, boosts previously unseen templates, and lowers pagination priority. QA slightly favours detail and informational routes; SEO favours category and editorial coverage. Query variants identified as tracking, sorting or facets are deduplicated or excluded from the default crawl; meaningful query parameters remain part of URL identity. The original URL is retained for navigation and evidence.
+
+The report summary includes inspected template count, candidate page-type counts, pagination count, queued distinct template count and page-budget utilisation. These are scheduling diagnostics, not proof of complete route coverage.
