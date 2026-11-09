@@ -442,10 +442,12 @@ class TaskManager:
                     previous_id = None
                     for index, step in enumerate(initial_plan.steps, 1):
                         step_id = str(getattr(step, "step_id", None) or f"step-{index}")
+                        step_capability = getattr(step, "capability", None) or "extract"
+                        step_capability = getattr(step_capability, "value", step_capability)
                         fallback_subtasks.append({
                             "subtask_id": step_id,
                             "objective": str(getattr(step, "objective", None) or step_id),
-                            "capability": str(getattr(step, "capability", None) or "extract"),
+                            "capability": str(step_capability),
                             "depends_on": [previous_id] if previous_id else [],
                             "success_criteria": [],
                             "expected_output": "Evidence-backed output for this step",
