@@ -619,6 +619,68 @@ class BrowserRuntime:
             }
         return result
 
+    async def _run_safe_interaction_smoke(self, page: Page, limit: int = 5) -> dict:
+        """Exercise only reversible disclosure controls; never submit forms or business actions."""
+        selector = 'button[aria-expanded], details > summary'
+        locator = page.locator(selector)
+        checks = []
+        try:
+            count = await locator.count()
+        except Exception as exc:  # noqa: BLE001
+            return {"checks": [], "checked_count": 0, "error": str(exc)[:180]}
+        for index in range(min(count, max(1, min(8, limit)))):
+            item = locator.nth(index)
+            try:
+                if not await item.is_visible():
+                    continue
+                before = await item.evaluate("""el => ({
+                  tag: el.tagName.toLowerCase(),
+                  in_form: Boolean(el.closest("form")),
+                  type: el.getAttribute("type"),
+                  expanded: el.getAttribute("aria-expanded"),
+                  details_open: el.parentElement?.tagName === "DETAILS" ? el.parentElement.open : null,
+                  label: (el.getAttribute("aria-label") || el.innerText || "").trim().slice(0,120)
+                })""")
+                if before["in_form"] or before["type"] == "submit":
+                    continue
+                if before["expanded"] not in {"true", "false"} and before["details_open"] is not False:
+                    continue
+                await item.click(timeout=2500)
+                after = await item.evaluate("""el => ({
+                  expanded: el.getAttribute("aria-expanded"),
+                  details_open: el.parentElement?.tagName === "DETAILS" ? el.parentElement.open : null
+                })""")
+                changed = (
+                    after["expanded"] != before["expanded"]
+                    if before["expanded"] in {"true", "false"}
+                    else after["details_open"] != before["details_open"]
+                )
+                restored = False
+                if changed:
+                    await item.click(timeout=2500)
+                    restored_state = await item.evaluate("""el => ({
+                      expanded: el.getAttribute("aria-expanded"),
+                      details_open: el.parentElement?.tagName === "DETAILS" ? el.parentElement.open : null
+                    })""")
+                    restored = (
+                        restored_state["expanded"] == before["expanded"]
+                        and restored_state["details_open"] == before["details_open"]
+                    )
+                checks.append({
+                    "label": before["label"], "tag": before["tag"],
+                    "changed_state": changed, "restored": restored,
+                    "ok": changed and restored,
+                    "interaction": "reversible_local_disclosure_toggle",
+                })
+            except Exception as exc:  # noqa: BLE001 - record rather than abort audit
+                checks.append({"ok": False, "error": str(exc)[:180]})
+        return {
+            "checks": checks,
+            "checked_count": len(checks),
+            "passed_count": sum(item.get("ok") is True for item in checks),
+            "scope": "Only reversible aria-expanded buttons and details disclosures; no forms or business actions activated.",
+        }
+
     async def _run_readonly_navigation_smoke(self, page: Page, limit: int = 5) -> dict:
         """Navigate a small sample of safe same-origin anchors using GET only."""
         original_url = page.url
@@ -843,6 +905,7 @@ class BrowserRuntime:
             if workflow_type in {"qa", "seo_qa"}:
                 audit_signals["qa_extended"] = await collect_qa_extended_signals(page)
                 audit_signals["qa_navigation_journeys"] = await self._run_readonly_navigation_smoke(page, limit=5)
+                audit_signals["qa_interaction_journeys"] = await self._run_safe_interaction_smoke(page, limit=5)
             audit_findings = page_signal_findings(audit_signals, workflow_type)
             for check in audit_signals["internal_link_checks"].get("checks", []):
                 if check.get("ok") is False:
@@ -975,6 +1038,7 @@ class BrowserRuntime:
                 structured_data["qa_checks"] = audit_signals.get("qa", {})
                 structured_data["qa_extended"] = audit_signals.get("qa_extended", {})
                 structured_data["qa_navigation_journeys"] = audit_signals.get("qa_navigation_journeys", {})
+                structured_data["qa_interaction_journeys"] = audit_signals.get("qa_interaction_journeys", {})
                 structured_data["internal_link_checks"] = audit_signals.get("internal_link_checks", {})
             limitations = list(issues)
             if workflow_type in {"seo", "seo_qa"}:
