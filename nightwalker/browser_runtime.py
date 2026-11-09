@@ -32,6 +32,7 @@ class BrowserRuntime:
         self._task_contexts: dict[str, BrowserContext] = {}
         self._task_pages: dict[str, Page] = {}
         self._tab_listener_contexts: set[int] = set()
+        self._qa_listener_pages: set[int] = set()
         self.backend = os.getenv("BROWSER_BACKEND", "local").strip().lower()
         if self.backend not in {"local", "steel"}:
             raise ValueError("BROWSER_BACKEND must be 'local' or 'steel'")
@@ -786,6 +787,28 @@ class BrowserRuntime:
                         lambda opened: asyncio.create_task(self._enforce_tab_limit(task_id, opened)),
                     )
                     self._tab_listener_contexts.add(id(context))
+            from nightwalker.workflows import classify_workflow
+            workflow_type = classify_workflow(objective).value
+            if workflow_type in {"qa", "seo_qa"} and id(page) not in self._qa_listener_pages:
+                runtime_events = self._task_sessions[task_id].setdefault("qa_runtime_events", [])
+
+                def record_qa_event(kind: str, message: str, event_url: str | None = None) -> None:
+                    runtime_events.append({
+                        "kind": kind, "message": str(message)[:500],
+                        "url": event_url, "captured_at": datetime.now(UTC).isoformat(),
+                    })
+                    if len(runtime_events) > 500:
+                        del runtime_events[:-500]
+
+                page.on("console", lambda message: (
+                    record_qa_event("console_error", message.text, page.url)
+                    if message.type == "error" else None
+                ))
+                page.on("pageerror", lambda error: record_qa_event("page_error", str(error), page.url))
+                page.on("requestfailed", lambda request: record_qa_event(
+                    "request_failed", f"{request.method} {request.url}: {request.failure}", request.url
+                ))
+                self._qa_listener_pages.add(id(page))
             # Secondary pages are reviewed by the AI janitor in Orchestrator;
             # this runtime only enforces the hard cap and protects the primary page.
             response = await page.goto(
@@ -830,8 +853,6 @@ class BrowserRuntime:
 
             title = (await page.title())[:500]
             self._browser_event(task_id, "Captured page title, headings and visible text", url=page.url, title=title)
-            from nightwalker.workflows import classify_workflow
-            workflow_type = classify_workflow(objective).value
             # Use the final navigated origin so a legitimate www/non-www redirect
             # does not cause every discovered page to be excluded.
             target_parts = urlparse(page.url)
@@ -906,6 +927,10 @@ class BrowserRuntime:
                 audit_signals["qa_extended"] = await collect_qa_extended_signals(page)
                 audit_signals["qa_navigation_journeys"] = await self._run_readonly_navigation_smoke(page, limit=5)
                 audit_signals["qa_interaction_journeys"] = await self._run_safe_interaction_smoke(page, limit=5)
+                audit_signals["qa_runtime_events"] = list(
+                    self._task_sessions[task_id].get("qa_runtime_events", [])
+                )
+                self._task_sessions[task_id]["qa_runtime_events"] = []
             audit_findings = page_signal_findings(audit_signals, workflow_type)
             for check in audit_signals["internal_link_checks"].get("checks", []):
                 if check.get("ok") is False:
@@ -1039,6 +1064,7 @@ class BrowserRuntime:
                 structured_data["qa_extended"] = audit_signals.get("qa_extended", {})
                 structured_data["qa_navigation_journeys"] = audit_signals.get("qa_navigation_journeys", {})
                 structured_data["qa_interaction_journeys"] = audit_signals.get("qa_interaction_journeys", {})
+                structured_data["qa_runtime_events"] = audit_signals.get("qa_runtime_events", [])
                 structured_data["internal_link_checks"] = audit_signals.get("internal_link_checks", {})
             limitations = list(issues)
             if workflow_type in {"seo", "seo_qa"}:
