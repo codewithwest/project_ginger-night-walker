@@ -81,3 +81,35 @@ def test_checklist_never_marks_assigned_subtask_as_complete(tmp_path):
 
     assert "1. [ ] Find primary sources" in markdown
     assert "**source** (assigned)" in markdown
+
+
+def test_checklist_shows_decider_plan_separately_from_acceptance_workflow(tmp_path):
+    checklist = TaskChecklist(str(tmp_path))
+    markdown = checklist.render({
+        "task_id": "task-decider",
+        "objective": "Verify a product search on https://example.com",
+        "goal_state": {"original_goal": "Verify a product search on https://example.com"},
+        "planner_provenance": {"decider": "ollama.decide_task"},
+        "decider_plan": {
+            "summary": "Open the requested page and verify the search result",
+            "target_url": "https://example.com",
+            "steps": [{
+                "step_id": "open-target",
+                "capability": "navigate",
+                "objective": "Open the exact URL supplied by the user",
+            }],
+        },
+        "execution_blueprint": {"subtasks": [{
+            "subtask_id": "qa-content",
+            "objective": "Run the requested search and verify its result",
+            "capability": "extract",
+            "depends_on": [],
+            "success_criteria": ["product-result"],
+        }]},
+    })
+
+    assert "## Decider routing plan" in markdown
+    assert "ollama.decide_task" in markdown
+    assert "open-target" in markdown
+    assert "## Evidence acceptance workflow" in markdown
+    assert "verification gates, not the Decider's routing plan" in markdown
