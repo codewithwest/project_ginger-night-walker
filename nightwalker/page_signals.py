@@ -32,7 +32,7 @@ async def collect_page_signals(page: Any) -> dict[str, Any]:
           external_link_count: links.filter(a => { try { return new URL(a.href).origin !== location.origin; } catch { return false; } }).length,
           internal_links: links.filter(a => { try { return new URL(a.href).origin === location.origin; } catch { return false; } }).slice(0, 200).map(a => ({url: a.href, label: (a.innerText || a.getAttribute("aria-label") || "").trim().slice(0, 160)})),
           canonical_is_same_origin: (() => { const c=document.querySelector('link[rel="canonical"]'); try { return c ? new URL(c.href).origin === location.origin : null; } catch { return false; } })(),
-          noindex: /(^|[,\\s])noindex([,\\s]|$)/i.test(meta("robots") || meta("googlebot") || ""),
+          noindex: /(^|[,\s])noindex([,\s]|$)/i.test(meta("robots") || meta("googlebot") || ""),
           json_ld_blocks: Array.from(document.querySelectorAll('script[type="application/ld+json"]')).slice(0, 30).map(s => { try { JSON.parse(s.textContent || ""); return {valid_json:true, excerpt:(s.textContent || "").slice(0,500)}; } catch { return {valid_json:false, excerpt:(s.textContent || "").slice(0,500)}; } })
         },
         qa: { page_ready_state: document.readyState, visible_control_count: controls.filter(visible).length,
