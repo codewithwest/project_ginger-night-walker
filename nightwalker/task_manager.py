@@ -467,14 +467,14 @@ class TaskManager:
                     loop_guard=loop_guard, round_count=round_count,
                     next_url=next_url, next_assignment=next_assignment,
                 )
-            while next_url and (round_count < self.max_rounds or resume_in_flight):
+            while next_url and (round_count < int(record.get("max_rounds", self.max_rounds)) or resume_in_flight):
                 if resume_in_flight:
                     resume_in_flight = False
                 else:
                     round_count += 1
                 record["round"] = round_count
                 record["current_step"] = {
-                    "index": round_count, "total": self.max_rounds,
+                    "index": round_count, "total": int(record.get("max_rounds", self.max_rounds)),
                     "capability": "research", "objective": next_assignment,
                     "url": next_url,
                 }
