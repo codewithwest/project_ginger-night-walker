@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from collections import Counter
 from typing import Any
-from urllib.parse import parse_qsl, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 _TRACKING_KEYS = {"gclid", "fbclid", "msclkid", "dclid", "yclid", "_ga", "_gl"}
 _FACET_KEYS = {
@@ -48,9 +48,7 @@ def url_identity(value: str) -> str:
             if folded.startswith("utm_") or folded in _TRACKING_KEYS or folded in {"session", "sessionid", "sid", "phpsessid"}:
                 continue
             query.append((key, val))
-        return urlunsplit((parts.scheme.casefold(), netloc, path, "&".join(
-            f"{key}={val}" for key, val in sorted(query)
-        ), ""))
+        return urlunsplit((parts.scheme.casefold(), netloc, path, urlencode(sorted(query)), ""))
     except (TypeError, ValueError):
         return str(value).strip().split("#", 1)[0]
 
