@@ -88,3 +88,96 @@ def test_off_origin_redirect_is_not_counted_as_a_broken_http_destination():
     result = prioritise_findings([finding])
     assert result[0]["priority"] == "P2"
     assert "redirect target" in result[0]["remediation"].lower()
+
+
+def test_internal_link_redirects_are_followed_only_within_origin():
+    import asyncio
+    from nightwalker.page_signals import collect_internal_link_checks
+
+    class Locator:
+        async def evaluate_all(self, _script):
+            return ["https://example.com/old"]
+
+    class Response:
+        def __init__(self, status, headers=None, url=""):
+            self.status = status
+            self.headers = headers or {}
+            self.url = url
+
+    class Request:
+        def __init__(self):
+            self.calls = []
+
+        async def head(self, url, **kwargs):
+            self.calls.append((url, kwargs))
+            if url.endswith("/old"):
+                return Response(301, {"location": "/new"}, url)
+            return Response(200, {}, url)
+
+        async def get(self, url, **kwargs):
+            raise AssertionError("GET fallback should not be needed")
+
+    class Policy:
+        def __init__(self):
+            self.validated = []
+
+        def validate_url(self, url, allow_private_networks):
+            self.validated.append(url)
+            assert allow_private_networks is False
+            assert url.startswith("https://example.com/")
+
+    class Page:
+        url = "https://example.com/"
+        locator = lambda self, _selector: Locator()
+
+        def __init__(self):
+            self.request = Request()
+
+    page, policy = Page(), Policy()
+    result = asyncio.run(collect_internal_link_checks(page, policy=policy))
+    assert result["checked_count"] == 1
+    assert result["checks"][0]["ok"] is True
+    assert result["checks"][0]["redirect_hops"] == 1
+    assert [call[0] for call in page.request.calls] == [
+        "https://example.com/old", "https://example.com/new"
+    ]
+    assert all(call[1]["max_redirects"] == 0 for call in page.request.calls)
+    assert policy.validated == ["https://example.com/old", "https://example.com/new"]
+
+
+def test_internal_link_off_origin_redirect_is_not_followed():
+    import asyncio
+    from nightwalker.page_signals import collect_internal_link_checks
+
+    class Locator:
+        async def evaluate_all(self, _script):
+            return ["https://example.com/account"]
+
+    class Response:
+        status = 302
+        headers = {"location": "https://attacker.example/landing"}
+
+    class Request:
+        calls = []
+
+        async def head(self, url, **kwargs):
+            self.calls.append(url)
+            return Response()
+
+    class Policy:
+        def validate_url(self, url, allow_private_networks):
+            assert "attacker.example" not in url
+
+    class Page:
+        url = "https://example.com/"
+        request = Request()
+
+        def locator(self, _selector):
+            return Locator()
+
+    result = asyncio.run(collect_internal_link_checks(Page(), policy=Policy()))
+    assert result["off_origin_redirect_count"] == 1
+    assert result["broken_count"] == 0
+    assert result["checks"][0]["ok"] is False
+    assert result["checks"][0]["off_origin_redirect"] is True
+    assert Page.request.calls == ["https://example.com/account"]
