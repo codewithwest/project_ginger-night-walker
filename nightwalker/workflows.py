@@ -139,7 +139,7 @@ def build_workflow_blueprint(objective: str, workflow: WorkflowType) -> Executio
 
     if workflow == WorkflowType.SEO_QA:
         seo = build_workflow_blueprint(objective, WorkflowType.SEO)
-        qa = build_workflow_blueprint(objective, WorkflowType.QA)
+        qa = build_workflow_blueprint(objective + " site-wide QA crawl", WorkflowType.QA)
         criteria = [item.model_dump() for item in seo.success_criteria + qa.success_criteria]
         seo_tasks = [
             item for item in seo.subtasks
