@@ -492,6 +492,7 @@ class BrowserRuntime:
                     url for url in (candidate_urls or [])
                     if not cached_parser.can_fetch("GingerNightWalker", url)
                 ][:100]
+            cached_result["cache_hit"] = True
             return cached_result
         self.policy.validate_url(robots_url, allow_private_networks=False)
         result = {
@@ -1078,7 +1079,9 @@ class BrowserRuntime:
             structured_data = {"products": products} if products else {}
             if workflow_type in {"seo", "seo_qa"}:
                 structured_data["seo_checks"] = audit_signals.get("seo", {})
-                structured_data["seo_discovery"] = audit_signals.get("seo_discovery", {})
+                discovery_signals = audit_signals.get("seo_discovery", {})
+                if not discovery_signals.get("cache_hit"):
+                    structured_data["seo_discovery"] = discovery_signals
             if workflow_type in {"seo", "qa", "seo_qa"}:
                 structured_data["crawl_page"] = {
                     "url": page.url, "title": title,
