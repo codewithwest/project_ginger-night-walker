@@ -1228,6 +1228,10 @@ class TaskManager:
                     (int(item.get("url_count") or 0) for item in sitemap_by_url.values()),
                     default=0,
                 )
+                sitemap_disallowed = max(
+                    (int(item.get("disallowed_url_count") or 0) for item in sitemap_by_url.values()),
+                    default=0,
+                )
                 sitemap_sample_urls = list(dict.fromkeys(
                     url for item in sitemap_by_url.values()
                     for url in item.get("sample_urls", []) if url
@@ -1237,6 +1241,7 @@ class TaskManager:
                 } & {canonical_url_key(url) for url in visited_urls}
                 coverage.update({
                     "sitemap_url_count": sitemap_total,
+                    "sitemap_disallowed_by_robots": sitemap_disallowed,
                     "sitemap_urls_sampled": len(sitemap_sample_urls),
                     "sitemap_sample_urls_visited": len(sitemap_sample_visited),
                     "sitemap_sample_coverage_percent": round(
@@ -1322,6 +1327,7 @@ class TaskManager:
                     "known_discovered_url_count": coverage["discovered_url_count"],
                     "crawl_coverage_percent": coverage["coverage_percent"],
                     "sitemap_url_count": coverage["sitemap_url_count"],
+                    "sitemap_disallowed_by_robots": coverage["sitemap_disallowed_by_robots"],
                     "sitemap_sample_urls_visited": coverage["sitemap_sample_urls_visited"],
                     "sitemap_sample_coverage_percent": coverage["sitemap_sample_coverage_percent"],
                     "sitemap_urls_beyond_sample_cap": coverage["sitemap_urls_beyond_sample_cap"],
