@@ -849,7 +849,7 @@ class BrowserRuntime:
                     audit_findings.append({
                         "claim": f"Internal link destination returned HTTP {check.get('status')}: {check.get('url')}",
                         "type": "broken_internal_link", "severity": "high",
-                        "affected_url": check.get("url"),
+                        "affected_urls": [check.get("url")], "source_url": page.url,
                     })
             for viewport in (audit_signals.get("qa_extended") or {}).get("responsive_viewports", []):
                 if viewport.get("horizontal_overflow"):
