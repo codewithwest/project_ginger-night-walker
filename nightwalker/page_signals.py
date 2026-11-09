@@ -224,6 +224,23 @@ async def collect_qa_extended_signals(page: Any) -> dict[str, Any]:
         focusable_inside_aria_hidden: Array.from(document.querySelectorAll(
           'a[href],button,input,select,textarea,[tabindex]:not([tabindex="-1"])'
         )).filter(el => visible(el) && el.closest('[aria-hidden="true"]')).length,
+        broken_aria_labelledby_references: Array.from(document.querySelectorAll("[aria-labelledby]"))
+          .filter(el => (el.getAttribute("aria-labelledby") || "").trim().split(/\\s+/)
+            .some(id => id && !document.getElementById(id))).length,
+        generic_link_names: Array.from(document.querySelectorAll("a[href]"))
+          .filter(el => visible(el) && /^(click here|here|read more|more|learn more)$/i
+            .test((el.getAttribute("aria-label") || el.innerText || "").trim())).length,
+        nested_interactive_controls: Array.from(document.querySelectorAll("a[href] button,button a[href],[role=button] a[href],[role=link] button"))
+          .filter(visible).length,
+        positive_tabindex_count: Array.from(document.querySelectorAll("[tabindex]"))
+          .filter(el => visible(el) && Number(el.getAttribute("tabindex")) > 0).length,
+        multiple_main_landmarks: document.querySelectorAll("main,[role=main]").length > 1,
+        tables_without_header_cells: Array.from(document.querySelectorAll("table"))
+          .filter(table => !table.querySelector("th,[role=columnheader],[role=rowheader]")).length,
+        target_blank_without_noopener: Array.from(document.querySelectorAll('a[target="_blank"]'))
+          .filter(el => !/\\bnoopener\\b/i.test(el.getAttribute("rel") || "")).length,
+        document_title_missing: !document.title.trim(),
+        document_language_missing: !(document.documentElement.lang || "").trim(),
         forms: Array.from(document.forms).slice(0, 30).map(form => ({
           method: (form.method || "get").toLowerCase(),
           action: form.action,
@@ -256,3 +273,62 @@ async def collect_qa_extended_signals(page: Any) -> dict[str, Any]:
         "keyboard_focus_sequence": focus,
         "interaction_scope": "Read-only smoke checks; no forms submitted and no state-changing controls activated."
     }
+
+
+def qa_extended_findings(extended: dict[str, Any], page_url: str) -> list[dict[str, Any]]:
+    """Convert deterministic responsive/semantic smoke signals into reviewable findings."""
+    findings: list[dict[str, Any]] = []
+    for viewport in extended.get("responsive_viewports", []):
+        if viewport.get("horizontal_overflow"):
+            findings.append({
+                "claim": f"Horizontal overflow detected at {viewport.get('viewport')} viewport ({viewport.get('viewport_width')}px).",
+                "type": "qa_responsive_issue", "severity": "medium",
+                "affected_urls": [page_url],
+            })
+    semantic = extended.get("semantic_accessibility") or {}
+    checks = (
+        ("visible_form_controls_without_label", "visible form control(s) lack a detectable programmatic label", "high"),
+        ("links_without_accessible_name", "visible link(s) lack a detectable accessible name", "medium"),
+        ("buttons_without_accessible_name", "visible button(s) lack a detectable accessible name", "high"),
+        ("focusable_inside_aria_hidden", "focusable element(s) are inside aria-hidden content", "high"),
+        ("broken_aria_labelledby_references", "element(s) reference missing IDs through aria-labelledby", "high"),
+        ("generic_link_names", "visible link(s) use generic labels such as ‘click here’ or ‘read more’", "low"),
+        ("nested_interactive_controls", "nested interactive control(s) were detected", "high"),
+        ("positive_tabindex_count", "element(s) use positive tabindex values, which can disrupt natural focus order", "medium"),
+        ("tables_without_header_cells", "table(s) have no detectable header cells", "medium"),
+        ("target_blank_without_noopener", "new-tab link(s) lack rel=noopener", "low"),
+    )
+    for field, description, severity in checks:
+        count = int(semantic.get(field) or 0)
+        if count:
+            findings.append({
+                "claim": f"{count} {description}.",
+                "type": "qa_accessibility_issue" if severity in {"high", "medium"} else "qa_accessibility_warning",
+                "severity": severity, "affected_urls": [page_url],
+            })
+    landmarks = semantic.get("landmark_counts") or {}
+    if not landmarks.get("main"):
+        findings.append({
+            "claim": "No main landmark was detected on the page.",
+            "type": "qa_accessibility_warning", "severity": "low",
+            "affected_urls": [page_url],
+        })
+    if semantic.get("multiple_main_landmarks"):
+        findings.append({
+            "claim": "Multiple main landmarks were detected; review the page's primary content structure.",
+            "type": "qa_accessibility_warning", "severity": "low",
+            "affected_urls": [page_url],
+        })
+    if semantic.get("document_title_missing"):
+        findings.append({
+            "claim": "The document has no non-empty title.",
+            "type": "qa_accessibility_issue", "severity": "medium",
+            "affected_urls": [page_url],
+        })
+    if semantic.get("document_language_missing"):
+        findings.append({
+            "claim": "The document language is not declared.",
+            "type": "qa_accessibility_warning", "severity": "medium",
+            "affected_urls": [page_url],
+        })
+    return findings
