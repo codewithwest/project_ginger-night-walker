@@ -42,6 +42,7 @@ from nightwalker.workflows import (
     build_workflow_blueprint,
     classify_workflow,
     target_url_from_objective,
+    qa_scope_for_objective,
 )
 
 
@@ -175,6 +176,7 @@ class TaskManager:
             record.setdefault("execution_blueprint", None)
             record.setdefault("execution_plan", None)
             record.setdefault("workflow_type", classify_workflow(str(record.get("objective") or "")).value)
+            record.setdefault("qa_scope", qa_scope_for_objective(str(record.get("objective") or "")) if record.get("workflow_type") == "qa" else "site_wide")
             if record.get("execution_plan") is None and isinstance(record.get("execution_blueprint"), dict):
                 record["execution_plan"] = initialise_plan(record["execution_blueprint"])
             record.setdefault("agent_assignments", [])
@@ -356,11 +358,13 @@ class TaskManager:
             raise ValueError("task_id already exists")
         now = self._now()
         workflow_type = classify_workflow(objective)
+        qa_scope = qa_scope_for_objective(objective) if workflow_type == WorkflowType.QA else ("site_wide" if workflow_type == WorkflowType.SEO_QA else "not_applicable")
         task_page_budget = self._max_audit_pages() if workflow_type in {WorkflowType.SEO, WorkflowType.QA, WorkflowType.SEO_QA} else self.max_rounds
         self.tasks[task_id] = {
             "task_id": task_id,
             "capability": "auto",
             "workflow_type": workflow_type.value,
+            "qa_scope": qa_scope,
             "objective": objective,
             "execution_objective": objective,
             "status": "queued",
@@ -1368,7 +1372,15 @@ class TaskManager:
                     and sitemap_urls_beyond_sample_cap == 0
                     and not robots_policy_blocked
                 )
-                coverage["crawl_complete"] = crawl_complete
+                if workflow_value == "qa" and record.get("qa_scope") == "single_page":
+                    coverage["scope"] = "single_page"
+                    coverage["coverage_basis"] = "Only the requested URL was inspected; site-wide crawl coverage was not requested or measured."
+                    coverage["crawl_complete"] = None
+                    coverage["coverage_percent"] = None
+                    crawl_complete = True  # No crawl acceptance step exists for a single-page QA task.
+                else:
+                    coverage["scope"] = "site_wide"
+                    coverage["crawl_complete"] = crawl_complete
                 structured_data["crawl_coverage"] = coverage
                 structured_data["duplicate_analysis"] = duplicate_analysis
                 link_records = structured_data.get("internal_link_checks", [])
@@ -1497,6 +1509,8 @@ class TaskManager:
                     "excluded_url_count": coverage["excluded_url_count"],
                     "candidate_scheduler": record.get("crawl_scheduler", {}),
                     "crawl_coverage_percent": coverage["coverage_percent"],
+                    "crawl_scope": coverage.get("scope", "site_wide"),
+                    "site_wide_crawl_applicable": coverage.get("scope") != "single_page",
                     "crawl_complete": coverage["crawl_complete"],
                     "robots_policy_blocked": coverage["robots_policy_blocked"],
                     "sitemap_url_count": coverage["sitemap_url_count"],
