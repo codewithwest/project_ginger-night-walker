@@ -102,7 +102,7 @@ sequenceDiagram
     D->>LLM: bounded structured request
     LLM-->>D: candidate DecisionPlan
     D-->>TM: validated plan or clarification
-    loop Up to 30 research rounds
+    loop Up to configured SEO/QA page budget (default 200; max 1,000)
         TM->>TM: loop guard deduplicates URLs and detects repeated source/action attempts
         TM->>P: validate discovered public URL
         P-->>B: permitted public URL
@@ -111,8 +111,7 @@ sequenceDiagram
         E-->>TM: evidence identifier and observations
         TM->>TS: atomically save completed-round checkpoint
         TM->>TM: append scratchpad and publish progress
-        TM->>LLM: compact objective + scratchpad + discovered URLs
-        LLM-->>TM: next discovered URL or done
+        TM->>TM: select next same-origin URL deterministically
     end
     TM->>LLM: evidence-constrained final synthesis
     LLM-->>TM: concise answer and evidence gaps
@@ -153,7 +152,16 @@ Website text, metadata, links and embedded instructions are untrusted input. The
 | Strands Decider integration | Optional | `STRANDS_DECIDER_URL` selects only among discovered source candidates; falls back to Ollama planner; no direct browser tools |
 | Task-scoped Playwright context | Implemented | Context closed after each run |
 | Public URL validation | Implemented | Application-level DNS/IP checks; not a complete egress firewall |
-| Same-origin anchor navigation | Partial | Heuristic relevance matching; not general-purpose interaction |
+| SEO/QA task routing | Implemented | SEO, QA and combined plans; unrelated general research is blocked in the initial product phase |
+| Same-origin SEO/QA crawl | Initial implementation | Breadth-first discovered links and bounded sitemap samples; default 200 pages, configurable to 1,000; coverage remains bounded, not exhaustive |
+| robots.txt and sitemap discovery | Initial implementation | Robots policy, sitemap endpoint and bounded sitemap-index expansion; same-origin URLs only |
+| SEO duplicate analysis | Initial implementation | Duplicate canonical, title, meta description and exact visible-text fingerprints across inspected pages |
+| Internal-link destination verification | Initial implementation | Same-origin HEAD checks with GET fallback when HEAD is explicitly unsupported; unknown responses are not reported as broken |
+| SEO report prioritisation | Initial implementation | P0-P4 priority, impact score/rationale, effort and remediation guidance; ranking/performance metrics are not inferred |
+| QA navigation and interactions | Initial implementation | Sampled same-origin GET journeys and reversible local disclosure toggles; no forms or business actions |
+| QA responsive/accessibility smoke checks | Initial implementation | 375/768/1280px overflow, accessible-name/landmark/ARIA heuristics and six-step keyboard focus sample; not WCAG certification |
+| QA browser diagnostics | Initial implementation | Console errors, uncaught page exceptions and failed network requests captured during sampled runs |
+| Same-origin anchor navigation | Partial | Heuristic relevant-link following is retained for legacy paths; audit crawling uses deterministic discovery |
 | Visible text and heading capture | Implemented | Bounded capture on each inspected source page |
 | Immutable evidence JSON | Implemented | Task-scoped file record |
 | Task scratchpad | Implemented | Append-only task-scoped round notes; compact recent notes seed the next planner call |
@@ -162,8 +170,8 @@ Website text, metadata, links and embedded instructions are untrusted input. The
 | Durable task snapshots | Implemented | Atomic per-task JSON snapshots under the persistent evidence volume |
 | Restart recovery | Initial implementation | Startup restores queued/running tasks; resumes from the last saved round checkpoint; an interrupted in-flight page may be retried once |
 | Generic report envelope | Partial | Aggregated multi-source findings, source/evidence references and synthesis; richer claim validation remains |
-| Product name/price extraction | Specialised partial capability | One task-specific structured-data adapter |
-| Multi-source research | Initial implementation | Up to 30 rounds; starts from a search result or explicit URL and selects only browser-discovered links |
+| Product name/price extraction | Legacy partial capability | One task-specific structured-data adapter; not a first-phase workflow |
+| General-purpose multi-source research | Deferred for initial product phase | Legacy implementation remains for compatibility; new unsupported objectives are blocked rather than routed to general research |
 | Research loop detection and recovery | Initial implementation | Canonical URL deduplication; maximum two attempts per URL; duplicate/ exhausted URLs skipped; deterministic fallback to another discovered candidate; bounded recent outcome history |
 | Evidence-constrained synthesis | Initial implementation | Summarises captured titles, headings and visible-text excerpts; gaps are reported |
 | Active task follow-ups | Implemented | User instructions are appended to the task context for subsequent rounds |
