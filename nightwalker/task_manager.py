@@ -419,7 +419,7 @@ class TaskManager:
                     available = rank_crawl_candidates(
                         candidates, visited_urls, workflow=str(record.get("workflow_type")),
                         inspected_template_keys=inspected_templates,
-                        limit=int(record.get("max_rounds", self.max_rounds)),
+                        limit=1000,
                     )
                 else:
                     available = loop_guard.filter_candidates(
@@ -1078,7 +1078,7 @@ class TaskManager:
                         candidates = rank_crawl_candidates(
                             candidates, visited_urls, workflow=workflow_value,
                             inspected_template_keys=inspected_templates,
-                            limit=int(record.get("max_rounds", self.max_rounds)),
+                            limit=1000,
                         )
                         record["crawl_scheduler"] = crawl_candidate_metrics(candidates)
                     else:
@@ -1198,7 +1198,7 @@ class TaskManager:
                     available = rank_crawl_candidates(
                         candidates, visited_urls, workflow=workflow_value,
                         inspected_template_keys=inspected_templates,
-                        limit=int(record.get("max_rounds", self.max_rounds)),
+                        limit=1000,
                     )
                     if not available:
                         next_url = ""
