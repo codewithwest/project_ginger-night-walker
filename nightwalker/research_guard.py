@@ -97,6 +97,7 @@ class ResearchLoopGuard:
             ):
                 continue
             selected[key] = {
+                **{name: value for name, value in item.items() if name not in {"url", "label"}},
                 "url": url,
                 "label": str(item.get("label") or "")[:240],
             }
