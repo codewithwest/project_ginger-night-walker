@@ -222,7 +222,17 @@ class TaskManager:
 
     def snapshot(self, task_id: str) -> dict[str, Any] | None:
         record = self.tasks.get(task_id)
-        return {**record, "logs": list(record["logs"])} if record else None
+        if record is None:
+            return None
+        snapshot = {**record, "logs": list(record.get("logs", []))}
+        plan = record.get("execution_plan") or {}
+        steps = plan.get("steps") or []
+        snapshot["plan_progress"] = {
+            "status": plan.get("status", "pending"),
+            "completed": sum(1 for step in steps if step.get("status") == "completed"),
+            "total": len(steps),
+        } if steps else None
+        return snapshot
 
     def list_tasks(self) -> list[dict[str, Any]]:
         """Return lightweight mission cards; full task state is fetched only when opened."""
