@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 from datetime import UTC, datetime
 from typing import Any
@@ -41,6 +42,13 @@ class TaskManager:
     @staticmethod
     def _now() -> str:
         return datetime.now(UTC).isoformat()
+
+    @staticmethod
+    def _max_audit_pages() -> int:
+        try:
+            return max(1, min(1000, int(os.getenv("AUDIT_MAX_PAGES", "200"))))
+        except ValueError:
+            return 200
 
     def _log(self, task_id: str, message: str, level: str = "info") -> None:
         record = self.tasks[task_id]
@@ -304,10 +312,12 @@ class TaskManager:
         if task_id in self.tasks:
             raise ValueError("task_id already exists")
         now = self._now()
+        workflow_type = classify_workflow(objective)
+        task_page_budget = self._max_audit_pages() if workflow_type in {WorkflowType.SEO, WorkflowType.QA, WorkflowType.SEO_QA} else self.max_rounds
         self.tasks[task_id] = {
             "task_id": task_id,
             "capability": "auto",
-            "workflow_type": classify_workflow(objective).value,
+            "workflow_type": workflow_type.value,
             "objective": objective,
             "execution_objective": objective,
             "status": "queued",
@@ -321,7 +331,7 @@ class TaskManager:
             "logs": [],
             "progress_events": [],
             "round": 0,
-            "max_rounds": self.max_rounds,
+            "max_rounds": task_page_budget,
             "scratchpad": self.scratchpad.read(task_id),
             "checklist_markdown": "",
             "follow_up_instructions": [],
@@ -571,7 +581,7 @@ class TaskManager:
                     "plan_step_id": active_plan_step.get("step_id") if active_plan_step else None,
                 }
                 self._persist(task_id)
-                self._log(task_id, f"Round {round_count}/{self.max_rounds}: {next_assignment}")
+                self._log(task_id, f"Round {round_count}/{record.get('max_rounds', self.max_rounds)}: {next_assignment}")
                 attempt = loop_guard.begin(next_url, next_assignment)
                 already_visited = loop_guard.is_visited(next_url, visited_urls) and not resume_plan_source
                 self._save_checkpoint(
@@ -1036,7 +1046,7 @@ class TaskManager:
                     "evidence": list(evidence), "structured_data": structured_data,
                     "limitations": list(dict.fromkeys(limitations)),
                     "suggested_memory": [], "rounds_completed": round_count,
-                    "max_rounds": self.max_rounds, "visited_urls": list(visited_urls),
+                    "max_rounds": int(record.get("max_rounds", self.max_rounds)), "visited_urls": list(visited_urls),
                     "goal_state": record.get("goal_state"),
                     "loop_guard": loop_guard.snapshot(),
                 }
@@ -1063,7 +1073,7 @@ class TaskManager:
                         next_url="", next_assignment=next_assignment, research_complete=True,
                     )
                     break
-                if not candidates or round_count >= self.max_rounds:
+                if not candidates or round_count >= int(record.get("max_rounds", self.max_rounds)):
                     next_url = ""
                     research_complete = True
                     self._save_checkpoint(
@@ -1275,8 +1285,8 @@ class TaskManager:
                     limitations.append(
                         f"{coverage['known_discovered_urls_remaining']} discovered same-origin URL(s) remained unvisited when the crawl ended."
                     )
-            if round_count >= self.max_rounds and candidates:
-                limitations.append(f"Maximum research budget of {self.max_rounds} rounds reached.")
+            if round_count >= int(record.get("max_rounds", self.max_rounds)) and candidates:
+                limitations.append(f"Maximum page/crawl budget of {record.get('max_rounds', self.max_rounds)} reached.")
             if sources:
                 self._log(task_id, "Research rounds resolved; synthesising the evidence-backed report")
                 record["progress_events"].append({
@@ -1286,7 +1296,7 @@ class TaskManager:
                 try:
                     synthesis = await self.orchestrator.ollama.synthesise_research(
                         self._effective_objective(task_id, objective), findings, sources, round_count,
-                        self.max_rounds, task_id=task_id,
+                        int(record.get("max_rounds", self.max_rounds)), task_id=task_id,
                         checklist_markdown=self.checklist.write(record),
                     )
                     answer = synthesis.answer
@@ -1331,7 +1341,7 @@ class TaskManager:
                 "structured_data": structured_data,
                 "limitations": list(dict.fromkeys(limitations)),
                 "suggested_memory": [], "rounds_completed": round_count,
-                "max_rounds": self.max_rounds, "visited_urls": visited_urls,
+                "max_rounds": int(record.get("max_rounds", self.max_rounds)), "visited_urls": visited_urls,
                 "goal_state": record.get("goal_state"),
                 "loop_guard": loop_guard.snapshot(),
             }
