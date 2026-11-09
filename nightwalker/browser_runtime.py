@@ -384,11 +384,13 @@ class BrowserRuntime:
             }))"""
         )
         current = urlparse(page.url)
+        current_origin = (current.scheme, current.hostname, current.port)
         ranked: list[tuple[float, str]] = []
         for item in candidates:
             href = urljoin(page.url, str(item.get("href", "")))
             parsed = urlparse(href)
-            if parsed.scheme not in {"http", "https"} or parsed.hostname != current.hostname:
+            candidate_origin = (parsed.scheme, parsed.hostname, parsed.port)
+            if parsed.scheme not in {"http", "https"} or candidate_origin != current_origin:
                 continue
             score = self._link_score(str(item.get("text", "")), objective)
             if score >= 0.25:
@@ -528,6 +530,10 @@ class BrowserRuntime:
 
             title = (await page.title())[:500]
             self._browser_event(task_id, "Captured page title, headings and visible text", url=page.url, title=title)
+            from nightwalker.workflows import classify_workflow
+            workflow_type = classify_workflow(objective).value
+            target_parts = urlparse(url)
+            target_origin = (target_parts.scheme, target_parts.hostname, target_parts.port)
             candidate_links = await page.locator("a[href]").evaluate_all(
                 """nodes => nodes.slice(0, 500).map(a => ({
                     label: (a.innerText || a.getAttribute('aria-label') || '').trim().slice(0, 240),
@@ -538,11 +544,14 @@ class BrowserRuntime:
             seen_candidates = set()
             for item in candidate_links:
                 candidate_url = self._resolve_search_result_url(str(item.get("url", ""))).split("#", 1)[0]
-                candidate_host = (urlparse(candidate_url).hostname or "").lower()
+                candidate_parts = urlparse(candidate_url)
+                candidate_origin = (candidate_parts.scheme, candidate_parts.hostname, candidate_parts.port)
+                same_origin_required = workflow_type in {"seo", "qa", "seo_qa"}
                 if (
                     candidate_url and candidate_url not in seen_candidates
                     and candidate_url != page.url
-                    and not candidate_host.endswith(("bing.com", "microsoft.com"))
+                    and (not same_origin_required or candidate_origin == target_origin)
+                    and not (candidate_parts.hostname or "").lower().endswith(("bing.com", "microsoft.com"))
                 ):
                     seen_candidates.add(candidate_url)
                     candidates.append({
@@ -567,8 +576,6 @@ class BrowserRuntime:
                 )
             from nightwalker.page_signals import collect_page_signals, page_signal_findings
             audit_signals = await collect_page_signals(page)
-            from nightwalker.workflows import classify_workflow
-            workflow_type = classify_workflow(objective).value
             audit_findings = page_signal_findings(audit_signals, workflow_type)
             wants_products = bool(re.search(r"(?i)\b(product|products|item|items|price|pricing)\b", objective))
             products = self._extract_products_from_text(body_text, limit=200) if wants_products else []
