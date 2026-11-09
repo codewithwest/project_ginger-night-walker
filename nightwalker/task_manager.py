@@ -386,9 +386,9 @@ class TaskManager:
                     if len(subject) >= 8:
                         research_queries = [subject[:180]]
                 homepage_price_lookup = bool(
-                    re.search(r"(?i)\\b(?:cheapest|lowest[- ]priced|lowest price)\\b", objective)
-                    and re.search(r"(?i)\\bweylandts\\.co\\.za\\b", objective)
-                    and re.search(r"(?i)\\bhomepage\\b", objective)
+                    re.search(r"(?i)\b(?:cheapest|lowest[- ]priced|lowest price)\b", objective)
+                    and re.search(r"(?i)\bweylandts\.co\.za\b", objective)
+                    and re.search(r"(?i)\bhomepage\b", objective)
                 )
                 if homepage_price_lookup:
                     initial_plan = DecisionPlan.model_validate({
@@ -405,7 +405,7 @@ class TaskManager:
                         ],
                     })
                     research_queries = []
-                    self.max_rounds = min(self.max_rounds, 3)
+                    record["max_rounds"] = 1
                     self._log(task_id, "Focused homepage price lookup detected; bypassing search discovery and unrelated source exploration.")
                 if initial_plan.status == DecisionStatus.READY and research_queries and not explicit_target:
                     from urllib.parse import quote
