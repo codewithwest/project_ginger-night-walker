@@ -77,7 +77,8 @@ type Task = {
   created_at?: string;
   updated_at?: string;
   site_name?: string;
-  current_step?: string | null;
+  current_step?: string | { objective?: string; url?: string; plan_step_id?: string } | null;
+  plan_progress?: { status: string; completed: number; total: number } | null;
   target_url?: string;
   plan?: { clarification_question?: string; [key: string]: unknown };
   step_results?: unknown;
