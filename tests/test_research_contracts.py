@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from nightwalker.research_contracts import ResearchRoundPlan
+from pydantic import ValidationError
+
+from nightwalker.research_contracts import ResearchRoundPlan, ResearchSynthesis
 
 
 def test_round_plan_must_select_a_discovered_url():
@@ -72,3 +74,13 @@ def test_round_plan_rejects_credentials_even_if_host_matches():
         ResearchRoundPlan.validate_plan(
             plan, {"https://example.com/research"}
         )
+
+
+def test_research_synthesis_accepts_answers_above_previous_3000_character_limit():
+    synthesis = ResearchSynthesis(answer="A" * 4200)
+    assert len(synthesis.answer) == 4200
+
+
+def test_research_synthesis_still_rejects_unbounded_answers():
+    with pytest.raises(ValidationError):
+        ResearchSynthesis(answer="A" * 6001)
