@@ -93,6 +93,29 @@ _PRIORITY = {
     "info": (10, "P4"),
 }
 
+_REMEDIATION = {
+    "broken_internal_link": "Correct the href, restore the destination, or add an intentional redirect; verify the final destination returns a successful response.",
+    "duplicate_canonical": "Choose one preferred URL and align canonical tags, redirects and internal links with that URL.",
+    "duplicate_title": "Write a distinct, descriptive title that reflects each page's unique search intent.",
+    "duplicate_meta_description": "Write a distinct summary for each indexable page that accurately describes its content.",
+    "duplicate_content": "Consolidate near-identical pages or add genuinely distinct, useful content and clear canonical signals.",
+    "qa_responsive_issue": "Inspect the reported viewport and remove the element or layout rule causing horizontal overflow.",
+    "qa_accessibility_issue": "Provide a programmatic accessible name or label, and ensure hidden content is not keyboard-focusable.",
+    "qa_accessibility_warning": "Review semantic landmarks and keyboard navigation, then validate with an automated WCAG testing tool.",
+    "seo_issue": "Correct the affected page's technical or on-page SEO signal and verify the rendered page again.",
+    "seo_warning": "Review the affected page and make the metadata or document structure clearer and more consistent.",
+}
+
+_IMPACT = {
+    "broken_internal_link": "Users and crawlers may be unable to reach the linked destination.",
+    "duplicate_canonical": "Conflicting canonical signals can fragment indexing and ranking signals.",
+    "duplicate_title": "Repeated titles make page purpose less distinct in search results.",
+    "duplicate_meta_description": "Repeated snippets reduce the uniqueness and relevance of search-result descriptions.",
+    "duplicate_content": "Substantially repeated page content can dilute indexation and make page selection ambiguous.",
+    "qa_responsive_issue": "Horizontal overflow can hide content or controls on smaller screens.",
+    "qa_accessibility_issue": "Assistive technology or keyboard users may not be able to identify or operate the affected control.",
+}
+
 
 def prioritise_findings(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Add deterministic impact/priority fields while preserving original evidence."""
@@ -107,7 +130,9 @@ def prioritise_findings(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
             priority = "P0" if score >= 100 else "P1" if score >= 80 else priority
         item["impact_score"] = score
         item["priority"] = priority
-        item.setdefault("effort", "medium")
+        item.setdefault("impact_rationale", _IMPACT.get(kind, "This issue may affect search visibility, usability or reliability; validate against the affected page and business context."))
+        item.setdefault("remediation", _REMEDIATION.get(kind, "Review the evidence, correct the underlying page issue and re-run the affected check."))
+        item.setdefault("effort", "low" if kind in {"broken_internal_link", "seo_warning"} else "medium")
         item.setdefault("affected_urls", [])
         output.append(item)
     order = {"P0": 0, "P1": 1, "P2": 2, "P3": 3, "P4": 4}
