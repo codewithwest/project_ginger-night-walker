@@ -1245,6 +1245,12 @@ class TaskManager:
                 sitemap_sample_visited = {
                     canonical_url_key(url) for url in sitemap_sample_urls
                 } & {canonical_url_key(url) for url in visited_urls}
+                sitemap_urls_beyond_sample_cap = max(0, sitemap_total - len(sitemap_sample_urls))
+                robots_policy_blocked = any(
+                    (discovery.get("robots_txt") or {}).get("crawl_policy")
+                    in {"unknown", "temporarily_unavailable_conservatively_blocked"}
+                    for discovery in discovery_records if isinstance(discovery, dict)
+                )
                 coverage.update({
                     "sitemap_url_count": sitemap_total,
                     "sitemap_disallowed_by_robots": sitemap_disallowed,
@@ -1253,8 +1259,15 @@ class TaskManager:
                     "sitemap_sample_coverage_percent": round(
                         len(sitemap_sample_visited) / len(sitemap_sample_urls) * 100, 1
                     ) if sitemap_sample_urls else None,
-                    "sitemap_urls_beyond_sample_cap": max(0, sitemap_total - len(sitemap_sample_urls)),
+                    "sitemap_urls_beyond_sample_cap": sitemap_urls_beyond_sample_cap,
+                    "robots_policy_blocked": robots_policy_blocked,
                 })
+                crawl_complete = (
+                    coverage["known_discovered_urls_remaining"] == 0
+                    and sitemap_urls_beyond_sample_cap == 0
+                    and not robots_policy_blocked
+                )
+                coverage["crawl_complete"] = crawl_complete
                 structured_data["crawl_coverage"] = coverage
                 structured_data["duplicate_analysis"] = duplicate_analysis
                 link_records = structured_data.get("internal_link_checks", [])
@@ -1294,14 +1307,22 @@ class TaskManager:
                 ))
                 if isinstance(execution_plan, dict) and all_evidence_refs:
                     for step in execution_plan.get("steps", []):
-                        if str(step.get("step_id", "")).endswith(
-                            ("seo-crawl", "qa-crawl", "audit-crawl", "seo-synthesise", "qa-synthesise")
-                        ) and step.get("status") not in {"completed", "blocked", "failed", "skipped"}:
-                            start_step(execution_plan, step["step_id"])
+                        step_id = str(step.get("step_id", ""))
+                        is_crawl_step = step_id.endswith(("seo-crawl", "qa-crawl", "audit-crawl"))
+                        is_synthesis_step = step_id.endswith(("seo-synthesise", "qa-synthesise"))
+                        if (
+                            (is_crawl_step and crawl_complete or is_synthesis_step)
+                            and step.get("status") not in {"completed", "blocked", "failed", "skipped"}
+                        ):
+                            start_step(execution_plan, step_id)
                             complete_step(
-                                execution_plan, step["step_id"],
+                                execution_plan, step_id,
                                 evidence_refs=all_evidence_refs,
-                                result="Aggregated crawl coverage, duplicate analysis, verified link checks and prioritised evidence-backed findings.",
+                                result=(
+                                    "Crawl coverage acceptance satisfied; all known discovered and sampled sitemap URLs were visited or explicitly excluded."
+                                    if is_crawl_step else
+                                    "Aggregated crawl coverage, duplicate analysis, verified link checks and prioritised evidence-backed findings."
+                                ),
                             )
                     if record.get("goal_state"):
                         GoalStateManager.apply_verified_workflow_results(
@@ -1333,6 +1354,8 @@ class TaskManager:
                     "pages_inspected": len(crawl_pages),
                     "known_discovered_url_count": coverage["discovered_url_count"],
                     "crawl_coverage_percent": coverage["coverage_percent"],
+                    "crawl_complete": coverage["crawl_complete"],
+                    "robots_policy_blocked": coverage["robots_policy_blocked"],
                     "sitemap_url_count": coverage["sitemap_url_count"],
                     "sitemap_disallowed_by_robots": coverage["sitemap_disallowed_by_robots"],
                     "sitemap_sample_urls_visited": coverage["sitemap_sample_urls_visited"],
