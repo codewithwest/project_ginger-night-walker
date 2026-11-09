@@ -455,8 +455,12 @@ class BrowserRuntime:
 
         return products
 
-    async def _collect_seo_discovery_signals(self, page: Page) -> dict:
-        """Read robots.txt and a discovered sitemap without leaving the site origin."""
+    async def _collect_seo_discovery_signals(
+        self, page: Page, candidate_urls: list[str] | None = None,
+    ) -> dict:
+        """Inspect robots.txt and bounded same-origin sitemap indexes/URL sets."""
+        import xml.etree.ElementTree as ET
+        from urllib.robotparser import RobotFileParser
         from urllib.parse import urljoin
 
         origin = urlparse(page.url)
@@ -464,15 +468,24 @@ class BrowserRuntime:
         robots_url = urljoin(base, "robots.txt")
         self.policy.validate_url(robots_url, allow_private_networks=False)
         result = {
-            "robots_txt": {"url": robots_url, "status": None, "sitemap_urls": [], "disallow_rules": []},
-            "sitemap": {"url": None, "status": None, "url_count": 0, "sample_urls": []},
+            "robots_txt": {
+                "url": robots_url, "status": None, "sitemap_urls": [],
+                "disallow_rules": [], "target_url_allowed": None,
+                "candidate_urls_disallowed": [],
+            },
+            "sitemap": {
+                "url": None, "status": None, "url_count": 0,
+                "sample_urls": [], "child_sitemap_count": 0,
+            },
         }
         robots_text = ""
+        parser = RobotFileParser(robots_url)
         try:
             response = await page.request.get(robots_url, timeout=10000)
             result["robots_txt"]["status"] = response.status
             if response.ok:
                 robots_text = (await response.text())[:200000]
+                parser.parse(robots_text.splitlines())
                 result["robots_txt"]["sitemap_urls"] = [
                     line.split(":", 1)[1].strip()
                     for line in robots_text.splitlines()
@@ -484,16 +497,46 @@ class BrowserRuntime:
                     for line in robots_text.splitlines()
                     if line.strip().casefold().startswith("disallow:")
                 ][:50]
-        except Exception as exc:  # noqa: BLE001 - record unavailable endpoint, do not fail page capture
+                result["robots_txt"]["target_url_allowed"] = parser.can_fetch(
+                    "GingerNightWalker", page.url
+                )
+                result["robots_txt"]["candidate_urls_disallowed"] = [
+                    url for url in (candidate_urls or [])
+                    if not parser.can_fetch("GingerNightWalker", url)
+                ][:100]
+            elif response.status >= 500:
+                result["robots_txt"]["crawl_policy"] = "temporarily_unavailable_conservatively_blocked"
+            else:
+                result["robots_txt"]["crawl_policy"] = "robots_unavailable"
+        except Exception as exc:  # noqa: BLE001 - record endpoint outcome
             result["robots_txt"]["error"] = str(exc)[:180]
+            result["robots_txt"]["crawl_policy"] = "unknown"
+
+        def same_origin(value: str) -> bool:
+            parsed = urlparse(value)
+            return (parsed.scheme, parsed.hostname, parsed.port) == (
+                origin.scheme, origin.hostname, origin.port
+            )
+
+        def loc_values(xml_text: str) -> tuple[str, list[str]]:
+            root = ET.fromstring(xml_text)
+            root_name = root.tag.rsplit("}", 1)[-1].casefold()
+            values = [
+                (node.text or "").strip()
+                for node in root.iter()
+                if node.tag.rsplit("}", 1)[-1].casefold() == "loc" and (node.text or "").strip()
+            ]
+            return root_name, values
 
         sitemap_candidates = list(result["robots_txt"]["sitemap_urls"])
         if not sitemap_candidates:
             sitemap_candidates = [urljoin(base, "sitemap.xml")]
-        for sitemap_url in sitemap_candidates[:3]:
+        page_urls: list[str] = []
+        child_sitemaps: list[str] = []
+        sitemap_errors: list[str] = []
+        for sitemap_url in sitemap_candidates[:5]:
             try:
-                parsed = urlparse(sitemap_url)
-                if (parsed.scheme, parsed.hostname, parsed.port) != (origin.scheme, origin.hostname, origin.port):
+                if not same_origin(sitemap_url):
                     continue
                 self.policy.validate_url(sitemap_url, allow_private_networks=False)
                 response = await page.request.get(sitemap_url, timeout=12000)
@@ -501,22 +544,47 @@ class BrowserRuntime:
                     if result["sitemap"]["status"] is None:
                         result["sitemap"].update({"url": sitemap_url, "status": response.status})
                     continue
-                body = (await response.text())[:2000000]
-                locs = re.findall(r"<loc>\\s*(.*?)\\s*</loc>", body, flags=re.IGNORECASE | re.DOTALL)
-                urls = []
-                for raw in locs:
-                    candidate = re.sub(r"&amp;", "&", raw.strip())
-                    parsed_candidate = urlparse(candidate)
-                    if (parsed_candidate.scheme, parsed_candidate.hostname, parsed_candidate.port) == (origin.scheme, origin.hostname, origin.port):
-                        urls.append(candidate)
-                result["sitemap"] = {
-                    "url": sitemap_url, "status": response.status,
-                    "url_count": len(urls), "sample_urls": urls[:200],
-                }
-                break
+                root_name, locs = loc_values((await response.text())[:2000000])
+                if root_name == "sitemapindex":
+                    child_sitemaps.extend(url for url in locs if same_origin(url))
+                else:
+                    page_urls.extend(url for url in locs if same_origin(url))
+                if result["sitemap"]["url"] is None:
+                    result["sitemap"].update({"url": sitemap_url, "status": response.status})
             except Exception as exc:  # noqa: BLE001
-                if result["sitemap"]["status"] is None:
-                    result["sitemap"].update({"url": sitemap_url, "error": str(exc)[:180]})
+                sitemap_errors.append(str(exc)[:160])
+
+        for child_url in child_sitemaps[:20]:
+            try:
+                if not same_origin(child_url):
+                    continue
+                self.policy.validate_url(child_url, allow_private_networks=False)
+                response = await page.request.get(child_url, timeout=12000)
+                if not response.ok:
+                    sitemap_errors.append(f"{child_url}: HTTP {response.status}")
+                    continue
+                root_name, locs = loc_values((await response.text())[:2000000])
+                if root_name != "sitemapindex":
+                    page_urls.extend(url for url in locs if same_origin(url))
+            except Exception as exc:  # noqa: BLE001
+                sitemap_errors.append(str(exc)[:160])
+
+        if robots_text and result["robots_txt"].get("status", 0) < 500:
+            page_urls = [
+                url for url in page_urls
+                if parser.can_fetch("GingerNightWalker", url)
+            ]
+        elif result["robots_txt"].get("status", 0) >= 500:
+            page_urls = []
+
+        page_urls = list(dict.fromkeys(page_urls))
+        result["sitemap"].update({
+            "url_count": len(page_urls),
+            "sample_urls": page_urls[:1000],
+            "child_sitemap_count": len(child_sitemaps),
+        })
+        if sitemap_errors:
+            result["sitemap"]["errors"] = sitemap_errors[:20]
         return result
 
     async def _run_readonly_navigation_smoke(self, page: Page, limit: int = 5) -> dict:
@@ -722,12 +790,20 @@ class BrowserRuntime:
             audit_signals = await collect_page_signals(page)
             audit_signals["internal_link_checks"] = await collect_internal_link_checks(page, limit=40)
             if workflow_type in {"seo", "seo_qa"}:
-                audit_signals["seo_discovery"] = await self._collect_seo_discovery_signals(page)
+                audit_signals["seo_discovery"] = await self._collect_seo_discovery_signals(
+                    page, [item.get("url", "") for item in candidates]
+                )
                 sitemap_urls = (audit_signals["seo_discovery"].get("sitemap") or {}).get("sample_urls", [])
+                robots = audit_signals["seo_discovery"].get("robots_txt") or {}
+                disallowed = set(robots.get("candidate_urls_disallowed") or [])
                 for sitemap_url in sitemap_urls:
                     if sitemap_url != page.url and not any(item.get("url") == sitemap_url for item in candidates):
                         candidates.append({"url": sitemap_url, "label": "URL discovered in XML sitemap"})
-                candidates = candidates[:200]
+                if robots.get("crawl_policy") == "temporarily_unavailable_conservatively_blocked":
+                    candidates = []
+                else:
+                    candidates = [item for item in candidates if item.get("url") not in disallowed]
+                candidates = candidates[:1000]
             if workflow_type in {"qa", "seo_qa"}:
                 audit_signals["qa_extended"] = await collect_qa_extended_signals(page)
                 audit_signals["qa_navigation_journeys"] = await self._run_readonly_navigation_smoke(page, limit=5)
