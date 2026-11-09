@@ -888,9 +888,12 @@ class BrowserRuntime:
             target_parts = urlparse(page.url)
             target_origin = (target_parts.scheme, target_parts.hostname, target_parts.port)
             candidate_links = await page.locator("a[href]").evaluate_all(
-                """nodes => nodes.slice(0, 500).map(a => ({
+                """nodes => nodes.slice(0, 2000).map(a => ({
                     label: (a.innerText || a.getAttribute('aria-label') || '').trim().slice(0, 240),
-                    url: a.href
+                    url: a.href,
+                    context: a.closest('main, article') ? 'content' :
+                        a.closest('nav, header') ? 'navigation' :
+                        a.closest('footer') ? 'footer' : 'body'
                 })).filter(item => item.url && /^https?:\\/\\//i.test(item.url))"""
             )
             candidates = []
