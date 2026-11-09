@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
+import time
 from typing import Any
 
 import httpx
@@ -47,6 +49,59 @@ class OllamaClient:
         self.timeout = float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "90"))
         self.registry = ModelRegistry()
         self.compiler = ContextCompiler()
+        self.inference_events: list[dict[str, Any]] = []
+        self.logger = logging.getLogger(__name__)
+
+    async def _post_inference(self, client: httpx.AsyncClient, url: str, **kwargs: Any) -> httpx.Response:
+        """Call Ollama and capture model identity plus server-reported load/inference timings."""
+        request_body = kwargs.get("json") or {}
+        request_headers = kwargs.get("headers") or {}
+        requested_model = str(request_body.get("model") or request_headers.get("X-Ginger-Model") or "unknown")
+        started = time.perf_counter()
+        outcome = "error"
+        response: httpx.Response | None = None
+        envelope: dict[str, Any] = {}
+        try:
+            response = await self._post_inference(client,url, **kwargs)
+            response.raise_for_status()
+            try:
+                payload = response.json()
+                envelope = payload if isinstance(payload, dict) else {}
+            except (ValueError, json.JSONDecodeError):
+                envelope = {}
+            outcome = "success"
+            return response
+        except Exception:
+            raise
+        finally:
+            elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
+            def ms(key: str) -> float | None:
+                value = envelope.get(key)
+                return round(value / 1_000_000, 2) if isinstance(value, (int, float)) else None
+            event = {
+                "at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+                "task_id": request_headers.get("X-Ginger-Task-Id"),
+                "operation": request_headers.get("X-Ginger-Operation", "inference"),
+                "capability": request_headers.get("X-Ginger-Capability"),
+                "endpoint": url.split("/api/")[0],
+                "requested_model": requested_model,
+                "response_model": envelope.get("model"),
+                "status": outcome,
+                "http_status": response.status_code if response is not None else None,
+                "duration_ms": elapsed_ms,
+                "load_duration_ms": ms("load_duration"),
+                "prompt_eval_duration_ms": ms("prompt_eval_duration"),
+                "eval_duration_ms": ms("eval_duration"),
+                "total_duration_ms": ms("total_duration"),
+                "prompt_tokens": envelope.get("prompt_eval_count"),
+                "completion_tokens": envelope.get("eval_count"),
+            }
+            self.inference_events.append(event)
+            self.inference_events = self.inference_events[-500:]
+            self.logger.info("ollama_inference %s", json.dumps(event, separators=(",", ":")))
+
+    def inference_events_for_task(self, task_id: str, limit: int = 100) -> list[dict[str, Any]]:
+        return [event.copy() for event in self.inference_events if event.get("task_id") == task_id][-max(1, min(limit, 200)):]
 
     @staticmethod
     def _keep_alive_for_model(model: str) -> str:
@@ -236,7 +291,7 @@ class OllamaClient:
         }
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(
+                response = await self._post_inference(client,
                     f"{base_url}/api/chat", headers=self._headers(
                         agent="decider", capability="planning", operation="decide-task",
                         model=model, task_id=task_id,
@@ -361,7 +416,7 @@ class OllamaClient:
                 "num_ctx": int(os.getenv("OLLAMA_NUM_CTX", "8192")),"temperature": 0.1, "num_predict": int(os.getenv("OLLAMA_PLAN_MAX_TOKENS", "1800"))}}
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(
+                response = await self._post_inference(client,
                     f"{base_url}/api/chat",
                     headers=self._headers(agent="goal-analyst-planner", capability="planning",
                         operation="create-execution-blueprint", model=model, task_id=task_id),
@@ -442,7 +497,7 @@ class OllamaClient:
         }
         try:
             async with httpx.AsyncClient(timeout=min(self.timeout, 45.0)) as client:
-                response = await client.post(
+                response = await self._post_inference(client,
                     f"{base_url}/api/chat",
                     headers=self._headers(
                         agent="browser-tab-janitor",
@@ -491,7 +546,7 @@ class OllamaClient:
                 "num_ctx": int(os.getenv("OLLAMA_NUM_CTX", "8192")),"temperature": 0, "num_predict": 300}}
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(f"{base_url}/api/chat", headers=self._headers(
+                response = await self._post_inference(client,f"{base_url}/api/chat", headers=self._headers(
                     agent="goal-state", capability="goal-tracking", operation="initialise-criteria",
                     model=model, task_id=task_id,
                 ), json=body)
@@ -517,7 +572,7 @@ class OllamaClient:
                 "num_ctx": int(os.getenv("OLLAMA_NUM_CTX", "8192")),"temperature": 0, "num_predict": 400}}
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(f"{base_url}/api/chat", headers=self._headers(
+                response = await self._post_inference(client,f"{base_url}/api/chat", headers=self._headers(
                     agent="goal-state", capability="goal-tracking", operation="evaluate-progress",
                     model=model, task_id=task_id, round_number=round_number,
                 ), json=body)
@@ -575,7 +630,7 @@ class OllamaClient:
                 strands_key = os.getenv("STRANDS_DECIDER_API_KEY")
                 if strands_key:
                     strands_headers["Authorization"] = "Bearer " + strands_key
-                response = await client.post(endpoint, json=payload, headers=strands_headers)
+                response = await self._post_inference(client,endpoint, json=payload, headers=strands_headers)
                 response.raise_for_status()
                 answer = response.json().get("answers", {}).get("next_action", {})
                 choice = answer.get("choice")
@@ -701,7 +756,7 @@ class OllamaClient:
         }
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(
+                response = await self._post_inference(client,
                     f"{base_url}/api/chat", headers=self._headers(
                         agent="decider", capability="research-planning", operation="plan-research-round",
                         model=model, task_id=task_id, round_number=round_number,
@@ -782,7 +837,7 @@ class OllamaClient:
         }
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(
+                response = await self._post_inference(client,
                     f"{base_url}/api/chat", headers=self._headers(
                         agent="synthesis", capability="research-synthesis", operation="synthesise-report",
                         model=model, task_id=task_id, round_number=round_count,
@@ -831,7 +886,7 @@ class OllamaClient:
         }
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(
+                response = await self._post_inference(client,
                     f"{base_url}/api/chat",
                     headers=self._headers(agent="tool-selector", capability=workflow, operation="select-tool", model=model, task_id=task_id),
                     json=selection_body,
@@ -850,7 +905,7 @@ class OllamaClient:
                     ],
                     "options": options,
                 }
-                response = await client.post(
+                response = await self._post_inference(client,
                     f"{base_url}/api/chat",
                     headers=self._headers(agent="tool-arguments", capability=workflow, operation="fill-tool-arguments", model=model, task_id=task_id),
                     json=argument_body,
@@ -903,7 +958,7 @@ class OllamaClient:
         }
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(
+                response = await self._post_inference(client,
                     f"{base_url}/api/chat", headers=self._headers(
                         agent=f"{task.capability.value}-agent", capability=task.capability.value,
                         operation="capability-proposal", model=model, task_id=task.task_id,
