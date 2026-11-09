@@ -143,6 +143,28 @@ class TaskManager:
             saved_plan = record.get("plan")
             if not isinstance(saved_plan, dict):
                 saved_plan = {}
+            if record.get("execution_plan") is None and saved_plan.get("steps"):
+                migrated_subtasks = []
+                previous_step_id = None
+                for index, step in enumerate(saved_plan.get("steps") or [], 1):
+                    if not isinstance(step, dict):
+                        continue
+                    step_id = str(step.get("step_id") or f"legacy-step-{index}")
+                    capability = step.get("capability") or "extract"
+                    migrated_subtasks.append({
+                        "subtask_id": step_id,
+                        "objective": str(step.get("objective") or step_id),
+                        "capability": str(getattr(capability, "value", capability)),
+                        "depends_on": [previous_step_id] if previous_step_id else [],
+                        "success_criteria": [],
+                        "expected_output": "Evidence-backed output for this step",
+                    })
+                    previous_step_id = step_id
+                if migrated_subtasks:
+                    record["execution_blueprint"] = record.get("execution_blueprint") or {
+                        "version": 1, "subtasks": migrated_subtasks, "success_criteria": [],
+                    }
+                    record["execution_plan"] = initialise_plan(record["execution_blueprint"])
             # Older Decider versions sometimes stored the website-only prompt
             # in summary rather than clarification_question. Check both fields so
             # those persisted tasks are automatically re-planned after an upgrade.
