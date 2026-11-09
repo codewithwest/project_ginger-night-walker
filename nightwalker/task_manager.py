@@ -5,6 +5,7 @@ import os
 import re
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import urlsplit
 
 from nightwalker.a2a import A2ABus
 from nightwalker.agent_allocator import AgentAllocator
@@ -41,8 +42,8 @@ from nightwalker.workflows import (
     WorkflowType,
     build_workflow_blueprint,
     classify_workflow,
-    target_url_from_objective,
     qa_scope_for_objective,
+    target_url_from_objective,
 )
 
 
@@ -525,7 +526,6 @@ class TaskManager:
                     return
 
                 self._log(task_id, "Preparing dedicated " + workflow.value.upper() + " workflow")
-                from urllib.parse import urlsplit
                 decided_target = explicit_target
                 decided_site_name = urlsplit(explicit_target).hostname
                 decided_summary = None
