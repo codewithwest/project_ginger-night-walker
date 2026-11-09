@@ -522,6 +522,7 @@ class TaskManager:
                     if available_plan_steps:
                         active_plan_step = start_step(execution_plan, available_plan_steps[0]["step_id"])
                         record["active_plan_step_id"] = active_plan_step["step_id"]
+                        next_assignment = active_plan_step["objective"]
                         self._log(task_id, f"Plan step started: {active_plan_step['step_id']} — {active_plan_step['objective']}")
                 record["current_step"] = {
                     "index": round_count, "total": int(record.get("max_rounds", self.max_rounds)),
