@@ -119,3 +119,18 @@ def test_accessibility_finding_requires_the_matching_semantic_signal():
     structured["qa_extended"][0]["semantic_accessibility"]["links_without_accessible_name"] = 2
     findings, _ = validate_findings([finding], evidence, structured)
     assert findings[0]["validation"]["verdict"] == "confirmed"
+
+
+def test_site_wide_qa_page_signals_validate_missing_title_and_broken_image():
+    evidence = [{"evidence_id": "ev-6"}]
+    signals = {"source_id": "s-6", "evidence_ids": ["ev-6"], "title": "",
+               "h1_count": 1, "images": [{"src": "https://example.com/fail.png",
+                                           "load_status": "broken", "alt": ""}]}
+    findings, _ = validate_findings([
+        {"claim": "The page has no non-empty document title.", "type": "qa_page_issue",
+         "source_ids": ["s-6"], "evidence_ids": ["ev-6"]},
+        {"claim": "Image failed to load", "type": "qa_broken_image",
+         "image_url": "https://example.com/fail.png", "source_ids": ["s-6"],
+         "evidence_ids": ["ev-6"]},
+    ], evidence, {"qa_page_signals": [signals]})
+    assert all(item["validation"]["verdict"] == "confirmed" for item in findings)
