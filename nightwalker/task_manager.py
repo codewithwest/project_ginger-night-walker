@@ -843,6 +843,17 @@ class TaskManager:
                                         verified_result = f"Lowest extracted homepage price: {cheapest_product.get('name')} — {cheapest_product.get('price')} (R {amount:,.2f}); compared {len(priced)} priced products"
                                 else:
                                     verified_result = f"Extracted {len(products)} product records with displayed prices"
+                            elif capability == "extract" and str(step.get("step_id", "")).endswith("seo-page"):
+                                seo_checks = (result.get("structured_data") or {}).get("seo_checks") or {}
+                                if seo_checks and result.get("evidence_id"):
+                                    verified_result = "Captured page-level title, description, canonical, headings, image and link signals"
+                            elif capability == "extract" and str(step.get("step_id", "")).endswith("qa-availability"):
+                                if result.get("status") == "completed" and result.get("http_status", 0) < 400 and result.get("evidence_id"):
+                                    verified_result = f"Target page loaded successfully with HTTP {result.get('http_status')}"
+                            elif capability == "extract" and str(step.get("step_id", "")).endswith("qa-content"):
+                                qa_checks = (result.get("structured_data") or {}).get("qa_checks") or {}
+                                if qa_checks and result.get("evidence_id"):
+                                    verified_result = "Captured visible DOM structure, controls, forms, links and duplicate-ID checks"
                             if verified_result is None:
                                 break
                             complete_step(execution_plan, step["step_id"], evidence_refs=evidence_refs, result=verified_result)
@@ -861,6 +872,10 @@ class TaskManager:
                                 record["goal_state"], record.get("execution_plan"), evidence,
                                 record.get("plan_outputs"),
                                 {**structured_data, "products": products or structured_data.get("products", [])},
+                            )
+                            GoalStateManager.apply_verified_workflow_results(
+                                record["goal_state"], record.get("execution_blueprint"),
+                                record.get("execution_plan"), evidence,
                             )
                             self._log(task_id, f"Goal progress: {len(record['goal_state']['completed'])}/{len(record['goal_state']['criteria'])} criteria have verified evidence.")
                         except (OllamaUnavailable, AttributeError) as exc:
