@@ -55,8 +55,14 @@ class TaskStateStore:
                 value = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
                 continue
-            if isinstance(value, dict) and isinstance(value.get("task_id"), str):
-                records.append(value)
+            if not isinstance(value, dict) or not isinstance(value.get("task_id"), str):
+                continue
+            # A snapshot is trusted only when its filename is derived from the
+            # task_id inside that same snapshot. This prevents copied/renamed task
+            # JSON from being restored under another task's identity.
+            if path.name != self._filename(value["task_id"]):
+                continue
+            records.append(value)
         return records
 
     def delete(self, task_id: str) -> None:
