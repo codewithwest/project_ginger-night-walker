@@ -1077,7 +1077,7 @@ class TaskManager:
                         *(str(item.get("url") or "") for item in new_discoveries if isinstance(item, dict)),
                     ]))
                     candidates.extend(new_discoveries)
-                    # Audit crawls use deterministic same-origin breadth-first discovery.
+                    # SEO/QA crawls use deterministic same-origin priority scheduling.
                     # General research retains its relevance-ranked candidate selection.
                     workflow_value = str(record.get("workflow_type") or "")
                     if workflow_value in {"seo", "qa", "seo_qa"}:
@@ -1479,6 +1479,16 @@ class TaskManager:
                         str(item.get("template_key")) for item in crawl_pages
                         if isinstance(item, dict) and item.get("template_key")
                     }),
+                    "inspected_page_types": {
+                        page_type: sum(
+                            str(item.get("page_type") or "other") == page_type
+                            for item in crawl_pages if isinstance(item, dict)
+                        )
+                        for page_type in sorted({
+                            str(item.get("page_type") or "other")
+                            for item in crawl_pages if isinstance(item, dict)
+                        })
+                    },
                     "budget_utilisation_percent": round(
                         min(100, len(crawl_pages) / max(1, int(record.get("max_rounds", self.max_rounds))) * 100), 1
                     ),
