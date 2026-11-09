@@ -894,8 +894,8 @@ class TaskManager:
                                 if seo_checks and result.get("evidence_id"):
                                     verified_result = "Captured page-level title, description, canonical, headings, image and link signals"
                             elif capability == "extract" and str(step.get("step_id", "")).endswith("qa-availability"):
-                                if result.get("status") == "completed" and result.get("http_status", 0) < 400 and result.get("evidence_id"):
-                                    verified_result = f"Target page loaded successfully with HTTP {result.get('http_status')}"
+                                if result.get("http_status") is not None and result.get("http_status", 0) < 400 and result.get("evidence_id"):
+                                    verified_result = f"Target page returned HTTP {result.get('http_status')}; visible-content issues are tracked separately"
                             elif capability == "extract" and str(step.get("step_id", "")).endswith("qa-content"):
                                 qa_checks = (result.get("structured_data") or {}).get("qa_checks") or {}
                                 if qa_checks and result.get("evidence_id"):
@@ -903,10 +903,7 @@ class TaskManager:
                             elif capability == "interact" and str(step.get("step_id", "")).endswith(("seo-links", "qa-navigation")):
                                 link_checks = (result.get("structured_data") or {}).get("internal_link_checks") or {}
                                 navigation = (result.get("structured_data") or {}).get("qa_navigation_journeys") or {}
-                                if result.get("evidence_id") and (
-                                    link_checks.get("checked_count", 0) > 0
-                                    or navigation.get("checked_count", 0) > 0
-                                ):
+                                if result.get("evidence_id") and isinstance(link_checks, dict) and "checked_count" in link_checks:
                                     verified_result = (
                                         f"Captured {link_checks.get('checked_count', 0)} same-origin link destination check(s) "
                                         f"and {navigation.get('checked_count', 0)} browser navigation journey(s)"
