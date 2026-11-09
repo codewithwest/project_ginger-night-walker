@@ -74,7 +74,6 @@ def page_signal_findings(signals: dict[str, Any], workflow_type: str) -> list[di
             findings.append({
                 "claim": "Image failed to load: " + str(image.get("src") or "(empty image source)")[:300],
                 "type": "qa_broken_image", "severity": "medium",
-                "affected_urls": [page.url if hasattr(page, "url") else ""],
                 "image_url": image.get("src"),
             })
         if qa.get("controls_without_accessible_name", 0): findings.append({"claim": str(qa["controls_without_accessible_name"]) + " visible control(s) have no detectable accessible name.", "type": "qa_accessibility_warning", "severity": "medium"})
