@@ -874,8 +874,9 @@ class TaskManager:
                                 discovery = (result.get("structured_data") or {}).get("seo_discovery") or {}
                                 robots = discovery.get("robots_txt") or {}
                                 sitemap = discovery.get("sitemap") or {}
+                                robots_outcome_recorded = robots.get("status") is not None or bool(robots.get("error"))
                                 sitemap_outcome_recorded = sitemap.get("status") is not None or bool(sitemap.get("error"))
-                                if robots.get("status") is not None and sitemap_outcome_recorded and result.get("evidence_id"):
+                                if robots_outcome_recorded and sitemap_outcome_recorded and result.get("evidence_id"):
                                     verified_result = f"Recorded robots.txt HTTP {robots.get('status')} and sitemap discovery outcome"
                             elif capability == "extract" and str(step.get("step_id", "")).endswith("seo-page"):
                                 seo_checks = (result.get("structured_data") or {}).get("seo_checks") or {}
