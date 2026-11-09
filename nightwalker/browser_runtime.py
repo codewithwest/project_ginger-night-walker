@@ -797,6 +797,8 @@ class BrowserRuntime:
                 __import__("datetime").UTC
             ).isoformat()
             findings = list(audit_findings)
+            for finding in findings:
+                finding.setdefault("affected_urls", [page.url])
             if title:
                 findings.append({
                     "claim": f"Page title: {title}",
