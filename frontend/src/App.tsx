@@ -99,7 +99,7 @@ type Task = {
   logs?: Log[];
   progress_events?: { at?: string; event_type?: string; status?: string; message?: string }[];
   execution_trace?: { event_id?: string; at?: string; phase?: string; details?: Record<string, unknown> }[];
-  timing?: { started_at?: string; finished_at?: string | null; elapsed_ms?: number; active_elapsed_ms?: number; active_phase?: string | null; phases_ms?: Record<string, number>; phases?: Record<string, { duration_ms: number; share_percent: number }> };
+  timing?: { started_at?: string; finished_at?: string | null; elapsed_ms?: number; active_elapsed_ms?: number; active_phase?: string | null; phases_ms?: Record<string, number>; current_phase_ms?: number; phases?: Record<string, { duration_ms: number; share_percent: number }> };
   round?: number;
   max_rounds?: number;
   scratchpad?: { round?: number; assignment?: string; status?: string; findings?: unknown[]; evidence_ids?: string[] }[];
@@ -667,8 +667,8 @@ export default function App() {
                       <strong className="timing-panel__total">{formatDuration(selected.timing.elapsed_ms)}</strong>
                     </div>
                     <div className="timing-panel__phases">
-                      {(["planning", "browser", "analysis", "reporting"] as const).map((phase) => {
-                        const duration = selected.timing?.phases_ms?.[phase] || 0;
+                      {(["queue", "planning", "browser", "analysis", "reporting"] as const).map((phase) => {
+                        const duration = (selected.timing?.phases_ms?.[phase] || 0) + (selected.timing?.active_phase === phase ? (selected.timing?.current_phase_ms || 0) : 0);
                         const share = selected.timing?.active_elapsed_ms ? Math.min(100, (duration / selected.timing.active_elapsed_ms) * 100) : 0;
                         return <div className="timing-phase" key={phase}><div className="timing-phase__meta"><span>{phase}</span><span>{formatDuration(duration)}</span></div><div className="timing-phase__track"><span style={{ width: `${share}%` }} /></div></div>;
                       })}

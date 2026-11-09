@@ -322,6 +322,7 @@ class TaskManager:
             summary = {key: record.get(key) for key in fields if key != "plan_progress"}
             plan = record.get("execution_plan") or {}
             steps = plan.get("steps") or []
+            summary["timing"] = self.timing.snapshot(record)
             summary["plan_progress"] = {
                 "status": plan.get("status", "pending"),
                 "completed": sum(1 for step in steps if step.get("status") == "completed"),

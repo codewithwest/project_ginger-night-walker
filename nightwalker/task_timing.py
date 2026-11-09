@@ -37,6 +37,11 @@ class TaskTiming:
         self.end(record)
         state = self._state(record)
         state["finished_at"] = None
+        if not state.get("execution_started_at"):
+            created = _parse(state.get("started_at") or record.get("created_at"))
+            if created:
+                state.setdefault("phases_ms", {})["queue"] = max(0, round((datetime.now(UTC) - created).total_seconds() * 1000))
+            state["execution_started_at"] = datetime.now(UTC).isoformat()
         state["active_phase"] = phase
         state["active_phase_started_at"] = datetime.now(UTC).isoformat()
         self._phase_started[str(record["task_id"])] = monotonic()
@@ -68,8 +73,10 @@ class TaskTiming:
         end = finished or datetime.now(UTC)
         state["elapsed_ms"] = max(0, round((end - started).total_seconds() * 1000)) if started else 0
         active = self._phase_started.get(str(record.get("task_id") or ""))
+        state["current_phase_ms"] = 0
         if active is not None and state.get("active_phase"):
             current = max(0, round((monotonic() - active) * 1000))
+            state["current_phase_ms"] = current
             state["active_elapsed_ms"] = sum(int(v) for v in state.get("phases_ms", {}).values()) + current
         else:
             state["active_elapsed_ms"] = sum(int(v) for v in state.get("phases_ms", {}).values())
