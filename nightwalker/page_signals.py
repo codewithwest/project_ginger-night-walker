@@ -53,6 +53,11 @@ def page_signal_findings(signals: dict[str, Any], workflow_type: str) -> list[di
         if seo.get("h1_count", 0) == 0: findings.append({"claim": "No H1 heading was found.", "type": "seo_issue", "severity": "medium"})
         if seo.get("h1_count", 0) > 1: findings.append({"claim": "Multiple H1 headings were found; review heading structure.", "type": "seo_warning", "severity": "low"})
         if seo.get("images_missing_alt", 0): findings.append({"claim": str(seo["images_missing_alt"]) + " image(s) have no alt attribute.", "type": "seo_issue", "severity": "medium"})
+        if seo.get("canonical_url") and seo.get("canonical_is_same_origin") is False: findings.append({"claim": "Canonical URL points to a different origin.", "type": "seo_issue", "severity": "high"})
+        if seo.get("noindex"): findings.append({"claim": "A noindex directive is present.", "type": "seo_warning", "severity": "high"})
+        if any(not block.get("valid_json") for block in seo.get("json_ld_blocks", [])): findings.append({"claim": "At least one JSON-LD block contains invalid JSON.", "type": "seo_issue", "severity": "medium"})
+        levels = seo.get("heading_levels", [])
+        if any(current > previous + 1 for previous, current in zip(levels, levels[1:])): findings.append({"claim": "Heading levels skip one or more ranks; review document outline.", "type": "seo_warning", "severity": "low"})
     if workflow_type in {"qa", "seo_qa"}:
         if qa.get("controls_without_accessible_name", 0): findings.append({"claim": str(qa["controls_without_accessible_name"]) + " visible control(s) have no detectable accessible name.", "type": "qa_accessibility_warning", "severity": "medium"})
         if qa.get("duplicate_ids"): findings.append({"claim": "Duplicate HTML IDs were detected: " + ", ".join(qa["duplicate_ids"][:8]), "type": "qa_dom_issue", "severity": "low"})
