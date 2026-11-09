@@ -938,7 +938,13 @@ class TaskManager:
                                     "evidence_ids": [result["evidence_id"]] if result.get("evidence_id") else [],
                                 }
                             structured_data.setdefault(key, []).append(value)
-                    candidates.extend(result.get("candidate_urls", []))
+                    new_discoveries = result.get("candidate_urls", [])
+                    record.setdefault("discovered_urls", [])
+                    record["discovered_urls"] = list(dict.fromkeys([
+                        *record["discovered_urls"],
+                        *(str(item.get("url") or "") for item in new_discoveries if isinstance(item, dict)),
+                    ]))
+                    candidates.extend(new_discoveries)
                     # Audit crawls use deterministic same-origin breadth-first discovery.
                     # General research retains its relevance-ranked candidate selection.
                     workflow_value = str(record.get("workflow_type") or "")
@@ -1161,7 +1167,7 @@ class TaskManager:
                 from nightwalker.audit_analysis import analyse_duplicate_pages, crawl_coverage, prioritise_findings
                 crawl_pages = structured_data.get("crawl_page", [])
                 duplicate_analysis = analyse_duplicate_pages(crawl_pages)
-                known_urls = [str(item.get("url") or "") for item in candidates if isinstance(item, dict)]
+                known_urls = list(record.get("discovered_urls") or [])
                 known_urls.extend(str(item.get("url") or "") for item in crawl_pages if isinstance(item, dict))
                 coverage = crawl_coverage(known_urls, visited_urls)
                 structured_data["crawl_coverage"] = coverage
