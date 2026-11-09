@@ -178,7 +178,7 @@ def build_workflow_blueprint(objective: str, workflow: WorkflowType) -> Executio
             "success_criteria": ["combined-seo-coverage", "combined-qa-coverage"],
             "depends_on": [],
         })
-        criteria = criteria[:12]
+        criteria = criteria[:20]
         tasks = tasks[:20]
 
     return ExecutionBlueprint(
