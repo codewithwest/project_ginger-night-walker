@@ -1,6 +1,6 @@
 # Ginger Night Walker
 
-Ginger Night Walker is Ginger OS's local-first, policy-governed capability for **general-purpose web browsing, research and evidence capture**. It supports discovery, investigation, comparisons, structured extraction and evidence-backed synthesis. Product lookup is one use case, not the product definition.
+Ginger Night Walker is Ginger OS's local-first, policy-governed **website SEO and QA audit platform**. Its first product phase has two explicit workflows: evidence-backed SEO audits and read-only website/application QA. General-purpose and deep research are deferred; they are not fallback routes for failed audits.
 
 The core trust boundary is deliberate:
 
@@ -16,6 +16,8 @@ Start with the [documentation index](docs/README.md).
 
 | Document | Contents |
 |---|---|
+| [Product scope](docs/product-scope.md) | Initial SEO/QA focus, intent routing and deferred capabilities |
+| [SEO/QA audit engine](docs/seo-qa-audit-engine.md) | Crawl limits, SEO checks, QA smoke checks, reporting and honest coverage |
 | [Architecture](docs/architecture.md) | Responsibilities, component boundaries, lifecycle and Mermaid diagrams |
 | [Research report standard](docs/research-report-standard.md) | Canonical report contract, finding quality, evidence provenance and validation |
 | [Security and trust](docs/security-and-trust.md) | Threat model, security boundaries and deployment requirements |
@@ -43,31 +45,25 @@ The model proposes a bounded plan. Trusted code validates it and owns browser ex
 ## Current capabilities and limits
 
 Implemented baseline:
-- natural-language task submission, clarification and active-task follow-up instructions;
-- iterative multi-source research across up to 30 bounded browser rounds;
-- repeat-action detection, canonical URL deduplication, bounded per-source retries and fallback to alternative discovered sources;
-- task-scoped scratchpad notes that seed subsequent rounds without replaying full chat history;
-- durable atomic task snapshots and round checkpoints, with automatic restart recovery from the last saved research position;
-- progressive round-completion updates, partial reports and operator cancellation;
-- remote Ollama structured planning plus a dedicated small-model Goal State Manager;
-- evidence-gated success criteria: the goal model must provide a quote from a captured evidence record, and Python verifies the quote before marking a criterion complete;
-- optional Strands Decider integration for selecting among browser-discovered source URLs (no direct browser tools);
-- task-isolated Playwright browser contexts;
-- application-level public URL validation and request interception;
-- same-origin anchor navigation;
-- bounded page title, heading and visible-text capture;
-- task-scoped JSON evidence records;
-- a generic report envelope with answer, findings, sources, evidence, structured data, limitations and suggested memory;
-- React + TypeScript operator UI.
+- explicit SEO, QA and combined SEO+QA task routing; unrelated general research is blocked in this product phase;
+- workflow-specific plans with evidence-required acceptance criteria;
+- same-origin deterministic audit crawling, default budget 200 pages (configurable with `AUDIT_MAX_PAGES`, 1-1,000);
+- robots.txt policy inspection, bounded sitemap and sitemap-index discovery, and same-origin URL filtering;
+- per-page HTTP outcome, title, description, canonical, robots, headings, language, viewport, image-alt, JSON-LD syntax and internal-link observations;
+- duplicate canonical, title, meta-description and exact visible-text analysis across inspected pages;
+- internal destination verification using HEAD with GET fallback only when HEAD is unsupported;
+- deterministic finding priorities (P0-P4), impact rationale, effort estimate, affected URLs and remediation guidance;
+- QA responsive overflow sampling at 375px, 768px and 1280px, semantic/accessibility heuristics, keyboard focus sampling and safe same-origin GET navigation journeys;
+- evidence-linked findings, crawl coverage statistics, structured report summaries, durable task snapshots and restart recovery;
+- task-isolated Playwright browser contexts, URL policy enforcement, and React + TypeScript operator UI.
 
 Partial or not yet implemented:
-- source discovery begins from a search-engine results page or explicit user URL, then follows links actually observed by the browser; coverage depends on those search results and links;
-- product name/price parsing is a specialised extraction adapter;
-- goal completion is evidence-gated but still model-assisted; it does not prove a source's real-world truth; broader claim validation remains future work;
-- synthesis uses captured page titles, headings and visible-text excerpts; deeper claim extraction, authority assessment and conflict reconciliation remain future work;
-- task records, scratchpad notes and evidence persist on the Compose evidence volume; queued/running research resumes from the latest saved checkpoint after restart. Storage is single-process JSON, not a multi-worker transactional queue;
-- automatic Ginger memory writes are intentionally not implemented;
-- arbitrary interactions, form submission, purchases, downloads and transactions are not supported;
+- crawl coverage is bounded by discovered links, sitemap sample size and the configured page budget; it is not a guarantee that every route, orphan page or JavaScript-only URL was discovered;
+- Core Web Vitals, field/lab performance metrics, search ranking/traffic/backlink data and full Schema.org validation are not measured;
+- QA journeys are read-only navigation smoke tests; forms are not submitted, state-changing controls are not activated, and SPA workflows/authentication/transactions are not tested;
+- accessibility checks are heuristics and a short keyboard focus sample, not automated WCAG conformance or screen-reader certification;
+- visual regression, exhaustive responsive interaction testing, browser-console/network failure aggregation and regression suites remain future work;
+- product extraction and generic research code remain for legacy compatibility but are not first-phase product workflows;
 - the service is not hardened or authenticated for hostile multi-user workloads.
 
 The Goal-Aware Strands prototype is retained under `integrations/goal_aware_strands/`. Its goal-state and Strands decision concepts are integrated into the core; its direct Playwright MCP executor and coding-model tool-argument loop are intentionally not used because they bypass Night Walker's central BrowserRuntime and PolicyEngine.
@@ -106,7 +102,7 @@ For local development and operational details, see [Development and operations](
 
 ## Quality gates
 
-CI currently runs Ruff, pytest and a Vite production build. Use the commands below locally:
+The GitHub Actions CI workflow is intentionally disabled during beta. Run the checks below locally before deploying:
 
 ```bash
 uv sync --group dev
