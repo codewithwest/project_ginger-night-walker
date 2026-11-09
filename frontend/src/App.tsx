@@ -98,7 +98,8 @@ type Task = {
   error?: string;
   logs?: Log[];
   progress_events?: { at?: string; event_type?: string; status?: string; message?: string }[];
-  execution_trace?: { event_id?: string; at?: string; phase?: string; details?: Record<string, unknown> }[];\n  timing?: { started_at?: string; finished_at?: string | null; elapsed_ms?: number; active_elapsed_ms?: number; active_phase?: string | null; phases_ms?: Record<string, number>; phases?: Record<string, { duration_ms: number; share_percent: number }> };
+  execution_trace?: { event_id?: string; at?: string; phase?: string; details?: Record<string, unknown> }[];
+  timing?: { started_at?: string; finished_at?: string | null; elapsed_ms?: number; active_elapsed_ms?: number; active_phase?: string | null; phases_ms?: Record<string, number>; phases?: Record<string, { duration_ms: number; share_percent: number }> };
   round?: number;
   max_rounds?: number;
   scratchpad?: { round?: number; assignment?: string; status?: string; findings?: unknown[]; evidence_ids?: string[] }[];
@@ -118,7 +119,15 @@ const isTerminal = (status: string) =>
     status,
   );
 
-const formatDuration = (milliseconds?: number) => {\n  const totalSeconds = Math.max(0, Math.floor((milliseconds || 0) / 1000));\n  const hours = Math.floor(totalSeconds / 3600);\n  const minutes = Math.floor((totalSeconds % 3600) / 60);\n  const seconds = totalSeconds % 60;\n  return hours > 0 ? `${hours}h ${minutes}m ${seconds}s` : minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;\n};\n\nconst formatTime = (value?: string) =>
+const formatDuration = (milliseconds?: number) => {
+  const totalSeconds = Math.max(0, Math.floor((milliseconds || 0) / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return hours > 0 ? `${hours}h ${minutes}m ${seconds}s` : minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+};
+
+const formatTime = (value?: string) =>
   value
     ? new Date(value).toLocaleTimeString([], {
         hour: "2-digit",
@@ -630,7 +639,9 @@ export default function App() {
                     <div className="result-header__meta">
                       <span>{selected.site_name || "Website task"}</span>
                       <span>·</span>
-                      <span>{formatTime(selected.updated_at)}</span>\n                      <span>·</span>\n                      <span className="job-duration">{selected.timing?.finished_at ? "Total time" : "Elapsed"} · {formatDuration(selected.timing?.elapsed_ms)}</span>
+                      <span>{formatTime(selected.updated_at)}</span>
+                      <span>·</span>
+                      <span className="job-duration">{selected.timing?.finished_at ? "Total time" : "Elapsed"} · {formatDuration(selected.timing?.elapsed_ms)}</span>
                     </div>
                   </div>
                   <div className="result-header__actions">
@@ -649,7 +660,24 @@ export default function App() {
                   </div>
                 </div>
 
-                {selected.timing && (\n                  <section className="timing-panel">\n                    <div className="timing-panel__top">\n                      <div><div className="section-kicker">JOB TIMING</div><strong>{selected.timing.finished_at ? "Total duration" : "Elapsed so far"}</strong></div>\n                      <strong className="timing-panel__total">{formatDuration(selected.timing.elapsed_ms)}</strong>\n                    </div>\n                    <div className="timing-panel__phases">\n                      {(["planning", "browser", "analysis", "reporting"] as const).map((phase) => {\n                        const duration = selected.timing?.phases_ms?.[phase] || 0;\n                        const share = selected.timing?.active_elapsed_ms ? Math.min(100, (duration / selected.timing.active_elapsed_ms) * 100) : 0;\n                        return <div className="timing-phase" key={phase}><div className="timing-phase__meta"><span>{phase}</span><span>{formatDuration(duration)}</span></div><div className="timing-phase__track"><span style={{ width: `${share}%` }} /></div></div>;\n                      })}\n                    </div>\n                    {selected.timing.active_phase && <div className="timing-panel__active">Currently timing: {selected.timing.active_phase}</div>}\n                  </section>\n                )}\n\n                {selected.status === "needs_clarification" && (
+                {selected.timing && (
+                  <section className="timing-panel">
+                    <div className="timing-panel__top">
+                      <div><div className="section-kicker">JOB TIMING</div><strong>{selected.timing.finished_at ? "Total duration" : "Elapsed so far"}</strong></div>
+                      <strong className="timing-panel__total">{formatDuration(selected.timing.elapsed_ms)}</strong>
+                    </div>
+                    <div className="timing-panel__phases">
+                      {(["planning", "browser", "analysis", "reporting"] as const).map((phase) => {
+                        const duration = selected.timing?.phases_ms?.[phase] || 0;
+                        const share = selected.timing?.active_elapsed_ms ? Math.min(100, (duration / selected.timing.active_elapsed_ms) * 100) : 0;
+                        return <div className="timing-phase" key={phase}><div className="timing-phase__meta"><span>{phase}</span><span>{formatDuration(duration)}</span></div><div className="timing-phase__track"><span style={{ width: `${share}%` }} /></div></div>;
+                      })}
+                    </div>
+                    {selected.timing.active_phase && <div className="timing-panel__active">Currently timing: {selected.timing.active_phase}</div>}
+                  </section>
+                )}
+
+                {selected.status === "needs_clarification" && (
                   <form className="clarification" onSubmit={clarify}>
                     <div className="section-kicker">
                       <CircleAlert size={14} /> A QUICK QUESTION

@@ -148,7 +148,8 @@ class TaskManager:
             task_id = record["task_id"]
             if task_id in self.tasks:
                 continue
-            record.setdefault("logs", [])\n            record.setdefault("timing", {"started_at": record.get("created_at"), "finished_at": None, "elapsed_ms": 0, "active_elapsed_ms": 0, "phases_ms": {}, "phases": {}, "active_phase": None})
+            record.setdefault("logs", [])
+            record.setdefault("timing", {"started_at": record.get("created_at"), "finished_at": None, "elapsed_ms": 0, "active_elapsed_ms": 0, "phases_ms": {}, "phases": {}, "active_phase": None})
             record.setdefault("progress_events", [])
             record.setdefault("scratchpad", self.scratchpad.read(task_id))
             record.setdefault("checklist_markdown", self.checklist.read(task_id) or "")
@@ -576,7 +577,10 @@ class TaskManager:
                     loop_guard=loop_guard, round_count=round_count,
                     next_url=next_url, next_assignment=next_assignment,
                 )
-            self.timing.end(record)\n            self.timing.start(record, "analysis")\n            self._persist(task_id)\n            while next_url and (round_count < int(record.get("max_rounds", self.max_rounds)) or resume_in_flight):
+            self.timing.end(record)
+            self.timing.start(record, "analysis")
+            self._persist(task_id)
+            while next_url and (round_count < int(record.get("max_rounds", self.max_rounds)) or resume_in_flight):
                 if resume_in_flight:
                     resume_in_flight = False
                 else:
@@ -689,7 +693,9 @@ class TaskManager:
                     }],
                 })
                 effective_objective = self._effective_objective(task_id, objective)
-                self.timing.end(record)\n                self.timing.start(record, "browser")\n                self._trace(task_id, "observe", {
+                self.timing.end(record)
+                self.timing.start(record, "browser")
+                self._trace(task_id, "observe", {
                     "round": round_count, "url": next_url, "workflow": record.get("workflow_type"),
                     "observation": "Target URL and active mission state loaded",
                 })
@@ -708,7 +714,9 @@ class TaskManager:
                     one_page_plan,
                     authorized_step=active_plan_step,
                 )
-                self.timing.end(record)\n                self.timing.start(record, "analysis")\n                verification = self.action_verifier.verify_workflow_result(result)
+                self.timing.end(record)
+                self.timing.start(record, "analysis")
+                verification = self.action_verifier.verify_workflow_result(result)
                 result["verification"] = verification
                 self._trace(task_id, "act", {
                     "status": result.get("status"), "evidence_id": result.get("evidence_id"),
