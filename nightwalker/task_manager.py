@@ -1343,6 +1343,8 @@ class TaskManager:
                             f"{summary.get('pages_inspected', 0)} page(s) inspected; "
                             f"{summary.get('crawl_coverage_percent') if summary.get('crawl_coverage_percent') is not None else 'unknown'}% "
                             "of known discovered URLs visited; "
+                            f"{summary.get('sitemap_sample_coverage_percent') if summary.get('sitemap_sample_coverage_percent') is not None else 'unknown'}% "
+                            "of sampled sitemap URLs visited; "
                             f"{summary.get('broken_internal_links', 0)} broken internal destination(s) confirmed; "
                             f"{summary.get('duplicate_title_groups', 0)} duplicate-title group(s); "
                             f"{summary.get('duplicate_content_groups', 0)} duplicate-content group(s)."
