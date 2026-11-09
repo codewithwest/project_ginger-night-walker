@@ -47,7 +47,7 @@ The model proposes a bounded plan. Trusted code validates it and owns browser ex
 Implemented baseline:
 - explicit SEO, QA and combined SEO+QA task routing; unrelated general research is blocked in this product phase;
 - workflow-specific plans with evidence-required acceptance criteria;
-- same-origin deterministic audit crawling, default budget 200 pages (configurable with `AUDIT_MAX_PAGES`, 1-1,000), with evidence-gated completion when discovered and sampled sitemap URLs remain unvisited;
+- same-origin deterministic audit crawling, default budget 200 pages (configurable with `AUDIT_MAX_PAGES`, 1-1,000), with crawl completion withheld while discovered or sampled sitemap URLs remain unvisited;
 - robots.txt policy inspection, bounded sitemap and sitemap-index discovery, and same-origin URL filtering;
 - per-page HTTP outcome, title, description, canonical, robots, headings, language, viewport, image-alt, JSON-LD syntax and internal-link observations;
 - duplicate canonical, title, meta-description and exact visible-text analysis across inspected pages;
