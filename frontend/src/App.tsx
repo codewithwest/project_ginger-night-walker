@@ -195,6 +195,10 @@ function ResearchReport({ result }: { result: BrowserResult }) {
   const summaryMetrics = auditSummary ? [
     { label: "Pages inspected", value: auditSummary.pages_inspected ?? 0 },
     { label: "Known URL coverage", value: auditSummary.crawl_coverage_percent == null ? "—" : String(auditSummary.crawl_coverage_percent) + "%" },
+    { label: "Templates inspected", value: auditSummary.unique_templates_inspected ?? 0 },
+    { label: "Budget used", value: auditSummary.budget_utilisation_percent == null ? "—" : String(auditSummary.budget_utilisation_percent) + "%" },
+    { label: "URLs excluded", value: auditSummary.excluded_url_count ?? 0 },
+    { label: "Pages still queued", value: auditSummary.queued_candidate_count ?? 0 },
     { label: "Broken internal links", value: auditSummary.broken_internal_links ?? 0 },
     { label: "Duplicate title groups", value: auditSummary.duplicate_title_groups ?? 0 },
     { label: "Duplicate content groups", value: auditSummary.duplicate_content_groups ?? 0 },
