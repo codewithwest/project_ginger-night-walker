@@ -372,3 +372,37 @@ async def test_decider_replaces_website_only_clarification_with_search_discovery
 
     assert plan.status.value == "ready"
     assert str(plan.target_url).startswith("https://www.bing.com/search?q=")
+
+
+
+def test_keep_alive_is_configured_independently_per_model_tier(monkeypatch):
+    monkeypatch.setenv("OLLAMA_MODEL_DEFAULT", "gpt-oss:20b")
+    monkeypatch.setenv("OLLAMA_MODEL_LIGHT", "qwen3.5:9b")
+    monkeypatch.setenv("OLLAMA_KEEP_ALIVE_DEFAULT", "8m")
+    monkeypatch.setenv("OLLAMA_KEEP_ALIVE_LIGHT", "90s")
+    monkeypatch.setenv("OLLAMA_KEEP_ALIVE", "0")
+
+    client = OllamaClient()
+    assert client._keep_alive_for_model("gpt-oss:20b") == "8m"
+    assert client._keep_alive_for_model("qwen3.5:9b") == "90s"
+
+
+def test_keep_alive_tier_settings_fall_back_to_legacy_global(monkeypatch):
+    monkeypatch.setenv("OLLAMA_MODEL_DEFAULT", "main:latest")
+    monkeypatch.setenv("OLLAMA_MODEL_LIGHT", "light:latest")
+    monkeypatch.delenv("OLLAMA_KEEP_ALIVE_DEFAULT", raising=False)
+    monkeypatch.delenv("OLLAMA_KEEP_ALIVE_LIGHT", raising=False)
+    monkeypatch.setenv("OLLAMA_KEEP_ALIVE", "3m")
+
+    client = OllamaClient()
+    assert client._keep_alive_for_model("main:latest") == "3m"
+    assert client._keep_alive_for_model("light:latest") == "3m"
+
+
+def test_keep_alive_uses_zero_when_no_retention_settings_exist(monkeypatch):
+    for key in (
+        "OLLAMA_KEEP_ALIVE_DEFAULT", "OLLAMA_KEEP_ALIVE_LIGHT", "OLLAMA_KEEP_ALIVE"
+    ):
+        monkeypatch.delenv(key, raising=False)
+    client = OllamaClient()
+    assert client._keep_alive_for_model("qwen3.5:9b") == "0"
