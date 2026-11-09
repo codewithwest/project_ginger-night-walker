@@ -181,3 +181,34 @@ def test_internal_link_off_origin_redirect_is_not_followed():
     assert result["checks"][0]["ok"] is False
     assert result["checks"][0]["off_origin_redirect"] is True
     assert Page.request.calls == ["https://example.com/account"]
+
+
+def test_qa_extended_findings_cover_responsive_and_deeper_semantic_failures():
+    from nightwalker.page_signals import qa_extended_findings
+
+    findings = qa_extended_findings({
+        "responsive_viewports": [{
+            "viewport": "mobile", "viewport_width": 375, "horizontal_overflow": True,
+        }],
+        "semantic_accessibility": {
+            "visible_form_controls_without_label": 1,
+            "broken_aria_labelledby_references": 2,
+            "generic_link_names": 1,
+            "nested_interactive_controls": 1,
+            "positive_tabindex_count": 2,
+            "tables_without_header_cells": 1,
+            "target_blank_without_noopener": 1,
+            "multiple_main_landmarks": True,
+            "document_title_missing": True,
+            "document_language_missing": True,
+            "landmark_counts": {"main": 2},
+        },
+    }, "https://example.com/contact")
+    types = [item["type"] for item in findings]
+    claims = " ".join(item["claim"] for item in findings)
+    assert "qa_responsive_issue" in types
+    assert types.count("qa_accessibility_issue") >= 3
+    assert "aria-labelledby" in claims
+    assert "positive tabindex" in claims
+    assert "nested interactive" in claims
+    assert all(item["affected_urls"] == ["https://example.com/contact"] for item in findings)
