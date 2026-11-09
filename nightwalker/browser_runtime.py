@@ -519,6 +519,79 @@ class BrowserRuntime:
                     result["sitemap"].update({"url": sitemap_url, "error": str(exc)[:180]})
         return result
 
+    async def _run_readonly_navigation_smoke(self, page: Page, limit: int = 5) -> dict:
+        """Navigate a small sample of safe same-origin anchors using GET only."""
+        original_url = page.url
+        origin = urlparse(original_url)
+        links = await page.locator("a[href]").evaluate_all(
+            """nodes => nodes.map(a => ({
+              url: a.href,
+              label: (a.innerText || a.getAttribute('aria-label') || '').trim().slice(0,120)
+            }))"""
+        )
+        seen = set()
+        checks = []
+        skipped = 0
+        for link in links:
+            candidate = str(link.get("url") or "").split("#", 1)[0]
+            parsed = urlparse(candidate)
+            if (
+                parsed.scheme not in {"http", "https"}
+                or (parsed.scheme, parsed.hostname, parsed.port) != (origin.scheme, origin.hostname, origin.port)
+                or candidate.rstrip("/") == original_url.rstrip("/")
+                or candidate in seen
+            ):
+                continue
+            seen.add(candidate)
+            if re.search(r"(?i)(logout|log-out|delete|remove|checkout|add-to-cart|cart/add|purchase|order|subscribe|unsubscribe|signout|sign-out)", parsed.path + "?" + parsed.query):
+                skipped += 1
+                continue
+            if len(checks) >= max(1, min(10, limit)):
+                break
+            item = {"url": candidate, "label": str(link.get("label") or ""), "method": "browser_get_navigation"}
+            try:
+                self.policy.validate_url(candidate, allow_private_networks=False)
+                response = await page.goto(
+                    candidate, wait_until="domcontentloaded",
+                    timeout=int(os.getenv("NAVIGATION_TIMEOUT_MS", "20000")),
+                )
+                item.update({
+                    "status": response.status if response else None,
+                    "final_url": page.url,
+                    "title": (await page.title())[:240],
+                    "ok": bool(response is None or response.status < 400),
+                    "same_origin_after_redirect": (
+                        (urlparse(page.url).scheme, urlparse(page.url).hostname, urlparse(page.url).port)
+                        == (origin.scheme, origin.hostname, origin.port)
+                    ),
+                })
+            except Exception as exc:  # noqa: BLE001 - preserve failed journey as evidence
+                item.update({"ok": False, "error": str(exc)[:180]})
+            checks.append(item)
+            try:
+                await page.goto(
+                    original_url, wait_until="domcontentloaded",
+                    timeout=int(os.getenv("NAVIGATION_TIMEOUT_MS", "20000")),
+                )
+            except Exception as exc:  # noqa: BLE001
+                item["restore_error"] = str(exc)[:160]
+                break
+        if page.url != original_url:
+            try:
+                await page.goto(original_url, wait_until="domcontentloaded", timeout=15000)
+            except Exception as exc:  # noqa: BLE001
+                return {
+                    "checks": checks, "checked_count": len(checks), "skipped_sensitive_count": skipped,
+                    "restored": False, "restore_error": str(exc)[:180],
+                    "scope": "Direct same-origin GET navigation only; no forms or state-changing controls activated.",
+                }
+        return {
+            "checks": checks, "checked_count": len(checks), "skipped_sensitive_count": skipped,
+            "restored": page.url == original_url,
+            "broken_count": sum(item.get("ok") is False for item in checks),
+            "scope": "Direct same-origin GET navigation only; no forms or state-changing controls activated.",
+        }
+
     async def run_plan(self, task_id: str, url: str, steps: list[dict], objective: str) -> dict:
         """Execute only public-site navigation, same-origin link following and extraction."""
         self.policy.validate_url(url, allow_private_networks=False)
@@ -657,6 +730,7 @@ class BrowserRuntime:
                 candidates = candidates[:200]
             if workflow_type in {"qa", "seo_qa"}:
                 audit_signals["qa_extended"] = await collect_qa_extended_signals(page)
+                audit_signals["qa_navigation_journeys"] = await self._run_readonly_navigation_smoke(page, limit=5)
             audit_findings = page_signal_findings(audit_signals, workflow_type)
             for check in audit_signals["internal_link_checks"].get("checks", []):
                 if check.get("ok") is False:
@@ -771,6 +845,7 @@ class BrowserRuntime:
             if workflow_type in {"qa", "seo_qa"}:
                 structured_data["qa_checks"] = audit_signals.get("qa", {})
                 structured_data["qa_extended"] = audit_signals.get("qa_extended", {})
+                structured_data["qa_navigation_journeys"] = audit_signals.get("qa_navigation_journeys", {})
                 structured_data["internal_link_checks"] = audit_signals.get("internal_link_checks", {})
             limitations = list(issues)
             if workflow_type in {"seo", "seo_qa"}:
