@@ -95,6 +95,11 @@ def _template_key(value: str, page_type: str) -> str:
         return page_type
 
 
+def template_key_for_url(value: str) -> str:
+    page_type = classify_page_url(value)
+    return _template_key(value, page_type)
+
+
 def rank_crawl_candidates(
     candidates: list[dict[str, Any]],
     visited_urls: list[str],
