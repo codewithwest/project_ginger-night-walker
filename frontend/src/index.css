@@ -1214,3 +1214,10 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
 .timing-phase__track span { display: block; height: 100%; border-radius: inherit; background: var(--accent, #67c9ad); transition: width .25s ease; }
 .timing-panel__active { margin-top: 12px; color: var(--muted, #9bb0ac); font-size: 11px; }
 @media (max-width: 700px) { .timing-panel__phases { grid-template-columns: 1fr; } }
+
+
+.inference-panel { margin-top: 16px; padding: 16px; border: 1px solid var(--border, #333); border-radius: 12px; }
+.inference-panel__list { display: grid; gap: 10px; margin-top: 12px; }
+.inference-event { padding: 10px 0; border-top: 1px solid var(--border, #333); min-width: 0; }
+.inference-event__top { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+.inference-event__model, .inference-event__metrics { margin-top: 5px; font-size: 11px; opacity: .75; overflow-wrap: anywhere; }
