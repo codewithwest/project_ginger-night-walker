@@ -42,7 +42,6 @@ from nightwalker.task_state_store import TaskStateStore
 from nightwalker.task_timing import TaskTiming
 from nightwalker.workflows import (
     WorkflowType,
-    build_workflow_blueprint,
     classify_workflow,
     qa_scope_for_objective,
     target_url_from_objective,
@@ -585,7 +584,7 @@ class TaskManager:
                 record["planner_provenance"] = {
                     "decider": "ollama.decide_task",
                     "execution_blueprint": "ollama.create_execution_blueprint",
-                    "objective_sha256": __import__("hashlib").sha256(objective.encode("utf-8")).hexdigest(),
+                    "objective_sha256": hashlib.sha256(objective.encode("utf-8")).hexdigest(),
                 }
                 # A separate goal analyst turns the Decider's routing plan into
                 # evidence-testable criteria and dependent subtasks. This is also
