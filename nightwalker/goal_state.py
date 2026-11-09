@@ -119,6 +119,51 @@ class GoalStateManager:
         return state
 
     @staticmethod
+    def apply_verified_workflow_results(
+        state: dict[str, Any],
+        workflow_blueprint: dict[str, Any] | None,
+        execution_plan: dict[str, Any] | None,
+        evidence: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Complete workflow criteria only when a trusted plan step has evidence."""
+        if not isinstance(workflow_blueprint, dict) or not isinstance(execution_plan, dict):
+            return state
+        criteria_by_id = {
+            str(item.get("criterion_id")): str(item.get("description") or "")
+            for item in workflow_blueprint.get("success_criteria", [])
+            if isinstance(item, dict) and item.get("criterion_id")
+        }
+        evidence_ids = {
+            str(item.get("evidence_id")) for item in evidence if item.get("evidence_id")
+        }
+        completed_criteria = set(state.get("completed", []))
+        evidence_map = state.setdefault("evidence_by_criterion", {})
+        for step in execution_plan.get("steps", []):
+            if not isinstance(step, dict) or step.get("status") != "completed":
+                continue
+            refs = [str(ref) for ref in step.get("evidence_refs", []) if str(ref) in evidence_ids]
+            if not refs:
+                continue
+            for criterion_id in step.get("success_criteria", []):
+                description = criteria_by_id.get(str(criterion_id))
+                if not description or description not in state.get("criteria", []):
+                    continue
+                if description not in completed_criteria:
+                    evidence_map[description] = {
+                        "evidence_id": refs[0],
+                        "verification": "trusted_workflow_step",
+                        "plan_step_id": step.get("step_id"),
+                    }
+                    completed_criteria.add(description)
+        state["completed"] = [
+            item for item in state.get("criteria", []) if item in completed_criteria
+        ]
+        state["remaining"] = [
+            item for item in state.get("criteria", []) if item not in completed_criteria
+        ]
+        return state
+
+    @staticmethod
     def apply_verified_plan_results(
         state: dict[str, Any],
         execution_plan: dict[str, Any] | None,
