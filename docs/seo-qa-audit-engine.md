@@ -10,7 +10,7 @@ SEO, QA and combined audit tasks use deterministic same-origin discovery rather 
 - Sitemap indexes are parsed with bounded tag extraction. Up to 5 sitemap endpoints and 20 child sitemap files are inspected once per task origin and cached for the remainder of that task.
 - At most 1,000 sitemap page URLs are admitted from a sitemap response.
 - The default audit page budget is 200. Set `AUDIT_MAX_PAGES` to a value from 1 to 1,000 to change it.
-- Redirected pages are checked against the established origin. External destinations are not added to the audit crawl.
+- Redirected pages are checked against the established origin. External destinations are not added to the audit crawl. Internal-link HEAD/GET checks disable automatic redirects, validate every redirect hop against the origin and URL policy, and classify off-origin redirects separately from HTTP failures.
 - URL and content fingerprints are used to report canonical, title, meta-description and exact visible-text duplicate groups.
 
 Coverage is reported against URLs discovered from inspected internal links and parsed sitemap samples. The crawl acceptance step remains incomplete if discovered URLs remain unvisited, the sitemap sample cap is exceeded, or robots policy cannot be read reliably; the task is then blocked rather than marked complete. This is not a guarantee that every URL on a site was found. Orphaned pages, JavaScript-only routes, unlinked content and URLs beyond the sitemap sample/page budget may remain undiscovered.
@@ -29,10 +29,10 @@ The current deterministic checks include:
 - H1 count and heading-level skips
 - image alt-attribute omissions and HTTP `X-Robots-Tag` noindex directives
 - JSON-LD block JSON syntax
-- internal-link destination status checks (HEAD, with GET fallback only when HEAD is explicitly unsupported)
+- internal-link destination status checks (HEAD, with GET fallback only when HEAD is explicitly unsupported); redirects are followed manually, with policy validation at each hop and no automatic off-origin follow
 - duplicate canonical, title, meta-description and exact visible-text groups
 
-Findings receive a deterministic priority (P0-P4), impact score, impact rationale, effort estimate, affected URLs and remediation guidance. These are triage heuristics, not search-engine ranking predictions.
+Findings receive a deterministic priority (P0-P4), impact score, impact rationale, effort estimate, affected URLs and remediation guidance. The operator UI surfaces these fields alongside an audit overview with crawl, duplicate, link, responsive and accessibility metrics. These are triage heuristics, not search-engine ranking predictions.
 
 Core Web Vitals, rendered field performance, full structured-data schema validation, exhaustive crawl of every route and search-engine index coverage are not claimed.
 
@@ -46,7 +46,9 @@ The read-only QA smoke checks include:
 - visible control, form and duplicate-ID observations
 - accessible-name heuristics for controls, links and buttons
 - focusable elements inside `aria-hidden` content
-- landmark presence, visible image alt omissions and heading-level skips
+- broken `aria-labelledby` references, generic link names, nested interactive controls and positive `tabindex` values
+- table header presence, new-tab link `rel=noopener`, document title/language and landmark structure
+- visible image alt omissions and heading-level skips
 - a six-step keyboard Tab focus sample
 - reversible local disclosure-toggle checks (ARIA-expanded buttons and native details summaries)
 - browser console errors, uncaught page exceptions and failed network requests
