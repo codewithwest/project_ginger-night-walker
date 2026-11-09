@@ -450,7 +450,8 @@ class BrowserRuntime:
             locator = page.locator(
                 'input[type="search"], input[name*="search" i], input[id*="search" i], '
                 'input[placeholder*="search" i], input[aria-label*="search" i], '
-                'form[role="search"] input, [role="search"] input'
+                'form[role="search"] input, [role="search"] input, '
+                'form[action*="search" i] input, form[id*="search" i] input, form[class*="search" i] input'
             )
             found = []
             for index in range(min(await locator.count(), 12)):
