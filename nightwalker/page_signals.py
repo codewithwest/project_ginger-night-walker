@@ -94,6 +94,9 @@ async def collect_internal_link_checks(page: Any, limit: int = 40) -> dict[str, 
         item = {"url": url, "method": "HEAD", "status": None, "ok": None, "final_url": None}
         try:
             response = await page.request.head(url, timeout=8000, max_redirects=5)
+            if response.status in {405, 501}:
+                response = await page.request.get(url, timeout=8000, max_redirects=5)
+                item["method"] = "GET_fallback_after_HEAD_unsupported"
             item.update({
                 "status": response.status,
                 "ok": 200 <= response.status < 400,
