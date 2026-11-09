@@ -181,3 +181,16 @@ STEEL_SESSION_TIMEOUT_MS=300000
 Rebuild and restart after changing backend configuration. If session release fails, Steel's session timeout is the fallback cleanup mechanism. Steel's self-hosting guide recommends at least 4 GB RAM and 10 GB free disk; the browser container is separate from Night Walker's 2 GB container limit. If the host cannot sustain that, use `BROWSER_BACKEND=local` to run Playwright in Night Walker instead, accepting the local-browser trade-offs.
 
 The existing Night Walker URL policy and request guard remain in place, but they are not a complete SSRF boundary: browser redirect handling can bypass per-request route checks. Steel is not a replacement for outbound network egress controls. Keep a host/container firewall or trusted egress proxy as the final control against internal-network access. Do not treat this deployment as hardened against hostile websites until egress enforcement is implemented and tested.
+
+
+## Beta CI pause
+
+GitHub Actions CI is intentionally paused during the beta iteration period. The workflow source is preserved at `.github/workflows/ci.yml.disabled`, which GitHub does not recognise as an active workflow. To re-enable CI, restore the filename to `.github/workflows/ci.yml`. Until then, run lint, backend tests and the frontend production build locally before deploying.
+
+## Mission plan execution ledger
+
+Each natural-language mission can own an execution plan. The plan is persisted inside the task snapshot and rendered into the task-scoped Markdown checklist under `EVIDENCE_DIR/checklists`. Step transitions and their history are written through the Task Manager; the Markdown file is a generated operator-readable ledger, not an independently editable source of truth.
+
+A step is only ticked after the trusted runtime records evidence references and verifies the applicable output. Navigation can be verified by a captured page; structured extraction requires structured records; numeric comparison is performed in Python over extracted price values. The UI exposes the plan and step counts in the selected mission, and compact plan progress on mission cards.
+
+Current beta scope is one plan per mission and sequential dependency scheduling. Independent worker execution, parallel step scheduling, arbitrary multi-plan revisions and a durable external A2A broker remain future work.
