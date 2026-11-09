@@ -177,6 +177,13 @@ def rank_crawl_candidates(
             score += {"detail": 4, "informational": 2, "editorial": -4}.get(page_type, 0)
         if novel:
             score += 18
+        context = str(raw.get("discovery_context") or "").casefold()
+        if context == "content":
+            score += 8
+        elif context == "navigation":
+            score += 4
+        elif context == "footer":
+            score -= 8
         if pagination:
             score -= 35
         depth = len([segment for segment in parts.path.split("/") if segment])
