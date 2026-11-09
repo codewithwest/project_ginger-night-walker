@@ -17,6 +17,7 @@ from nightwalker.crawl_intelligence import (
 )
 from nightwalker.decision_contracts import DecisionPlan, DecisionStatus, normalise_decision_plan
 from nightwalker.execution_control import ActionVerifier
+from nightwalker.finding_validation import validate_findings, recommendations_skipped
 from nightwalker.goal_state import GoalStateManager
 from nightwalker.ollama_client import OllamaUnavailable
 from nightwalker.orchestrator import Orchestrator
@@ -1446,6 +1447,25 @@ class TaskManager:
                             "source_ids": list(dict.fromkeys(item.get("source_id") for item in matched if item.get("source_id"))),
                             "evidence_ids": list(dict.fromkeys(eid for item in matched for eid in item.get("evidence_ids", []))),
                         })
+                # Every candidate passes a persisted evidence-validation gate before any
+                # remediation is attached. Unsupported candidates remain visible, but cannot
+                # enter the recommendation-ready set.
+                findings, validation_summary = validate_findings(findings, evidence, structured_data)
+                structured_data["finding_validation_summary"] = validation_summary
+                record["finding_validation"] = validation_summary
+                self._log(
+                    task_id,
+                    "Finding validation complete: "
+                    f"{validation_summary['confirmed']} confirmed, "
+                    f"{validation_summary['insufficient_evidence']} requiring more evidence.",
+                )
+                record["progress_events"].append({
+                    "at": self._now(), "event_type": "finding_validation_completed",
+                    "status": "running", "message": (
+                        f"{validation_summary['confirmed']} confirmed; "
+                        f"{validation_summary['insufficient_evidence']} require more evidence."
+                    ),
+                })
                 findings = prioritise_findings(findings)
                 # Complete report synthesis steps only after deterministic aggregation exists.
                 execution_plan = record.get("execution_plan")
@@ -1608,8 +1628,18 @@ class TaskManager:
                     "status": "running", "message": "Research collection is complete; preparing the final synthesis.",
                 })
                 try:
+                    recommendation_ready = [
+                        item for item in findings
+                        if (item.get("validation") or {}).get("verdict") == "confirmed"
+                    ]
+                    synthesis_objective = self._effective_objective(task_id, objective)
+                    if recommendations_skipped():
+                        synthesis_objective += (
+                            "\\n\\nREPORTING POLICY: Do not make recommendations, prescribe fixes, "
+                            "or infer root causes. Summarise observations and validation outcomes only."
+                        )
                     synthesis = await self.orchestrator.ollama.synthesise_research(
-                        self._effective_objective(task_id, objective), findings, sources, round_count,
+                        synthesis_objective, recommendation_ready, sources, round_count,
                         int(record.get("max_rounds", self.max_rounds)), task_id=task_id,
                         checklist_markdown=self.checklist.write(record),
                     )
