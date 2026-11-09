@@ -993,11 +993,17 @@ class BrowserRuntime:
                         "image_count": page_seo.get("image_count"),
                         "images": page_seo.get("images", []),
                         "broken_image_count": page_seo.get("broken_image_count"),
+                        "pending_image_count": sum(item.get("load_status") == "pending" for item in page_seo.get("images", [])),
                         "console_error_count": sum(item.get("kind") == "console_error" for item in runtime_events),
                         "page_error_count": sum(item.get("kind") == "page_error" for item in runtime_events),
                         "request_failed_count": sum(item.get("kind") == "request_failed" for item in runtime_events),
                         "runtime_events": runtime_events,
                     }
+                    if audit_signals["qa_page_smoke"]["pending_image_count"]:
+                        issues.append(
+                            f"{audit_signals['qa_page_smoke']['pending_image_count']} image(s) were still loading at capture time; "
+                            "they are marked pending and are not counted as confirmed broken images."
+                        )
             audit_findings = page_signal_findings(audit_signals, workflow_type)
             for check in audit_signals["internal_link_checks"].get("checks", []):
                 if check.get("off_origin_redirect"):
