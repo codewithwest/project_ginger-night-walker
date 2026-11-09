@@ -1278,6 +1278,31 @@ class BrowserRuntime:
                 structured_data["qa_runtime_events"] = audit_signals.get("qa_runtime_events", [])
                 structured_data["internal_link_checks"] = audit_signals.get("internal_link_checks", {})
             limitations = list(issues)
+            if qa_product_search is not None:
+                if not qa_product_search.get("performed"):
+                    limitations.append(
+                        f"Product search for {qa_product_search.get('query')!r} was not performed: "
+                        f"{qa_product_search.get('status')}. The requested product result remains unverified."
+                    )
+                elif not qa_product_search.get("matches"):
+                    limitations.append(
+                        f"The search for {qa_product_search.get('query')!r} was executed, but no matching "
+                        "product card was captured. Product presence, image and price could not be verified."
+                    )
+                else:
+                    for product_match in qa_product_search.get("matches", []):
+                        if not product_match.get("image_present"):
+                            limitations.append(
+                                f"Matching product {product_match.get('name_match')!r} has no image element in its captured card."
+                            )
+                        elif not product_match.get("image_loaded"):
+                            limitations.append(
+                                f"The image for matching product {product_match.get('name_match')!r} was not confirmed loaded."
+                            )
+                        if not product_match.get("price"):
+                            limitations.append(
+                                f"No displayed price could be extracted from the matching product card for {product_match.get('name_match')!r}."
+                            )
             if workflow_type in {"seo", "seo_qa"}:
                 limitations.append("Crawl coverage is bounded by the configured round/page budget and discovered same-origin links/sitemap entries; inaccessible, JavaScript-only, orphaned and undiscovered URLs may be absent. Core Web Vitals are not measured.")
             if workflow_type in {"qa", "seo_qa"}:
