@@ -888,8 +888,22 @@ class TaskManager:
                                 qa_checks = (result.get("structured_data") or {}).get("qa_checks") or {}
                                 if qa_checks and result.get("evidence_id"):
                                     verified_result = "Captured visible DOM structure, controls, forms, links and duplicate-ID checks"
+                            elif capability == "interact" and str(step.get("step_id", "")).endswith(("seo-links", "qa-navigation")):
+                                link_checks = (result.get("structured_data") or {}).get("internal_link_checks") or {}
+                                navigation = (result.get("structured_data") or {}).get("qa_navigation_journeys") or {}
+                                if result.get("evidence_id") and (
+                                    link_checks.get("checked_count", 0) > 0
+                                    or navigation.get("checked_count", 0) > 0
+                                ):
+                                    verified_result = (
+                                        f"Captured {link_checks.get('checked_count', 0)} same-origin link destination check(s) "
+                                        f"and {navigation.get('checked_count', 0)} browser navigation journey(s)"
+                                    )
                             if verified_result is None:
                                 workflow_value = str(record.get("workflow_type") or "")
+                                if workflow_value in {"seo", "qa", "seo_qa"} and str(step.get("step_id", "")).endswith(("seo-synthesise", "qa-synthesise")):
+                                    # Report acceptance is deferred until crawl aggregation and prioritisation.
+                                    break
                                 if workflow_value in {"seo", "qa", "seo_qa"} and str(step.get("step_id", "")).startswith(("seo-", "qa-", "combined-")):
                                     fail_step(
                                         execution_plan, step["step_id"],
@@ -1202,6 +1216,25 @@ class TaskManager:
                             "remediation": "Review whether these pages should have distinct canonical URLs, titles and substantive content.",
                         })
                 findings = prioritise_findings(findings)
+                # Complete report synthesis steps only after deterministic aggregation exists.
+                execution_plan = record.get("execution_plan")
+                all_evidence_refs = list(dict.fromkeys(
+                    str(item.get("evidence_id")) for item in evidence if item.get("evidence_id")
+                ))
+                if isinstance(execution_plan, dict) and all_evidence_refs:
+                    for step in execution_plan.get("steps", []):
+                        if str(step.get("step_id", "")).endswith(("seo-synthesise", "qa-synthesise")) and step.get("status") not in {"completed", "blocked", "failed", "skipped"}:
+                            start_step(execution_plan, step["step_id"])
+                            complete_step(
+                                execution_plan, step["step_id"],
+                                evidence_refs=all_evidence_refs,
+                                result="Aggregated crawl coverage, duplicate analysis, verified link checks and prioritised evidence-backed findings.",
+                            )
+                    if record.get("goal_state"):
+                        GoalStateManager.apply_verified_workflow_results(
+                            record["goal_state"], record.get("execution_blueprint"),
+                            execution_plan, evidence,
+                        )
                 priority_counts = {
                     priority: sum(item.get("priority") == priority for item in findings)
                     for priority in ("P0", "P1", "P2", "P3", "P4")
