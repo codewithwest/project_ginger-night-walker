@@ -843,6 +843,13 @@ class TaskManager:
                                         verified_result = f"Lowest extracted homepage price: {cheapest_product.get('name')} — {cheapest_product.get('price')} (R {amount:,.2f}); compared {len(priced)} priced products"
                                 else:
                                     verified_result = f"Extracted {len(products)} product records with displayed prices"
+                            elif capability == "extract" and str(step.get("step_id", "")).endswith("seo-technical"):
+                                discovery = (result.get("structured_data") or {}).get("seo_discovery") or {}
+                                robots = discovery.get("robots_txt") or {}
+                                sitemap = discovery.get("sitemap") or {}
+                                sitemap_outcome_recorded = sitemap.get("status") is not None or bool(sitemap.get("error"))
+                                if robots.get("status") is not None and sitemap_outcome_recorded and result.get("evidence_id"):
+                                    verified_result = f"Recorded robots.txt HTTP {robots.get('status')} and sitemap discovery outcome"
                             elif capability == "extract" and str(step.get("step_id", "")).endswith("seo-page"):
                                 seo_checks = (result.get("structured_data") or {}).get("seo_checks") or {}
                                 if seo_checks and result.get("evidence_id"):
@@ -959,7 +966,8 @@ class TaskManager:
                 # the operator still receives the evidence collected so far.
                 record["result"] = {
                     "schema_version": "1.0",
-                    "answer": f"Research in progress: inspected {len(sources)} sources across {round_count} rounds.",
+                    "workflow_type": record.get("workflow_type", "unsupported"),
+                    "answer": f"Workflow in progress: inspected {len(sources)} pages across {round_count} rounds.",
                     "findings": list(findings), "sources": list(sources),
                     "evidence": list(evidence), "structured_data": structured_data,
                     "limitations": list(dict.fromkeys(limitations)),
@@ -1113,7 +1121,8 @@ class TaskManager:
                 answer = "No usable sources could be inspected. Review the limitations and execution log."
                 final_status = "blocked"
             record["result"] = {
-                "schema_version": "1.0", "answer": answer,
+                "schema_version": "1.0", "workflow_type": record.get("workflow_type", "unsupported"),
+                "answer": answer,
                 "findings": findings, "sources": sources, "evidence": evidence,
                 "structured_data": structured_data,
                 "limitations": list(dict.fromkeys(limitations)),
