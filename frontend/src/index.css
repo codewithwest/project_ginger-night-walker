@@ -1135,3 +1135,44 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
   .checklist-fullscreen__header button { padding: 8px; font-size: 0; }
   .checklist-fullscreen__header button svg { width: 17px; height: 17px; }
 }
+
+
+/* Mission plan execution ledger */
+.plan-step-list {
+  display: grid;
+  gap: 10px;
+}
+.plan-step {
+  border: 1px solid var(--border, rgba(127, 127, 127, 0.24));
+  border-radius: 12px;
+  padding: 12px;
+  min-width: 0;
+}
+.plan-step__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.plan-step__heading strong {
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+.plan-step__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: 7px;
+  color: var(--muted, #858585);
+  font-size: 0.75rem;
+}
+.plan-step p {
+  margin: 9px 0 0;
+  font-size: 0.82rem;
+}
+.plan-step__evidence {
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+  color: var(--muted, #858585);
+  font: 0.72rem ui-monospace, SFMono-Regular, Menlo, monospace;
+}
