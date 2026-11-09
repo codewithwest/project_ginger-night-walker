@@ -144,7 +144,7 @@ class GoalStateManager:
                 continue
             value = product.get("price_value")
             if not isinstance(value, (int, float)):
-                match = re.search(r"[\\d,]+(?:\\.\\d{1,2})?", str(product.get("price") or ""))
+                match = re.search(r"[\d,]+(?:\.\d{1,2})?", str(product.get("price") or ""))
                 value = float(match.group(0).replace(",", "")) if match else None
             if isinstance(value, (int, float)):
                 priced.append((float(value), product))
@@ -156,7 +156,7 @@ class GoalStateManager:
         selected_name = str(selected.get("name") or "").strip()
         selected_price = selected.get("price_value")
         if not isinstance(selected_price, (int, float)):
-            match = re.search(r"[\\d,]+(?:\\.\\d{1,2})?", str(selected.get("price") or ""))
+            match = re.search(r"[\d,]+(?:\.\d{1,2})?", str(selected.get("price") or ""))
             selected_price = float(match.group(0).replace(",", "")) if match else None
         if not selected_name or not isinstance(selected_price, (int, float)):
             return state
@@ -197,8 +197,8 @@ class GoalStateManager:
                     # Match the selected numeric price in the captured text after the
                     # product name, accepting common currency/spacing formats.
                     price_match = None
-                    for match in re.finditer(r"(?:R\\s*)?[\\d,]+(?:\\.\\d{2})?", captured[name_index:], re.IGNORECASE):
-                        number = float(re.sub(r"[^\\d.]", "", match.group(0)))
+                    for match in re.finditer(r"(?:R\s*)?[\d,]+(?:\.\d{2})?", captured[name_index:], re.IGNORECASE):
+                        number = float(re.sub(r"[^\d.]", "", match.group(0)))
                         if abs(number - float(selected_price)) < 0.000001:
                             price_match = match
                             break
