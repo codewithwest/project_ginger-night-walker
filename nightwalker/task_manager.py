@@ -735,7 +735,7 @@ class TaskManager:
                                         value = product.get("price_value")
                                         if isinstance(value, (int, float)):
                                             return float(value)
-                                        match = re.search(r"[\\d,]+(?:\\.\\d{1,2})?", str(product.get("price") or ""))
+                                        match = re.search(r"[\d,]+(?:\.\d{1,2})?", str(product.get("price") or ""))
                                         return float(match.group(0).replace(",", "")) if match else None
                                     priced = [(amount, product) for product in products if (amount := _price_value(product)) is not None]
                                     if priced:
