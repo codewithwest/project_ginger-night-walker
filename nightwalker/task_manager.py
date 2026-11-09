@@ -746,14 +746,25 @@ class TaskManager:
                         from urllib.parse import urlsplit
                         target_parts = urlsplit(str(record.get("target_url") or ""))
                         source_parts = urlsplit(str(source.get("url") or final_url))
-                        same_origin = (
-                            source_parts.scheme, source_parts.hostname, source_parts.port
-                        ) == (
-                            target_parts.scheme, target_parts.hostname, target_parts.port
-                        )
+                        saved_origin = str(record.get("audit_origin") or "")
+                        if saved_origin:
+                            origin_parts = urlsplit(saved_origin)
+                            same_origin = (
+                                source_parts.scheme, source_parts.hostname, source_parts.port
+                            ) == (
+                                origin_parts.scheme, origin_parts.hostname, origin_parts.port
+                            )
+                        else:
+                            target_host = (target_parts.hostname or "").removeprefix("www.").casefold()
+                            source_host = (source_parts.hostname or "").removeprefix("www.").casefold()
+                            target_port = target_parts.port or (443 if target_parts.scheme == "https" else 80)
+                            source_port = source_parts.port or (443 if source_parts.scheme == "https" else 80)
+                            same_origin = bool(target_host and target_host == source_host and target_port == source_port)
+                            if same_origin:
+                                record["audit_origin"] = f"{source_parts.scheme}://{source_parts.netloc}"
                         accepted = same_origin
                         relevance_reason = (
-                            "Accepted same-origin page as part of the requested site audit."
+                            "Accepted page within the established website audit origin."
                             if accepted else "Rejected page outside the requested website origin."
                         )
                     else:
