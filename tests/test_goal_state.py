@@ -72,3 +72,55 @@ def test_goal_state_keeps_original_objective_and_supports_twelve_criteria():
     assert state["original_goal"] == objective
     assert len(state["criteria"]) == 10
     assert state["remaining"] == state["criteria"]
+
+
+def test_cheapest_product_goal_can_be_verified_from_completed_plan_and_exact_evidence():
+    state = GoalStateManager.initialise(
+        "find me the cheapest product on weylandts.co.za homepage",
+        ["Identify the cheapest product on the homepage"],
+    )
+    captured = (
+        "Shop Now New Arrivals Miguel Vase Range The price depends on the options chosen "
+        "on the product page R 895.00 Tuileries Garden Throw R 1,995.00 "
+        "Tuileries Palace Throw R 1,995.00 Brindille Nest Basket R 2,995.00 "
+        "Palm Sculpture R 5,995.00 Turtle II Sculpture R 29,995.00 "
+        "Cubist Patchwork Ottoman Large Waxed Tobacco R 6,995.00 "
+        "Jungle Pod Planter Range R 5,995.00"
+    )
+    evidence = [{"evidence_id": "ev-home", "captured_text": captured}]
+    plan = {"steps": [{
+        "step_id": "identify-cheapest", "objective": "Identify the cheapest product from the extracted list",
+        "status": "completed", "evidence_refs": ["ev-home"],
+        "result": "Lowest extracted homepage price: Miguel Vase Range — R 895.00; compared 8 priced products",
+    }]}
+    products = [
+        {"name": "Miguel Vase Range", "price": "R 895.00", "price_value": 895},
+        {"name": "Tuileries Garden Throw", "price": "R 1,995.00", "price_value": 1995},
+        {"name": "Tuileries Palace Throw", "price": "R 1,995.00", "price_value": 1995},
+    ]
+    result = GoalStateManager.apply_verified_plan_results(
+        state, plan, evidence, {"cheapest_product": products[0]}, {"products": products},
+    )
+    assert result["completed"] == ["Identify the cheapest product on the homepage"]
+    assert result["remaining"] == []
+    assert result["evidence_by_criterion"]["Identify the cheapest product on the homepage"]["evidence_id"] == "ev-home"
+
+
+def test_cheapest_product_plan_bridge_rejects_non_minimum_or_missing_capture():
+    state = GoalStateManager.initialise(
+        "find the cheapest product", ["Identify the cheapest product"],
+    )
+    plan = {"steps": [{
+        "objective": "Identify the cheapest product", "status": "completed",
+        "evidence_refs": ["ev-1"], "result": "Lowest product price",
+    }]}
+    products = [
+        {"name": "A", "price": "R 100.00", "price_value": 100},
+        {"name": "B", "price": "R 200.00", "price_value": 200},
+    ]
+    evidence = [{"evidence_id": "ev-1", "captured_text": "A R 100.00 and B R 200.00"}]
+    result = GoalStateManager.apply_verified_plan_results(
+        state, plan, evidence, {"cheapest_product": products[1]}, {"products": products},
+    )
+    assert result["completed"] == []
+    assert result["remaining"] == ["Identify the cheapest product"]
