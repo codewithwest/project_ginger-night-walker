@@ -121,7 +121,7 @@ def test_accessibility_finding_requires_the_matching_semantic_signal():
     assert findings[0]["validation"]["verdict"] == "confirmed"
 
 
-def test_site_wide_qa_page_signals_validate_missing_title_and_broken_image():
+def test_qa_page_signals_confirm_broken_images_but_not_seo_title_claims():
     evidence = [{"evidence_id": "ev-6"}]
     signals = {"source_id": "s-6", "evidence_ids": ["ev-6"], "title": "",
                "h1_count": 1, "images": [{"src": "https://example.com/fail.png",
@@ -133,4 +133,5 @@ def test_site_wide_qa_page_signals_validate_missing_title_and_broken_image():
          "image_url": "https://example.com/fail.png", "source_ids": ["s-6"],
          "evidence_ids": ["ev-6"]},
     ], evidence, {"qa_page_signals": [signals]})
-    assert all(item["validation"]["verdict"] == "confirmed" for item in findings)
+    assert findings[0]["validation"]["verdict"] == "insufficient_evidence"
+    assert findings[1]["validation"]["verdict"] == "confirmed"
