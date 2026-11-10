@@ -2,6 +2,7 @@ FROM node:22-bookworm-slim AS steel-mcp-build
 WORKDIR /app/steel-mcp-server
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN git init && git remote add origin https://github.com/steel-dev/steel-mcp-server.git && git fetch --depth 1 origin f28a17571b10053e3df5e4bbbc4d3bc30f58ba39 && git checkout FETCH_HEAD
+RUN node -e 'const fs=require("node:fs"); const p="src/core/steel/cdp.ts"; const s=fs.readFileSync(p,"utf8"); const a="const socket = new WebSocket(url, { maxPayload: 256 * 1024 * 1024 });"; const b="const socket = new WebSocket(url, { headers: { Host: process.env.STEEL_WS_HOST_HEADER || \"localhost\" }, maxPayload: 256 * 1024 * 1024 });"; if (!s.includes(a)) throw new Error("Pinned Steel CDP WebSocket constructor changed; review host-header patch"); fs.writeFileSync(p,s.replace(a,b));'
 RUN npm ci --ignore-scripts && npm run build && npm prune --omit=dev
 
 FROM node:22-alpine AS frontend-build
