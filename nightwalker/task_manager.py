@@ -1561,9 +1561,14 @@ class TaskManager:
                         search_records = structured_data.get("qa_product_search", [])
                         if isinstance(search_records, dict):
                             search_records = [search_records]
+                        # Preserve the latest search outcome even when the browser could
+                        # not perform the search. A captured failure/blocked outcome is still
+                        # evidence for qa-content; filtering to performed=True left the step
+                        # pending forever and consequently stranded qa-validate/synthesis.
                         search_record = next((
                             item for item in reversed(search_records)
-                            if isinstance(item, dict) and item.get("performed") is True
+                            if isinstance(item, dict)
+                            and (item.get("query") or item.get("status") or item.get("performed") is not None)
                         ), None)
 
                         # Some goal-analyst outputs assign the canonical qa-crawl ID
@@ -1621,16 +1626,31 @@ class TaskManager:
                                         + "; image_loaded=" + str(bool(match.get("image_loaded")))
                                         + "; price=" + str(match.get("price") or "not captured")
                                     )
-                                outcome = (
-                                    "Search-result content extraction was attempted. "
-                                    + ("Captured candidate card(s): " + " | ".join(product_outcomes)
-                                       if product_outcomes else
-                                       "No matching product card was captured; product name, image and price remain unverified.")
-                                )
+                                if search_record.get("performed") is True:
+                                    outcome = (
+                                        "Search-result content extraction was attempted. "
+                                        + ("Captured candidate card(s): " + " | ".join(product_outcomes)
+                                           if product_outcomes else
+                                           "No matching product card was captured; product name, image and price remain unverified.")
+                                    )
+                                else:
+                                    outcome = (
+                                        "Search outcome was captured but the search was not performed "
+                                        f"(status={search_record.get('status') or 'not reported'}). "
+                                        "Product presence, name, image and price remain unverified; "
+                                        "this step records the limitation rather than treating it as a successful search."
+                                    )
                                 start_step(execution_plan, step_id)
                                 complete_step(
                                     execution_plan, step_id,
                                     evidence_refs=all_evidence_refs, result=outcome,
+                                )
+                            else:
+                                start_step(execution_plan, step_id)
+                                fail_step(
+                                    execution_plan, step_id,
+                                    "No QA product-search outcome was captured; content extraction cannot be verified.",
+                                    blocked=True,
                                 )
 
                         should_complete = (
