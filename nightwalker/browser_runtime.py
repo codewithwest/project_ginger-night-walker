@@ -236,11 +236,20 @@ class BrowserRuntime:
 
     @staticmethod
     def _normalise_steel_debug_url(debug_url: str) -> str:
-        """Make a container-advertised Steel viewer URL reachable from the host UI."""
+        """Make Steel's viewer URL reachable from the browser displaying Night Walker.
+
+        Remote Steel hosts must remain remote; local Compose service names must
+        become localhost because the UI browser cannot resolve Docker DNS names.
+        """
         parsed = urlparse(debug_url)
         host = (parsed.hostname or "").strip("[]").lower()
-        if host in {"steel-browser", "ginger-steel-browser", "0.0.0.0", "::"}:
-            netloc = "localhost"
+        if host in {"steel-browser", "ginger-steel-browser", "0.0.0.0", "::", "", "localhost", "127.0.0.1", "::1"}:
+            api = urlparse(os.getenv("STEEL_API_BASE_URL", "http://steel-browser:3000/v1"))
+            api_host = (api.hostname or "").strip("[]").lower()
+            viewer_host = "localhost" if api_host in {"steel-browser", "ginger-steel-browser"} else api_host
+            if not viewer_host:
+                return debug_url
+            netloc = f"[{viewer_host}]" if ":" in viewer_host else viewer_host
             if parsed.port:
                 netloc += f":{parsed.port}"
             return parsed._replace(netloc=netloc).geturl()
@@ -1226,15 +1235,49 @@ class BrowserRuntime:
                     url=page.url,
                 )
             self._browser_event(task_id, "Navigated to target page", url=page.url, title=(await page.title())[:500])
-            if response and response.status >= 400:
-                return {
-                    "status": "failed",
-                    "issues": [f"Website returned HTTP {response.status}"],
-                    "final_url": page.url,
-                }
-
             visited = [page.url]
             issues: list[str] = []
+            if response and response.status >= 400:
+                initial_status = response.status
+                initial_url = page.url
+                if workflow_type == "qa" and product_search_requested:
+                    # Record a failed deep link, then recover only to the exact
+                    # same-origin root and discover the catalogue from real nav.
+                    from urllib.parse import urljoin
+                    site_root = urljoin(initial_url, "/")
+                    self._browser_event(
+                        task_id,
+                        f"Supplied URL returned HTTP {initial_status}; recording the failure and checking the same-origin site root for navigation routes",
+                        url=initial_url,
+                    )
+                    root_response = await page.goto(
+                        site_root,
+                        wait_until="domcontentloaded",
+                        timeout=int(os.getenv("NAVIGATION_TIMEOUT_MS", "45000")),
+                    )
+                    visited.append(page.url)
+                    if root_response and root_response.status < 400:
+                        issues.append(f"Supplied URL failed with HTTP {initial_status}: {initial_url}. Continued from the same-origin root to discover a valid catalogue route.")
+                        http_status = root_response.status
+                        self._browser_event(
+                            task_id, "Recovered to same-origin site root after recording the supplied URL failure",
+                            url=page.url, title=(await page.title())[:500],
+                        )
+                    else:
+                        return {
+                            "status": "failed",
+                            "issues": [
+                                f"Supplied URL returned HTTP {initial_status}: {initial_url}",
+                                f"Same-origin root recovery also failed with HTTP {root_response.status if root_response else 'unknown'}",
+                            ],
+                            "final_url": page.url,
+                        }
+                else:
+                    return {
+                        "status": "failed",
+                        "issues": [f"Website returned HTTP {response.status}"],
+                        "final_url": page.url,
+                    }
             for step in steps:
                 capability = step.get("capability")
                 step_objective = str(step.get("objective", ""))[:500]
