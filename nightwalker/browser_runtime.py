@@ -5,6 +5,7 @@ import base64
 import copy
 import os
 import re
+import socket
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlencode, urljoin, urlparse
@@ -189,15 +190,25 @@ class BrowserRuntime:
 
     @staticmethod
     def _normalise_steel_websocket_url(websocket_url: str, api_base: str) -> str:
-        """Pin every advertised CDP URL to the host configured for Steel."""
+        """Use a Steel-reachable IP for CDP while keeping REST on Docker DNS."""
         websocket = urlparse(websocket_url)
         api = urlparse(api_base)
-        host = (api.hostname or "").strip("[]")
-        if not host:
-            raise RuntimeError("STEEL_API_BASE_URL must include a reachable hostname")
+        configured_host = os.getenv("STEEL_CDP_HOST", "auto").strip()
+        host = configured_host
+        if not host or host.lower() == "auto":
+            api_host = (api.hostname or "").strip("[]")
+            if not api_host:
+                raise RuntimeError("STEEL_API_BASE_URL must include a reachable hostname")
+            try:
+                host = socket.gethostbyname(api_host)
+            except OSError as exc:
+                raise RuntimeError(
+                    f"Could not resolve Steel API host {api_host!r} for CDP: {exc}"
+                ) from exc
         netloc = f"[{host}]" if ":" in host else host
-        # Keep Steel's advertised CDP port/path/token, but never its internal,
-        # loopback, or stale hostname. The environment is the source of truth.
+        # Steel rejects Docker service names in the WebSocket Host header.
+        # Resolve the service name to its container IP; preserve the advertised
+        # CDP port, path and token.
         port = websocket.port or api.port
         if port:
             netloc += f":{port}"
@@ -225,7 +236,7 @@ class BrowserRuntime:
         """Pin the viewer to Steel's host and repair legacy unscoped debug routes."""
         parsed = urlparse(debug_url)
         api = urlparse(os.getenv("STEEL_API_BASE_URL", "http://steel-browser:3000/v1"))
-        host = (api.hostname or "").strip("[]")
+        host = os.getenv("STEEL_VIEWER_HOST", "localhost").strip()
         path = parsed.path
         # Steel's session-aware viewer routes require the session ID in the path.
         # Some versions advertise the old shared /sessions/debug endpoint, which
@@ -246,9 +257,10 @@ class BrowserRuntime:
     def _steel_ui_url(api_base: str) -> str:
         """Build the externally reachable Steel UI URL from the configured API."""
         api = urlparse(api_base)
-        if not api.hostname:
+        host = os.getenv("STEEL_VIEWER_HOST", "localhost").strip() or "localhost"
+        if not host:
             return ""
-        netloc = f"[{api.hostname}]" if ":" in api.hostname else api.hostname
+        netloc = f"[{host}]" if ":" in host else host
         if api.port:
             netloc += f":{api.port}"
         scheme = "https" if api.scheme == "https" else "http"
