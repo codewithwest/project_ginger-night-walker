@@ -260,3 +260,22 @@ def test_cart_product_name_uses_explicit_quoted_item_and_ignores_url():
 
 def test_cart_product_name_returns_none_without_an_explicit_item():
     assert BrowserRuntime._cart_product_name("Add the selected item to the cart") is None
+
+
+
+def test_restore_qa_product_search_reuses_only_the_matching_query():
+    captured = {
+        "query": "Dark Grey",
+        "performed": True,
+        "status": "matched",
+        "searched_url": "https://example.com/search?q=Dark+Grey",
+        "matches": [{"name_match": "Dark Grey Sofa", "price": "R 1,000", "image_src": "https://cdn.example.com/sofa.jpg"}],
+    }
+    session = {"qa_product_search": captured}
+
+    restored = BrowserRuntime._restore_qa_product_search(session, "Dark Grey")
+    assert restored == captured
+    assert restored is not captured
+    assert restored["matches"] is not captured["matches"]
+    assert BrowserRuntime._restore_qa_product_search(session, "Light Grey") is None
+    assert BrowserRuntime._restore_qa_product_search({}, "Dark Grey") is None
