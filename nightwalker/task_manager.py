@@ -2157,10 +2157,11 @@ class TaskManager:
             record["status"] = "failed"
             record["error"] = str(exc)[:1000]
             self._log(task_id, f"Task failed: {exc}", "error")
-        except Exception as exc:  # noqa: BLE001 - keep task state observable
+        except Exception as exc:  # noqa: BLE001 - preserve unexpected failure details
+            logger.exception("Unexpected task execution failure for %s", task_id)
             record["status"] = "failed"
-            record["error"] = "Unexpected internal error"
-            self._log(task_id, f"Unexpected internal error: {type(exc).__name__}", "error")
+            record["error"] = f"Unexpected internal error ({type(exc).__name__}): {str(exc)[:800]}"
+            self._log(task_id, f"Unexpected internal error ({type(exc).__name__}): {str(exc)[:800]}", "error")
         finally:
             try:
                 await self.orchestrator.browser.close_task_session(task_id)
@@ -2225,10 +2226,11 @@ class TaskManager:
             self.tasks[task_id]["status"] = "failed"
             self.tasks[task_id]["error"] = str(exc)[:1000]
             self._log(task_id, f"Task failed: {exc}", "error")
-        except Exception as exc:  # noqa: BLE001 - keep task state observable on unexpected failures
+        except Exception as exc:  # noqa: BLE001 - preserve unexpected failure details
+            logger.exception("Unexpected agent execution failure for %s", task_id)
             self.tasks[task_id]["status"] = "failed"
-            self.tasks[task_id]["error"] = "Unexpected internal error"
-            self._log(task_id, f"Unexpected internal error: {type(exc).__name__}", "error")
+            self.tasks[task_id]["error"] = f"Unexpected internal error ({type(exc).__name__}): {str(exc)[:800]}"
+            self._log(task_id, f"Unexpected internal error ({type(exc).__name__}): {str(exc)[:800]}", "error")
         finally:
             self.tasks[task_id]["updated_at"] = self._now()
             self.running.pop(task_id, None)
