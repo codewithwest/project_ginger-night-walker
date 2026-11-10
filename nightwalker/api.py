@@ -97,6 +97,7 @@ async def steel_mcp_smoke_test(request: SteelMCPSmokeRequest):
     if not browser.steel_mcp.connected:
         raise HTTPException(status_code=503, detail="Steel MCP is not enabled or connected")
     try:
+        browser.policy.validate_url(request.url)
         return await browser.steel_mcp.smoke_test(request.url)
     except (RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)[:1000]) from exc
