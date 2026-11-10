@@ -217,14 +217,8 @@ class TaskManager:
             # those plans to the deterministic cart sequence before resuming.
             if is_ecommerce_cart_workflow(str(record.get("objective") or "")):
                 canonical_blueprint = build_cart_journey_blueprint(str(record.get("objective") or ""))
-                canonical_ids = [item.subtask_id for item in canonical_blueprint.subtasks]
                 saved_blueprint = record.get("execution_blueprint") or {}
-                saved_ids = [
-                    str(item.get("subtask_id") or "")
-                    for item in saved_blueprint.get("subtasks", [])
-                    if isinstance(item, dict)
-                ]
-                if saved_ids != canonical_ids:
+                if not self._cart_blueprint_matches(saved_blueprint, canonical_blueprint):
                     old_plan = record.get("execution_plan") or {}
                     old_steps = old_plan.get("steps") or []
                     old_navigation = next((
@@ -379,20 +373,31 @@ class TaskManager:
         self._persist(task_id)
         return {"task_id": task_id, "messages": record["a2a_messages"]}
 
+    @staticmethod
+    def _cart_blueprint_matches(saved: dict[str, Any], canonical) -> bool:
+        """Compare execution semantics, not just IDs: old plans reused IDs with unsafe capabilities."""
+        saved_steps = saved.get("subtasks") or []
+        expected_steps = canonical.model_dump(mode="json").get("subtasks") or []
+        fields = ("subtask_id", "objective", "capability", "depends_on", "success_criteria")
+        def signature(items):
+            return [
+                tuple(
+                    tuple(item.get(field) or []) if field in {"depends_on", "success_criteria"}
+                    else str(item.get(field) or "")
+                    for field in fields
+                )
+                for item in items if isinstance(item, dict)
+            ]
+        return signature(saved_steps) == signature(expected_steps)
+
     def _migrate_legacy_cart_plan(self, record: dict[str, Any]) -> bool:
         """Bring an already-loaded legacy cart task onto the canonical safe workflow."""
         objective = str(record.get("objective") or "")
         if not is_ecommerce_cart_workflow(objective):
             return False
         canonical = build_cart_journey_blueprint(objective)
-        canonical_ids = [item.subtask_id for item in canonical.subtasks]
         saved = record.get("execution_blueprint") or {}
-        saved_ids = [
-            str(item.get("subtask_id") or "")
-            for item in saved.get("subtasks", [])
-            if isinstance(item, dict)
-        ]
-        if saved_ids == canonical_ids:
+        if self._cart_blueprint_matches(saved, canonical):
             return False
 
         old_plan = record.get("execution_plan") or {}
