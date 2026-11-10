@@ -5,6 +5,57 @@ import asyncio
 from typing import Any
 
 
+def classify_image_load_status(
+    source: str | None, complete: bool, natural_width: int,
+    deferred_source: str | None = None,
+) -> str:
+    """Classify image evidence without treating an absent lazy source as a broken request."""
+    if not str(source or "").strip():
+        return "lazy_not_triggered" if str(deferred_source or "").strip() else "missing_source"
+    if not complete:
+        return "pending_timeout"
+    return "loaded" if int(natural_width or 0) > 0 else "broken"
+
+
+async def settle_page_images(page: Any, timeout_ms: int = 8000) -> dict[str, Any]:
+    """Trigger lazy images with bounded scrolling, then wait a bounded time for requests."""
+    timeout_ms = max(1000, min(15000, int(timeout_ms)))
+    scroll_result = {"scroll_steps": 0, "image_count": 0}
+    try:
+        scroll_result = await page.evaluate("""async () => {
+          const originalY = window.scrollY;
+          const step = Math.max(300, Math.floor(window.innerHeight * 0.8));
+          const maxY = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+          let steps = 0;
+          for (let y = 0; y <= maxY && steps < 40; y += step, steps++) {
+            window.scrollTo(0, y);
+            await new Promise(resolve => setTimeout(resolve, 90));
+          }
+          window.scrollTo(0, maxY);
+          await new Promise(resolve => setTimeout(resolve, 180));
+          const imageCount = document.images.length;
+          window.scrollTo(0, originalY);
+          return {scroll_steps: steps, image_count: imageCount};
+        }""")
+    except Exception:
+        # Scrolling is best-effort; the readiness check below still records the state.
+        pass
+    timed_out = False
+    try:
+        await page.wait_for_function(
+            "() => Array.from(document.images).every(img => img.complete || "
+            "(!img.currentSrc && !img.getAttribute('src') && !img.getAttribute('data-src')))",
+            timeout=timeout_ms,
+        )
+    except Exception:
+        timed_out = True
+    return {
+        **(scroll_result if isinstance(scroll_result, dict) else {}),
+        "wait_timeout_ms": timeout_ms,
+        "wait_timed_out": timed_out,
+    }
+
+
 async def collect_page_signals(page: Any) -> dict[str, Any]:
     """Collect observable DOM signals; do not treat these as full audit passes."""
     return await page.evaluate(r"""() => {
@@ -46,13 +97,23 @@ async def collect_page_signals(page: Any) -> dict[str, Any]:
           image_count: images.length, images_missing_alt: images.filter(img => !img.hasAttribute("alt")).length,
           h1_headings: Array.from(document.querySelectorAll("h1")).map(h => (h.innerText || h.textContent || "").trim()).slice(0, 100),
           images: images.map(img => { const r=img.getBoundingClientRect(); return {
-            src: img.currentSrc || img.src || "", alt: img.getAttribute("alt"), complete: img.complete,
+            src: img.currentSrc || img.src || "", deferred_src: img.getAttribute("data-src") || img.getAttribute("data-lazy-src") || img.getAttribute("data-original") || null,
+            alt: img.getAttribute("alt"), complete: img.complete,
             natural_width: img.naturalWidth, natural_height: img.naturalHeight,
             rendered_width: Math.round(r.width), rendered_height: Math.round(r.height),
             visible: visible(img), selector: selectorFor(img), outer_html: img.outerHTML.slice(0,1600),
-            load_status: img.complete ? (img.naturalWidth > 0 ? "loaded" : "broken") : "pending"
+            load_status: (() => {
+              const source = img.currentSrc || img.getAttribute("src") || "";
+              const deferred = img.getAttribute("data-src") || img.getAttribute("data-lazy-src") || img.getAttribute("data-original") || "";
+              if (!source) return deferred ? "lazy_not_triggered" : "missing_source";
+              if (!img.complete) return "pending_timeout";
+              return img.naturalWidth > 0 ? "loaded" : "broken";
+            })()
           }; }).slice(0, 500),
-          broken_image_count: images.filter(img => img.complete && img.naturalWidth === 0).length,
+          broken_image_count: images.filter(img => (img.currentSrc || img.getAttribute("src")) && img.complete && img.naturalWidth === 0).length,
+          pending_image_count: images.filter(img => !img.complete && Boolean(img.currentSrc || img.getAttribute("src"))).length,
+          lazy_not_triggered_image_count: images.filter(img => !img.currentSrc && !img.getAttribute("src") && Boolean(img.getAttribute("data-src") || img.getAttribute("data-lazy-src") || img.getAttribute("data-original"))).length,
+          missing_source_image_count: images.filter(img => !img.currentSrc && !img.getAttribute("src") && !img.getAttribute("data-src") && !img.getAttribute("data-lazy-src") && !img.getAttribute("data-original")).length,
           images_empty_alt: images.filter(img => img.hasAttribute("alt") && !img.getAttribute("alt").trim()).length,
           internal_link_count: links.filter(a => { try { return new URL(a.href).origin === location.origin; } catch { return false; } }).length,
           external_link_count: links.filter(a => { try { return new URL(a.href).origin !== location.origin; } catch { return false; } }).length,
