@@ -167,23 +167,9 @@ class BrowserRuntime:
 
     async def close_task_session(self, task_id: str) -> None:
         """End task ownership while retaining Steel's live viewer for report review."""
-        mcp_session_id = self.steel_mcp._sessions.get(task_id)
-        if mcp_session_id:
-            state = self._task_sessions.get(task_id)
-            retention_ms = max(60_000, int(os.getenv("STEEL_SESSION_RETENTION_MS", "600000")))
-            retained_until = datetime.now(UTC).timestamp() + retention_ms / 1000
-            if state is not None:
-                state["status"] = "retained"
-                state["active"] = True
-                state["finished_at"] = datetime.now(UTC).isoformat()
-                state["retained_until"] = datetime.fromtimestamp(retained_until, UTC).isoformat()
-            self._browser_event(
-                task_id,
-                f"Steel browser retained for report review ({retention_ms // 60000} minute(s))",
-                status="retained",
-            )
-            # Steel session TTL handles final cleanup; do not release the live viewer here.
-            return
+        # MCP-created sessions must be explicitly released when a task ends.
+        # Retaining every completed MCP session consumes Steel's finite session slots;
+        # the remote TTL is only a fallback, not the normal lifecycle mechanism.
         await self.steel_mcp.release_task_session(task_id)
         context = self._task_contexts.pop(task_id, None)
         primary_page = self._task_pages.pop(task_id, None)
