@@ -377,6 +377,7 @@ export default function App() {
   const [checklistDismissed, setChecklistDismissed] = useState(false);
   const [browserPinned, setBrowserPinned] = useState(false);
   const [browserDismissed, setBrowserDismissed] = useState(false);
+  const [browserExpanded, setBrowserExpanded] = useState(false);
   const [checklistFullscreen, setChecklistFullscreen] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     try { return localStorage.getItem("night-walker-theme") === "light" ? "light" : "dark"; }
@@ -1010,7 +1011,7 @@ export default function App() {
           </section>
         </div>
 
-        <div className={`floating-browser ${selected?.browser?.active ? "is-running" : ""} ${browserPinned ? "is-pinned" : ""} ${browserDismissed ? "is-dismissed" : ""}`}>
+        <div className={`floating-browser ${selected?.browser?.active ? "is-running" : ""} ${browserPinned ? "is-pinned" : ""} ${browserDismissed ? "is-dismissed" : ""} ${browserExpanded ? "is-expanded" : ""} ${browserPinned && checklistPinned && !browserDismissed && !checklistDismissed ? "is-dual-open" : ""}`}>
           <button
             type="button"
             className="floating-browser__trigger"
@@ -1032,7 +1033,17 @@ export default function App() {
                 <span className="section-kicker"><MonitorPlay size={13} /> BROWSER OBSERVABILITY</span>
                 <strong>{selected?.browser?.page_title || "Waiting for browser activity"}</strong>
               </div>
-              <button
+              <div className="floating-browser__header-actions">
+                <button
+                  type="button"
+                  className="floating-browser__expand"
+                  aria-label={browserExpanded ? "Restore browser monitor size" : "Expand browser monitor"}
+                  title={browserExpanded ? "Restore size" : "Expand"}
+                  onClick={() => setBrowserExpanded((current) => !current)}
+                >
+                  {browserExpanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+                </button>
+                <button
                 type="button"
                 className="floating-browser__close"
                 aria-label="Close browser monitor"
@@ -1042,7 +1053,8 @@ export default function App() {
                 }}
               >
                 <X size={16} />
-              </button>
+                </button>
+              </div>
             </div>
             <div className="floating-browser__meta">
               <span className={selected?.browser?.active ? "is-live" : ""}>
