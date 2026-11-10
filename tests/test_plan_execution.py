@@ -1,6 +1,6 @@
 import pytest
 
-from nightwalker.plan_execution import complete_step, initialise_plan, ready_steps, ready_steps_for_capture, start_step
+from nightwalker.plan_execution import complete_step, fail_step, initialise_plan, ready_steps, ready_steps_for_capture, reset_retryable_steps, start_step
 
 
 def sample_plan():
@@ -47,3 +47,29 @@ def test_product_search_capture_does_not_advance_dependent_step_from_stale_page(
     assert [step["step_id"] for step in ready_steps_for_capture(
         plan, "extract", one_step_per_capture=True,
     )] == ["extract"]
+
+
+def test_retry_requeues_only_blocked_steps_with_verified_dependencies():
+    plan = sample_plan()
+    start_step(plan, "open")
+    complete_step(plan, "open", evidence_refs=["ev-home"], result="Homepage captured")
+    start_step(plan, "extract")
+    fail_step(plan, "extract", "Product card not found", blocked=True)
+
+    reset = reset_retryable_steps(plan)
+
+    assert reset == ["extract"]
+    assert plan["steps"][0]["status"] == "completed"
+    assert plan["steps"][1]["status"] == "pending"
+    assert [step["step_id"] for step in ready_steps(plan)] == ["extract"]
+
+
+def test_retry_does_not_requeue_step_with_unverified_dependency():
+    plan = sample_plan()
+    start_step(plan, "open")
+    fail_step(plan, "open", "Navigation failed", blocked=True)
+
+    assert reset_retryable_steps(plan) == []
+    assert plan["steps"][0]["status"] == "blocked"
+    assert plan["steps"][1]["status"] == "pending"
+    assert ready_steps(plan) == []
