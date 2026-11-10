@@ -15,6 +15,7 @@ class SteelMCPClient:
         self._lock = asyncio.Lock()
         self._tools: list[dict[str, Any]] = []
         self._stderr_task: asyncio.Task | None = None
+        self._sessions: dict[str, str] = {}
 
     @property
     def connected(self) -> bool:
@@ -126,6 +127,78 @@ class SteelMCPClient:
             "structured_content": result.get("structuredContent"),
         }
 
+    async def session_for_task(self, task_id: str) -> str:
+        """Create one Steel MCP browser session per mission and reuse it across steps."""
+        existing = self._sessions.get(task_id)
+        if existing:
+            return existing
+        created = await self.call_tool("steel_session_create", {})
+        if created["is_error"]:
+            raise RuntimeError(str(created["content"])[:1000])
+        session_id = str((created.get("structured_content") or {}).get("session_id") or "")
+        if not session_id:
+            raise RuntimeError("Steel MCP session_create did not return a session_id")
+        self._sessions[task_id] = session_id
+        return session_id
+
+    async def execute_mission_step(
+        self, task_id: str, url: str, objective: str, capability: str,
+        propose_tool_call,
+    ) -> dict[str, Any]:
+        """Execute one authorised model-authored mission step using registered Steel tools."""
+        session_id = await self.session_for_task(task_id)
+        if capability == "navigate":
+            result = await self.call_tool("steel_navigate", {
+                "session_id": session_id, "url": url, "include_snapshot": True,
+            })
+            selected_tool = "steel_navigate"
+        else:
+            snapshot = await self.call_tool("steel_snapshot", {
+                "session_id": session_id, "interactive_only": False,
+            })
+            if snapshot["is_error"]:
+                raise RuntimeError(str(snapshot["content"])[:1000])
+            allowed_by_capability = {
+                "interact": {"steel_find", "steel_act", "steel_wait_for"},
+                "extract": {"steel_snapshot", "steel_scrape"},
+                "recover": {"steel_navigate", "steel_wait_for"},
+            }
+            allowed = allowed_by_capability.get(capability)
+            if not allowed:
+                raise PermissionError(f"Unsupported Steel MCP mission capability: {capability}")
+            proposal = await propose_tool_call(
+                task_id=task_id, objective=objective, capability=capability,
+                observation={"url": url, "snapshot": snapshot, "session_id": session_id},
+                tools=[tool for tool in self._tools if tool["name"] in allowed],
+                session_id=session_id,
+            )
+            selected_tool = str(proposal.get("tool_name") or "")
+            if selected_tool not in allowed:
+                raise PermissionError("Model selected a Steel tool outside the capability allowlist")
+            arguments = dict(proposal.get("arguments") or {})
+            arguments["session_id"] = session_id
+            result = await self.call_tool(selected_tool, arguments)
+        if result["is_error"]:
+            raise RuntimeError(str(result["content"])[:1500])
+        after = await self.call_tool("steel_snapshot", {
+            "session_id": session_id, "interactive_only": False,
+        })
+        if after["is_error"]:
+            raise RuntimeError(str(after["content"])[:1000])
+        return {
+            "status": "completed", "session_id": session_id,
+            "tool_name": selected_tool, "tool_result": result,
+            "snapshot": after,
+        }
+
+    async def release_task_session(self, task_id: str) -> None:
+        session_id = self._sessions.pop(task_id, None)
+        if session_id and self.connected:
+            try:
+                await self.call_tool("steel_session_release", {"session_id": session_id})
+            except Exception:
+                pass
+
     async def smoke_test(self, url: str) -> dict[str, Any]:
         """Run a minimal create/navigate/snapshot/release flow through Steel MCP."""
         created = await self.call_tool("steel_session_create", {})
@@ -159,6 +232,7 @@ class SteelMCPClient:
     async def close(self) -> None:
         process, self._process = self._process, None
         self._tools = []
+        self._sessions.clear()
         if process is not None:
             if process.returncode is None:
                 process.terminate()
