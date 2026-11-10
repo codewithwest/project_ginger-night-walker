@@ -415,7 +415,7 @@ class OllamaClient:
             "'South Africa'; cover retailer discovery, product ranges, categories, pricing and online "
             "shopping experience. Avoid lexical matches unrelated to the subject. Return only JSON matching the schema."
         )
-        packet = {"original_objective": objective[:2000], "available_capabilities": [
+        packet = {"original_objective": objective, "available_capabilities": [
             "navigate", "interact", "extract", "recover"
         ]}
         body = {"model": model, "stream": False,
@@ -435,9 +435,11 @@ class OllamaClient:
                 response.raise_for_status()
                 raw = self._chat_content(response.json(), model=model, operation="Execution blueprint")
                 blueprint = ExecutionBlueprint.model_validate_json(raw)
-                if blueprint.original_objective.strip() != objective.strip():
-                    raise ValueError("Planner changed the immutable original objective")
-                return blueprint
+                # The user's objective is authoritative application state, not a
+                # planner-authored field. Some models paraphrase or truncate echoed
+                # input; never let that invalidate planning or overwrite the source.
+                # The complete objective is supplied above and restored verbatim here.
+                return blueprint.model_copy(update={"original_objective": objective})
         except (httpx.HTTPError, ValueError, ValidationError, KeyError) as exc:
             raise OllamaUnavailable(f"Execution blueprint planning failed: {exc}") from exc
 
