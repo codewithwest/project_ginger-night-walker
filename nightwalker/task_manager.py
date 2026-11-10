@@ -1069,7 +1069,27 @@ class TaskManager:
                                     plan_step_urls[step["step_id"]] = product_url
                             else:
                                 plan_step_urls.setdefault(step["step_id"], result.get("final_url") or next_url)
-                            if capability == "navigate" and (
+                            cart_results = (result.get("structured_data") or {}).get("qa_cart_journey", {}).get("step_results", [])
+                            cart_step_result = next((
+                                item for item in reversed(cart_results)
+                                if isinstance(item, dict) and item.get("step_id") == str(step.get("step_id") or "")
+                            ), None)
+                            if cart_step_result and cart_step_result.get("status") == "verified":
+                                cart_step_id = str(step.get("step_id") or "")
+                                cart_labels = {
+                                    "qa-discover": "Uniquely identified the requested product card and its Add to Cart control",
+                                    "qa-availability": "Clicked Add to Cart and observed a cart change",
+                                    "qa-content": "Captured the requested cart line item and its displayed price and quantity",
+                                    "qa-validate": "Removed only the requested cart line and verified it was absent",
+                                    "qa-synthesise": "Observed an explicit empty-cart state",
+                                }
+                                label = next((value for key, value in cart_labels.items() if cart_step_id.endswith(key)), "Verified cart journey step")
+                                verified_result = label
+                            elif cart_step_result:
+                                verified_result = None
+                            if verified_result:
+                                pass
+                            elif capability == "navigate" and (
                                 int(step.get("index") or 0) == 1
                                 or str(step.get("step_id", "")).endswith(("seo-discover", "qa-discover"))
                                 or any(term in objective_text for term in ("homepage", "home page", "starting page"))
