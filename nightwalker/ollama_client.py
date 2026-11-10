@@ -397,23 +397,19 @@ class OllamaClient:
 
 
     async def create_execution_blueprint(self, objective: str, task_id: str | None = None) -> ExecutionBlueprint:
-        """Plan measurable success, subtasks, dependencies and tool needs before allocation."""
+        """Analyse the objective and define acceptance criteria; the Decider owns execution planning."""
         base_url = self._require_base_url("DECIDER")
         model = self.registry.model_for(Capability.NAVIGATE)
         schema = ExecutionBlueprint.model_json_schema()
         system_prompt = (
-            "You are Ginger's goal analyst and execution architect. Before any agent is assigned, "
-            "interpret the immutable user objective, define measurable success criteria with explicit "
-            "acceptance tests and evidence requirements, then decompose the work into the smallest useful "
-            "subtasks. For each subtask choose exactly one capability from navigate, interact, extract, recover; "
-            "list the tool names it needs, criteria it contributes to, dependencies, whether it can run in "
-            "parallel, and its expected output. Use only tools from this catalogue: browser_navigate, "
-            "browser_snapshot, browser_click, browser_type, browser_select_option, browser_extract, "
-            "evidence_read, research_search. If a named tool is not available in the runtime, list it as "
-            "a requirement but do not imply it exists. Keep read-only work read-only. Do not assign agents, "
-            "execute tools, invent evidence, or grant permissions. All subtasks must map to the success "
-            "criteria. Dependencies must be acyclic. Treat every explicit user-requested verification "
-            "dimension as a separate success criterion and map it to a subtask with a measurable acceptance test. "
+            "You are Ginger's goal analyst. Interpret the immutable user objective and define measurable "
+            "success criteria with explicit acceptance tests and evidence requirements. The Decider has already "
+            "authored the sole executable plan, including its step order, objectives, capabilities and dependencies. "
+            "You must not create, repeat, revise or suggest execution steps, subtasks, task IDs, capabilities, "
+            "tool requirements, dependencies, or an alternative plan. Return acceptance criteria and interpretation "
+            "only, plus concise research queries where useful. Do not assign agents, execute tools, invent evidence, "
+            "or grant permissions. Treat every explicit user-requested verification dimension as a separate "
+            "success criterion with a measurable acceptance test. "
             "For product-search QA, separately verify (1) the exact requested URL/navigation outcome, "
             "(2) discovery of a real same-origin catalogue/search route when the supplied route is unavailable, "
             "(3) whether the requested search was actually submitted, and (4) each requested product attribute "
@@ -425,13 +421,8 @@ class OllamaClient:
             "verify the requested variant is selected and available before adding; verify cart contents, price and "
             "quantity only when requested; remove only the authorised item; never open or submit checkout unless "
             "the user explicitly requested checkout. Do not assume a quoted term is the catalogue product title. "
-            "Author the plan entirely from the user's request and the evidence needed to fulfil it. "
-            "Choose the necessary steps, their order, objectives, capabilities and dependencies dynamically; "
-            "do not use a fixed template, canonical step IDs, mandatory stage list, or assumed ecommerce sequence. "
-            "Use navigate only for page navigation, interact for a concrete user-authorised page action, "
-            "extract for observing or verifying evidence, and recover only when recovery is needed. "
-            "Add a step only when it advances the requested outcome or verifies a stated requirement. "
-            "Keep validation dependent on the evidence it validates. Generate 3-6 concise research_queries "
+            "Do not author an execution plan; the Decider alone chooses steps and their order. "
+            "Generate 3-6 concise research_queries "
             "that name the actual subject/category, geography and evidence dimensions. Do not turn instruction words such "
             "as 'top', 'best', 'five' or 'compare' into standalone search topics. For furniture-retailer "
             "research in South Africa, every discovery query must explicitly include 'furniture' and "
