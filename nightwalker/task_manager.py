@@ -238,9 +238,12 @@ class TaskManager:
                     record["execution_plan"] = initialise_plan(record["execution_blueprint"])
                     # Reuse only completed steps whose objective, capability and
                     # acceptance criteria are unchanged and whose evidence still exists.
+                    saved_result = record.get("result") if isinstance(record.get("result"), dict) else {}
+                    saved_checkpoint = record.get("checkpoint") if isinstance(record.get("checkpoint"), dict) else {}
+                    persisted_evidence = list(saved_result.get("evidence") or []) + list(saved_checkpoint.get("evidence") or [])
                     evidence_ids = {
                         str(item.get("evidence_id"))
-                        for item in (record.get("result") or {}).get("evidence", [])
+                        for item in persisted_evidence
                         if isinstance(item, dict) and item.get("evidence_id")
                     }
                     for old_step in old_steps:
