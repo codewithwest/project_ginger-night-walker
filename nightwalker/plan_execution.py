@@ -170,7 +170,6 @@ def start_step(plan: dict[str, Any], step_id: str) -> dict[str, Any]:
         raise ValueError("Unknown planned step")
     if step["status"] in TERMINAL:
         return step
-    by_id = {s["step_id"]: s for s in plan["steps"]}
     # Dependencies describe the intended order and are audited after execution.
     # They must not prevent the remaining plan from running when an earlier
     # acceptance check is inconclusive.
@@ -188,7 +187,6 @@ def complete_step(
         raise ValueError("Unknown planned step")
     if not evidence_refs:
         raise ValueError("A planned step cannot complete without evidence references")
-    by_id = {s["step_id"]: s for s in plan["steps"]}
     # Dependency integrity is checked after all executable steps have run.
     if step.get("status") != "in_progress":
         raise ValueError("A planned step must be in progress before it can be completed")
