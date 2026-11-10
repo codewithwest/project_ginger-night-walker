@@ -114,3 +114,17 @@ npm run build
 ```
 
 Documentation is part of the engineering contract: update diagrams, schemas, security notes, API tables and implementation status whenever behavior or boundaries change.
+
+
+## Steel MCP mission execution
+
+Set `STEEL_MCP_ENABLED=true` and `STEEL_MCP_MISSION_ENABLED=true` in `.env`, then rebuild Night Walker:
+
+```bash
+docker compose up -d --build night-walker
+```
+
+Check `GET /health/steel-mcp` for `connected: true` and `mission_execution_enabled: true`.
+For general research missions, the active authorised plan step is executed through the official Steel MCP tools. The model selects from the discovered tools permitted for that step capability; the runtime creates and reuses one MCP session per task, captures snapshot evidence, and releases the session at task completion.
+
+SEO and QA workflows (including product-search and cart verification) remain on the existing Playwright path until their specialised evidence collectors have MCP parity. If MCP is disabled or unavailable, the existing browser path remains in use.
