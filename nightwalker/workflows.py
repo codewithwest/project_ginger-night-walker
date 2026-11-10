@@ -35,6 +35,9 @@ _QA_TERMS = {
     "bug", "bugs", "defects",
     "product listing", "product listings", "product search", "search results",
     "verify the product appears", "verify that the product appears",
+    "add to cart", "add it to cart", "remove from cart", "remove it from the cart",
+    "shopping cart", "basket", "cart is empty", "cart is empty", "quantity",
+    "do not checkout", "without checking out", "cart journey", "cart flow",
     "check the product appears", "check that the product appears",
     "confirm the product appears", "confirm that the product appears",
 }
@@ -98,7 +101,10 @@ def qa_scope_for_objective(objective: str) -> str:
     return "site_wide" if qa_requires_site_crawl(objective) else "single_page"
 
 def extract_product_search_query(objective: str) -> str | None:
-    """Extract a product search query from a QA objective using broad patterns."""
+    """Extract a product search query, excluding ecommerce cart workflows."""
+    value = " ".join(objective.casefold().split())
+    if any(term in value for term in ("add to cart", "add it to the cart", "remove from cart", "remove it from the cart", "shopping cart", "cart is empty", "do not checkout", "without checking out")):
+        return None
     m = re.search(
         r"(?i)search\s+for\s+[“”\"'\u2018\u2019]([^“”\"'\u2018\u2019]{1,100})[“”\"'\u2018\u2019]",
         objective,
