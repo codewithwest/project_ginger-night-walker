@@ -1193,6 +1193,7 @@ class TaskManager:
                         str(record.get("workflow_type") or "") == "qa"
                         and extract_product_search_query(str(objective or "")) is not None
                     )
+                    focused_cart_journey = is_ecommerce_cart_workflow(str(objective or ""))
                     if isinstance(execution_plan, dict) and evidence_refs:
                         # Advance all sequential steps that this single captured page
                         # can actually satisfy. The trusted runtime performs extraction
@@ -1208,7 +1209,7 @@ class TaskManager:
                             ready = ready_steps_for_capture(
                                 execution_plan,
                                 str((active_plan_step or {}).get("step_id") or ""),
-                                one_step_per_capture=focused_product_search,
+                                one_step_per_capture=(focused_product_search or focused_cart_journey),
                             )
                             if not ready:
                                 break
