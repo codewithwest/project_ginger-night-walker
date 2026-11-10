@@ -181,6 +181,11 @@ class BrowserRuntime:
             state["finished_at"] = datetime.now(UTC).isoformat()
         if context is not None:
             await context.close()
+        if steel_session:
+            session_id, browser = steel_session
+            if browser.is_connected():
+                await browser.close()
+            await self._release_steel_session(session_id)
 
     @staticmethod
     def _normalise_steel_websocket_url(websocket_url: str, api_base: str) -> str:
