@@ -42,6 +42,7 @@ from nightwalker.task_state_store import TaskStateStore
 from nightwalker.task_timing import TaskTiming
 from nightwalker.workflows import (
     WorkflowType,
+    build_product_search_blueprint,
     classify_workflow,
     extract_product_search_query,
     qa_scope_for_objective,
@@ -597,6 +598,20 @@ class TaskManager:
                 )
                 if blueprint.original_objective.strip() != objective.strip():
                     raise ValueError("Execution planner changed the immutable task objective")
+                # Product-search QA has a strict browser-action contract: the
+                # query submission must be an authorised INTERACT step. The
+                # language model's generic blueprint has repeatedly mislabelled
+                # this step as NAVIGATE/EXTRACT, causing the evidence gate to
+                # block it before the browser could perform the search.
+                if (
+                    classify_workflow(objective) == WorkflowType.QA
+                    and extract_product_search_query(objective)
+                ):
+                    blueprint = build_product_search_blueprint(objective)
+                    self._log(
+                        task_id,
+                        "Applied deterministic product-search QA plan: navigation, authorised query submission, product extraction and validation",
+                    )
                 record["execution_blueprint"] = blueprint.model_dump(mode="json")
                 record["execution_plan"] = initialise_plan(record["execution_blueprint"])
                 record["workflow_summary"] = decision.summary or blueprint.interpretation
