@@ -24,14 +24,16 @@ _SEO_TERMS = {
     "seo", "search engine optimisation", "search engine optimization",
     "technical seo", "on-page seo", "on page seo", "indexability",
     "crawlability", "search visibility", "meta description", "structured data",
-    "robots.txt", "sitemap.xml", "core web vitals",
+    "robots.txt", "sitemap.xml", "core web vitals", "page title", "title tag",
+    "meta title", "h1 heading", "h1 headings", "heading structure", "alt text",
+    "image alt text", "canonical url", "indexing",
 }
 _QA_TERMS = {
     "qa", "quality assurance", "test website", "test web app", "test web application",
     "website testing", "web app testing", "functional testing", "regression testing",
     "broken links", "user journey", "usability testing", "accessibility testing",
     "responsive testing", "smoke test", "smoke testing", "broken images",
-    "console error", "console errors", "browser errors", "page title", "h1 heading", "h1 headings",
+    "console error", "console errors", "browser errors",
     "bug", "bugs", "defects",
     "product listing", "product listings", "product search", "search results",
     "verify the product appears", "verify that the product appears",
@@ -406,14 +408,14 @@ def build_workflow_blueprint(objective: str, workflow: WorkflowType) -> Executio
             criteria = [
                 ("qa-scope", "The requested page and single-page test boundary are recorded.", "Evidence identifies the supplied target URL; unrelated same-origin pages are not required."),
                 ("qa-availability", "The requested page loads and its HTTP/navigation outcome is recorded.", "The target page has a captured navigation outcome."),
-                ("qa-page-smoke", "The requested page title, H1 headings, image load status and browser console errors are inspected.", "Evidence records the document title, all H1 texts/count, each image load outcome and captured console/page errors."),
+                ("qa-page-smoke", "The requested page's usability signals and runtime behaviour are inspected.", "Evidence records visible interactive controls, accessible names, navigation links, forms, image load failures and captured console/page errors; SEO metadata and heading rules are excluded."),
                 ("qa-validation", "Every candidate page-level defect is validated against captured browser evidence before recommendations.", "Each candidate has a persisted confirmed or insufficient-evidence verdict and linked validation context."),
                 ("qa-report", "Only confirmed page-level defects receive recommendations.", "Recommendations reference confirmed defects and include reproducible verification steps."),
             ]
             tasks = [
                 ("qa-discover", "Open the supplied page and establish a single-page QA boundary.", Capability.NAVIGATE, ["qa-scope"]),
                 ("qa-availability", "Record the requested page's HTTP and navigation outcome.", Capability.EXTRACT, ["qa-availability"]),
-                ("qa-content", _qa_content_objective(objective), Capability.EXTRACT, ["qa-page-smoke"]),
+                ("qa-content", "Inspect visible interactive controls, links, forms, image load failures and runtime behaviour for usability issues. Do not audit SEO metadata, heading hierarchy or indexing.", Capability.EXTRACT, ["qa-page-smoke"]),
                 ("qa-validate", "Validate each candidate page defect against the captured page, image and runtime evidence.", Capability.EXTRACT, ["qa-validation"]),
                 ("qa-synthesise", "Report only confirmed defects and recommendations for the requested page.", Capability.EXTRACT, ["qa-report"]),
             ]
