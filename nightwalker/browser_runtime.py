@@ -166,6 +166,7 @@ class BrowserRuntime:
         return {"closed": closed, "remaining": remaining, "reason": reason[:300]}
 
     async def close_task_session(self, task_id: str) -> None:
+        await self.steel_mcp.release_task_session(task_id)
         """End task ownership while briefly retaining Steel for its live report preview."""
         context = self._task_contexts.pop(task_id, None)
         primary_page = self._task_pages.pop(task_id, None)
@@ -1515,6 +1516,75 @@ class BrowserRuntime:
         ):
             return copy.deepcopy(stored)
         return None
+
+    async def run_steel_mcp_step(
+        self, task_id: str, url: str, step: dict, objective: str, ollama,
+    ) -> dict[str, Any]:
+        """Run one authorised mission step through the official Steel MCP tool surface."""
+        self.policy.validate_url(url, allow_private_networks=False)
+        capability = str(step.get("capability") or "").strip().lower()
+        step_id = str(step.get("step_id") or "")
+        step_objective = str(step.get("objective") or "").strip()
+        if capability not in {"navigate", "interact", "extract", "recover"} or not step_id or not step_objective:
+            raise PermissionError("Invalid authorised mission step for Steel MCP")
+        self._task_sessions.setdefault(task_id, {
+            "backend": "steel-mcp", "status": "connecting", "active": True,
+            "activity": [], "started_at": datetime.now(UTC).isoformat(),
+        })
+        state = self._task_sessions[task_id]
+        state["backend"] = "steel-mcp"
+        self._browser_event(
+            task_id, f"Steel MCP executing authorised {capability} step: {step_objective}",
+            url=url, action="steel_mcp_" + capability, plan_step_id=step_id,
+        )
+        result = await self.steel_mcp.execute_mission_step(
+            task_id, url, step_objective, capability,
+            ollama.propose_steel_mcp_tool_call,
+        )
+        snapshots = result.get("snapshot") or {}
+        content = snapshots.get("content") or []
+        captured_text = "\n".join(
+            str(item.get("text") or "") for item in content if isinstance(item, dict)
+        )[:20000]
+        tool_content = (result.get("tool_result") or {}).get("content") or []
+        action_text = "\n".join(
+            str(item.get("text") or "") for item in tool_content if isinstance(item, dict)
+        )[:12000]
+        combined_text = "\n".join(part for part in (action_text, captured_text) if part).strip()
+        evidence_payload = {
+            "url": url, "final_url": url, "title": "",
+            "text": combined_text, "headings": [],
+            "evidence": [{
+                "url": url, "title": "", "captured_text": combined_text[:15000],
+                "capture_method": "steel_mcp_snapshot",
+            }],
+            "sources": [{"url": url, "title": "", "source_type": "webpage"}],
+            "structured_data": {
+                "browser_backend": "steel-mcp",
+                "steel_tool": result.get("tool_name"),
+                "steel_session_id": result.get("session_id"),
+                "mission_step": {"step_id": step_id, "capability": capability},
+            },
+        }
+        evidence_id = self.evidence.save(task_id, evidence_payload)
+        evidence_payload["evidence"][0]["evidence_id"] = evidence_id
+        self._browser_event(
+            task_id, f"Steel MCP tool {result.get('tool_name')} completed; snapshot evidence captured",
+            url=url, status="active", action="steel_mcp_result", plan_step_id=step_id,
+        )
+        return {
+            "status": "completed" if combined_text else "blocked",
+            "final_url": url, "http_status": None, "title": "",
+            "headings": [], "text": combined_text,
+            "evidence": evidence_payload["evidence"],
+            "sources": evidence_payload["sources"],
+            "structured_data": evidence_payload["structured_data"],
+            "evidence_id": evidence_id,
+            "issues": [] if combined_text else ["Steel MCP returned no snapshot text to verify this step."],
+            "browser_backend": "steel-mcp",
+            "steel_tool": result.get("tool_name"),
+            "steel_session_id": result.get("session_id"),
+        }
 
     async def run_plan(self, task_id: str, url: str, steps: list[dict], objective: str) -> dict:
         """Execute only public-site navigation, same-origin link following and extraction."""
