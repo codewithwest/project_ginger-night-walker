@@ -809,6 +809,129 @@ class BrowserRuntime:
             "searched_url": page.url, "route": route,
         }
 
+    @staticmethod
+    def _cart_product_name(objective: str) -> str | None:
+        """Extract the explicitly quoted product name from a cart objective."""
+        matches = re.findall(r"[“\"']([^”\"']{2,120})[”\"']", objective)
+        ignored = {"http", "https", "do not checkout"}
+        return next((item.strip() for item in matches if item.strip().casefold() not in ignored
+                     and not item.strip().lower().startswith(("http://", "https://"))), None)
+
+    async def _run_cart_journey_step(self, page: Page, step_id: str, objective: str,
+                                     task_id: str) -> dict[str, Any]:
+        """Run a narrowly scoped cart step; fail closed whenever the UI is ambiguous."""
+        session = self._task_sessions.setdefault(task_id, {})
+        journey = session.setdefault("qa_cart_journey", {
+            "product_name": self._cart_product_name(objective),
+            "steps": {}, "checkout_interaction": "prohibited",
+        })
+        name = journey.get("product_name") or self._cart_product_name(objective)
+        if not name:
+            return {"status": "blocked", "reason": "No exact quoted product name was found."}
+        journey["product_name"] = name
+        normal = lambda value: re.sub(r"[^a-z0-9]+", " ", str(value or "").casefold()).strip()
+        if step_id.endswith("qa-discover"):
+            selector = '[data-product-id], [data-product], .product-card, .product-item, .productinfo, .single-products, li.product'
+            cards = await page.locator(selector).evaluate_all(
+                """nodes => nodes.map((node, index) => {
+                    const title = node.querySelector('[itemprop="name"], .product-name, .product-title, h2, h3, h4, a[title]');
+                    const titleText = (title && (title.innerText || title.getAttribute('content') || title.title)) || '';
+                    const buttons = Array.from(node.querySelectorAll('button, a, [role="button"]'));
+                    const add = buttons.filter(el => /add to cart/i.test((el.innerText || '') + ' ' + (el.getAttribute('aria-label') || '')));
+                    return {index, title: titleText.trim(), addCount: add.length,
+                        addText: add.map(el => (el.innerText || el.getAttribute('aria-label') || '').trim())};
+                })"""
+            )
+            matches = [item for item in cards if normal(name) == normal(item.get("title"))]
+            if len(matches) != 1:
+                result = {"status": "blocked", "reason": "Expected one exact product card; found "
+                          + str(len(matches)), "candidate_count": len(matches)}
+            elif matches[0]["addCount"] != 1:
+                result = {"status": "blocked", "reason": "The matching card does not contain exactly one Add to Cart control.",
+                          "product_name": matches[0]["title"], "add_control_count": matches[0]["addCount"]}
+            else:
+                journey["card_index"] = matches[0]["index"]
+                journey["card_selector"] = selector
+                result = {"status": "verified", "product_name": matches[0]["title"],
+                          "add_control": matches[0]["addText"][0], "card_index": matches[0]["index"]}
+            journey["steps"]["discovery"] = result
+            return result
+        if step_id.endswith("qa-availability"):
+            discovery = journey.get("steps", {}).get("discovery", {})
+            if discovery.get("status") != "verified":
+                return {"status": "blocked", "reason": "A unique product card was not verified."}
+            card = page.locator(journey["card_selector"]).nth(int(journey["card_index"]))
+            button = card.get_by_role("button", name=re.compile(r"add to cart", re.I))
+            if await button.count() != 1:
+                return {"status": "blocked", "reason": "Add to Cart control is no longer unique."}
+            before = (await page.locator("body").inner_text())[:20000]
+            await button.click(timeout=5000)
+            await page.wait_for_timeout(800)
+            after = (await page.locator("body").inner_text())[:20000]
+            confirmed = normal(name) in normal(after) and (
+                normal(after) != normal(before)
+                or bool(re.search(r"(?i)added to (?:your )?cart|view cart|shopping cart", after))
+            )
+            result = {"status": "verified" if confirmed else "unconfirmed",
+                      "product_name": name, "click_performed": True,
+                      "cart_change_observed": confirmed}
+            journey["steps"]["addition"] = result
+            return result
+        if step_id.endswith("qa-content"):
+            body = (await page.locator("body").inner_text())[:30000]
+            lines = [re.sub(r"\\s+", " ", line).strip() for line in body.splitlines() if line.strip()]
+            matching_lines = [line for line in lines if normal(name) in normal(line)]
+            price_pattern = re.compile(r"(?i)(?:R\\s*)[0-9][0-9,]*(?:\\.[0-9]{2})?")
+            prices = [price_pattern.search(line).group(0) for line in matching_lines if price_pattern.search(line)]
+            qty = re.search(r"(?i)(?:quantity|qty)\\s*[:：]?\\s*(\\d+)", "\\n".join(matching_lines))
+            result = {"status": "verified" if matching_lines and prices and qty else "unconfirmed",
+                      "product_name": name, "matching_lines": matching_lines[:8],
+                      "price": prices[0] if len(set(prices)) == 1 else None,
+                      "quantity": int(qty.group(1)) if qty else None}
+            journey["steps"]["cart_line_item"] = result
+            return result
+        if step_id.endswith("qa-validate"):
+            # Never click a broad Remove/Clear Cart control. Require one remove control
+            # inside a uniquely identified line-item container; otherwise block safely.
+            rows = await page.locator("tr, li, [class*='cart-item'], [class*='cart_product'], [data-cart-item]").evaluate_all(
+                """nodes => nodes.map((node, index) => ({index, text: (node.innerText || '').trim(),
+                    removeCount: Array.from(node.querySelectorAll('button, a, [role="button"]')).filter(el =>
+                      /^(remove|delete)$/i.test((el.innerText || el.getAttribute('aria-label') || '').trim())).length}))"""
+            )
+            matches = [row for row in rows if normal(name) in normal(row["text"])]
+            if len(matches) != 1 or matches[0]["removeCount"] != 1:
+                result = {"status": "blocked", "reason": "Could not identify exactly one Remove control scoped to the requested cart line.",
+                          "matching_line_count": len(matches)}
+            else:
+                row = page.locator("tr, li, [class*='cart-item'], [class*='cart_product'], [data-cart-item]").nth(matches[0]["index"])
+                controls = row.locator("button, a, [role='button']")
+                remove_indexes = await controls.evaluate_all(
+                    "nodes => nodes.map((el, index) => ({index, label: (el.innerText || el.getAttribute('aria-label') || '').trim()})).filter(x => /^(remove|delete)$/i.test(x.label))"
+                )
+                if len(remove_indexes) != 1:
+                    result = {"status": "blocked", "reason": "Remove control changed before activation."}
+                else:
+                    await controls.nth(remove_indexes[0]["index"]).click(timeout=5000)
+                    await page.wait_for_timeout(500)
+                    remaining = await page.locator("body").inner_text()
+                    absent = normal(name) not in normal(remaining)
+                    result = {"status": "verified" if absent else "unconfirmed",
+                              "product_name": name, "remove_clicked": True, "item_absent": absent}
+            journey["steps"]["removal"] = result
+            return result
+        if step_id.endswith("qa-synthesise"):
+            body = (await page.locator("body").inner_text())[:20000]
+            explicit_empty = bool(re.search(
+                r"(?i)your cart is (?:currently )?empty|shopping cart is empty|no items in (?:your )?cart|0 items",
+                body,
+            ))
+            result = {"status": "verified" if explicit_empty else "unconfirmed",
+                      "empty_cart_confirmed": explicit_empty,
+                      "product_name": name}
+            journey["steps"]["empty_cart"] = result
+            return result
+        return {"status": "blocked", "reason": "Unknown cart journey step."}
+
     async def _execute_interaction(
         self, page: Page, objective: str, workflow_type: str,
         existing_product_search: dict[str, Any] | None = None,
@@ -1344,6 +1467,15 @@ class BrowserRuntime:
                 if capability == "navigate":
                     continue
                 if capability == "interact":
+                    step_id = str(step.get("step_id") or "")
+                    if step_id.endswith(("qa-discover", "qa-availability", "qa-validate")):
+                        cart_result = await self._run_cart_journey_step(page, step_id, objective, task_id)
+                        self._task_sessions[task_id].setdefault("qa_cart_journey_results", []).append(
+                            {"step_id": step_id, **cart_result}
+                        )
+                        if cart_result.get("status") != "verified":
+                            issues.append("Cart step " + step_id + " was not verified: " + str(cart_result.get("reason") or cart_result.get("status")))
+                        continue
                     if workflow_type == "qa" and product_search_requested and qa_product_search is None:
                         self._browser_event(
                             task_id, "Executing requested product search at authorised interaction step",
@@ -1382,6 +1514,14 @@ class BrowserRuntime:
                     visited.append(page.url)
                     self._browser_event(task_id, "Reloaded the current page for recovery", url=page.url, title=(await page.title())[:500])
                 elif capability == "extract":
+                    step_id = str(step.get("step_id") or "")
+                    if step_id.endswith(("qa-content", "qa-synthesise")):
+                        cart_result = await self._run_cart_journey_step(page, step_id, objective, task_id)
+                        self._task_sessions[task_id].setdefault("qa_cart_journey_results", []).append(
+                            {"step_id": step_id, **cart_result}
+                        )
+                        if cart_result.get("status") != "verified":
+                            issues.append("Cart step " + step_id + " was not verified: " + str(cart_result.get("reason") or cart_result.get("status")))
                     continue
 
             title = (await page.title())[:500]
@@ -1646,6 +1786,12 @@ class BrowserRuntime:
                 "retrieved_at": retrieved_at,
             }]
             structured_data = {"products": products} if products else {}
+            cart_journey = self._task_sessions.get(task_id, {}).get("qa_cart_journey")
+            if cart_journey:
+                structured_data["qa_cart_journey"] = copy.deepcopy(cart_journey)
+                structured_data["qa_cart_journey"]["step_results"] = copy.deepcopy(
+                    self._task_sessions.get(task_id, {}).get("qa_cart_journey_results", [])
+                )
             if focused_product_search:
                 # The product-search result records below are the only relevant data.
                 structured_data = {}
