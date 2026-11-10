@@ -928,7 +928,8 @@ class BrowserRuntime:
                 journey["card_selector"] = selector
                 result = {"status": "verified", "product_name": matches[0]["title"],
                           "add_control": matches[0]["addText"][0], "card_index": matches[0]["index"],
-                          "search_attempted": search_attempted, "scroll_attempted": scroll_attempted,\n                          "scroll_steps": scroll_steps, "page_url": page.url}
+                          "search_attempted": search_attempted, "scroll_attempted": scroll_attempted,
+                          "scroll_steps": scroll_steps, "page_url": page.url}
             journey["steps"]["discovery"] = result
             return result
         if step_id.endswith("qa-availability"):
