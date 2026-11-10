@@ -165,3 +165,15 @@ def test_runtime_observation_type_is_never_confirmed_without_impact_evidence():
         "evidence_ids": ["ev-console"],
     }], evidence, structured)
     assert findings[0]["validation"]["verdict"] == "insufficient_evidence"
+
+
+def test_prioritisation_deduplicates_same_page_observations_and_merges_evidence():
+    findings = prioritise_findings([
+        {"type": "qa_browser_error", "claim": "Page error: missing function",
+         "affected_urls": ["https://example.com/"], "evidence_ids": ["ev-1"]},
+        {"type": "qa_browser_error", "claim": "Page error: missing function",
+         "affected_urls": ["https://example.com/"], "evidence_ids": ["ev-2"]},
+    ])
+    assert len(findings) == 1
+    assert findings[0]["evidence_ids"] == ["ev-1", "ev-2"]
+    assert findings[0]["occurrences"] == 2
