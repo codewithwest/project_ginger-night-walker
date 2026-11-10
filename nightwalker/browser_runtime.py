@@ -836,7 +836,7 @@ class BrowserRuntime:
                 """nodes => nodes.map((node, index) => {
                     const title = node.querySelector('[itemprop="name"], .product-name, .product-title, h2, h3, h4, a[title]');
                     const titleText = (title && (title.innerText || title.getAttribute('content') || title.title)) || '';
-                    const buttons = Array.from(node.querySelectorAll('button, a, [role="button"]'));
+                    const buttons = Array.from(node.querySelectorAll('button, [role="button"]'));
                     const add = buttons.filter(el => /add to cart/i.test((el.innerText || '') + ' ' + (el.getAttribute('aria-label') || '')));
                     return {index, title: titleText.trim(), addCount: add.length,
                         addText: add.map(el => (el.innerText || el.getAttribute('aria-label') || '').trim())};
@@ -857,6 +857,9 @@ class BrowserRuntime:
             journey["steps"]["discovery"] = result
             return result
         if step_id.endswith("qa-availability"):
+            prior_add = journey.get("steps", {}).get("addition", {})
+            if prior_add.get("click_performed"):
+                return {"status": "blocked", "reason": "Add to Cart was already clicked in this task; refusing to repeat an unconfirmed state-changing action."}
             discovery = journey.get("steps", {}).get("discovery", {})
             if discovery.get("status") != "verified":
                 return {"status": "blocked", "reason": "A unique product card was not verified."}
@@ -921,6 +924,9 @@ class BrowserRuntime:
             journey["steps"]["cart_line_item"] = result
             return result
         if step_id.endswith("qa-validate"):
+            prior_remove = journey.get("steps", {}).get("removal", {})
+            if prior_remove.get("remove_clicked"):
+                return {"status": "blocked", "reason": "Remove was already clicked in this task; refusing to repeat an unconfirmed state-changing action."}
             # Never click a broad Remove/Clear Cart control. Require one remove control
             # inside a uniquely identified line-item container; otherwise block safely.
             rows = await page.locator("tr, li, [class*='cart-item'], [class*='cart_product'], [data-cart-item]").evaluate_all(
