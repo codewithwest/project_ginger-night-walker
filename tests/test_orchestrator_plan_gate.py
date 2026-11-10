@@ -91,3 +91,40 @@ async def test_browser_workflow_executes_only_the_authorised_plan_step():
         "capability": "navigate",
         "objective": "Open the homepage",
     }]
+
+
+@pytest.mark.asyncio
+async def test_browser_workflow_routes_authorised_step_through_steel_mcp(monkeypatch):
+    monkeypatch.setenv("STEEL_MCP_MISSION_ENABLED", "true")
+    browser = FakeBrowser()
+
+    class FakeMCP:
+        connected = True
+
+    browser.steel_mcp = FakeMCP()
+    captured = {}
+
+    async def run_mcp(task_id, url, step, objective, ollama):
+        captured.update({
+            "task_id": task_id, "url": url, "step": step,
+            "objective": objective, "ollama": ollama,
+        })
+        return {"status": "completed", "evidence_id": "ev-test", "browser_backend": "steel-mcp"}
+
+    browser.run_steel_mcp_step = run_mcp
+    ollama = object()
+    orchestrator = Orchestrator(browser, ollama=ollama)
+    authorised = {
+        "step_id": "home", "capability": "navigate",
+        "objective": "Open the homepage", "status": "in_progress",
+    }
+
+    result = await orchestrator.run_browser_workflow(
+        "task-1", "Open example.com", browser_plan(), authorized_step=authorised,
+    )
+
+    assert result["status"] == "completed"
+    assert result["browser_backend"] == "steel-mcp"
+    assert captured["step"]["step_id"] == "home"
+    assert captured["ollama"] is ollama
+    assert browser.calls == []
