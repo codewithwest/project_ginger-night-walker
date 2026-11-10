@@ -1,3 +1,4 @@
+import pytest
 from pydantic import ValidationError
 
 from nightwalker.a2a import A2ABus, A2AMessage, A2AMessageType
