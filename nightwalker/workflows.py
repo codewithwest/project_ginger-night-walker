@@ -158,17 +158,17 @@ def is_ecommerce_cart_workflow(objective: str) -> bool:
     # destination (for example, "add 'Dark Grey' to the cart"). Exact phrase
     # matching missed these common natural-language cart requests.
     has_add_action = bool(re.search(
-        r"\\badd\\b.{0,120}\\bto\\s+(?:the\\s+)?(?:shopping\\s+)?cart\\b",
+        r"\badd\b.{0,120}\bto\s+(?:the\s+)?(?:shopping\s+)?cart\b",
         value,
     ))
     has_remove_action = bool(re.search(
-        r"\\bremove\\b.{0,100}\\b(?:from|out\\s+of)\\s+(?:the\\s+)?(?:shopping\\s+)?cart\\b",
+        r"\bremove\b.{0,100}\b(?:from|out\s+of)\s+(?:the\s+)?(?:shopping\s+)?cart\b",
         value,
     ))
     has_remove_item_action = bool(re.search(
-        r"\\bremove\\s+(?:it|the\\s+(?:item|product))\\b",
+        r"\bremove\s+(?:it|the\s+(?:item|product))\b",
         value,
-    )) and bool(re.search(r"\\bcart\\b", value))
+    )) and bool(re.search(r"\bcart\b", value))
     has_cart_action = has_add_action or has_remove_action or has_remove_item_action
     has_cart_verification = any(term in value for term in (
         "cart is empty", "empty cart", "verify its price", "verify the price",
