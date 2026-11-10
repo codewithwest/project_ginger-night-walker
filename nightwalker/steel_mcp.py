@@ -143,10 +143,12 @@ class SteelMCPClient:
 
     async def execute_mission_step(
         self, task_id: str, url: str, objective: str, capability: str,
-        propose_tool_call,
+        propose_tool_call, session_callback=None,
     ) -> dict[str, Any]:
         """Execute one authorised model-authored mission step using registered Steel tools."""
         session_id = await self.session_for_task(task_id)
+        if session_callback is not None:
+            session_callback(session_id)
         if capability == "navigate":
             result = await self.call_tool("steel_navigate", {
                 "session_id": session_id, "url": url, "include_snapshot": True,
