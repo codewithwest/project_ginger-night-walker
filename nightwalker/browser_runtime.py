@@ -1410,21 +1410,22 @@ class BrowserRuntime:
             from nightwalker.page_signals import (
                 collect_internal_link_checks,
                 collect_page_signals,
+                settle_page_images,
                 collect_qa_extended_signals,
                 page_signal_findings,
                 qa_extended_findings,
             )
             if workflow_type in {"qa", "seo_qa"}:
-                # Give ordinary image requests a short bounded settle window; never
-                # wait indefinitely for lazy, blocked or third-party assets.
-                try:
-                    await page.wait_for_function(
-                        "() => Array.from(document.images).every(img => img.complete)",
-                        timeout=int(os.getenv("QA_IMAGE_SETTLE_TIMEOUT_MS", "4000")),
-                    )
-                except Exception:
-                    pass
+                # Scroll to trigger lazy-loaded assets, then wait within a bounded
+                # window. The final snapshot distinguishes broken, pending and lazy images.
+                audit_signals_image_capture = await settle_page_images(
+                    page, timeout_ms=int(os.getenv("QA_IMAGE_SETTLE_TIMEOUT_MS", "8000"))
+                )
+            else:
+                audit_signals_image_capture = None
             audit_signals = await collect_page_signals(page)
+            if audit_signals_image_capture is not None:
+                audit_signals.setdefault("seo", {})["image_capture"] = audit_signals_image_capture
             x_robots_tag = (response.headers.get("x-robots-tag") if response else None)
             audit_signals.setdefault("seo", {})["x_robots_tag"] = x_robots_tag
             if x_robots_tag and re.search(r"(?i)\bnoindex\b", x_robots_tag):
