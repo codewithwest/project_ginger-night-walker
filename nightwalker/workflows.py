@@ -142,6 +142,123 @@ def extract_product_search_query(objective: str) -> str | None:
     return None
 
 
+
+def is_ecommerce_cart_workflow(objective: str) -> bool:
+    """Identify an explicitly requested cart-state journey, not ordinary product research."""
+    value = " ".join(objective.casefold().split())
+    has_cart_action = any(term in value for term in (
+        "add to cart", "add it to the cart", "add to the cart",
+        "remove from cart", "remove it from the cart", "remove from the cart",
+    ))
+    has_cart_verification = any(term in value for term in (
+        "cart is empty", "empty cart", "verify its price", "verify the price",
+        "quantity", "do not checkout", "without checking out",
+    ))
+    return has_cart_action and has_cart_verification
+
+
+def build_cart_journey_blueprint(objective: str) -> ExecutionBlueprint:
+    """Create a sequential, explicitly interactive plan for an authorised cart test."""
+    if not is_ecommerce_cart_workflow(objective):
+        raise ValueError("An explicit ecommerce cart journey is required")
+    criteria = [
+        SuccessCriterion(
+            criterion_id="sc-navigation",
+            description="The requested storefront is reached.",
+            acceptance_test="Capture the target storefront URL and a matching page title or visible site identity.",
+        ),
+        SuccessCriterion(
+            criterion_id="sc-product-discovery",
+            description="The requested product and its add-to-cart control are identified.",
+            acceptance_test="Capture the exact matching product card, its visible name and an enabled Add to Cart control within that card.",
+        ),
+        SuccessCriterion(
+            criterion_id="sc-product-addition",
+            description="The requested product is added to the cart.",
+            acceptance_test="After an authorised click, capture the product in the cart or a cart count/success state attributable to that product.",
+        ),
+        SuccessCriterion(
+            criterion_id="sc-cart-verification",
+            description="The cart's product, displayed price and quantity are verified.",
+            acceptance_test="Capture the cart line item with exact product name, displayed price and quantity; do not infer missing values.",
+        ),
+        SuccessCriterion(
+            criterion_id="sc-cart-removal",
+            description="The requested product is removed from the cart.",
+            acceptance_test="After an authorised remove action, capture that the product line item is absent.",
+        ),
+        SuccessCriterion(
+            criterion_id="sc-empty-cart-confirmation",
+            description="The cart is confirmed empty without checkout.",
+            acceptance_test="Capture an explicit empty-cart state or zero-item cart count after removal; checkout must not be opened or submitted.",
+        ),
+    ]
+    tasks = [
+        PlannedSubtask(
+            subtask_id="qa-navigation",
+            objective="Navigate to the exact storefront URL and capture its identity.",
+            capability=Capability.NAVIGATE,
+            required_tools=["browser_navigate", "browser_snapshot"],
+            success_criteria=["sc-navigation"],
+            depends_on=[],
+            expected_output="Target URL, page title and navigation evidence.",
+        ),
+        PlannedSubtask(
+            subtask_id="qa-discover",
+            objective="Find the exact requested product card and identify its enabled Add to Cart control. Do not click it in this step.",
+            capability=Capability.INTERACT,
+            required_tools=["browser_snapshot", "browser_interact"],
+            success_criteria=["sc-product-discovery"],
+            depends_on=["qa-navigation"],
+            expected_output="Product-card identity, price/image observations and grounded add-control locator.",
+        ),
+        PlannedSubtask(
+            subtask_id="qa-availability",
+            objective="Click Add to Cart for the verified matching product only; do not checkout.",
+            capability=Capability.INTERACT,
+            required_tools=["browser_interact", "browser_snapshot"],
+            success_criteria=["sc-product-addition"],
+            depends_on=["qa-discover"],
+            expected_output="Observed cart mutation and evidence that the requested item was added.",
+        ),
+        PlannedSubtask(
+            subtask_id="qa-content",
+            objective="Read the cart line item and capture the exact product name, displayed price and quantity.",
+            capability=Capability.EXTRACT,
+            required_tools=["browser_snapshot", "browser_extract"],
+            success_criteria=["sc-cart-verification"],
+            depends_on=["qa-availability"],
+            expected_output="Exact cart line-item name, price, quantity and evidence source.",
+        ),
+        PlannedSubtask(
+            subtask_id="qa-validate",
+            objective="Remove only the requested product from the cart using its grounded remove control.",
+            capability=Capability.INTERACT,
+            required_tools=["browser_interact", "browser_snapshot"],
+            success_criteria=["sc-cart-removal"],
+            depends_on=["qa-content"],
+            expected_output="Observed removal and evidence that the product line item is absent.",
+        ),
+        PlannedSubtask(
+            subtask_id="qa-synthesise",
+            objective="Confirm the cart is empty and report any issues. Never open or submit checkout.",
+            capability=Capability.EXTRACT,
+            required_tools=["browser_snapshot", "browser_extract"],
+            success_criteria=["sc-empty-cart-confirmation"],
+            depends_on=["qa-validate"],
+            expected_output="Explicit empty-cart evidence and a concise account of verified/unverified steps.",
+        ),
+    ]
+    return ExecutionBlueprint(
+        original_objective=objective,
+        interpretation="Sequential ecommerce cart QA journey with explicitly authorised add/remove actions and no checkout.",
+        success_criteria=criteria,
+        subtasks=tasks,
+        completion_policy="all_criteria_verified",
+        research_queries=[],
+    )
+
+
 def build_product_search_blueprint(objective: str) -> ExecutionBlueprint:
     """Build a deterministic, correctly authorised plan for exact product-search QA."""
     query = extract_product_search_query(objective)
