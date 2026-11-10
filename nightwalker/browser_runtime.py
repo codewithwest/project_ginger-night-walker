@@ -582,7 +582,6 @@ class BrowserRuntime:
             }
 
         field = fields[0]
-        await field.fill(query)
         before_url = page.url
         before_cards = await page.locator(
             '.productinfo, .product-image-wrapper, .single-products, .product-card, '
@@ -590,89 +589,46 @@ class BrowserRuntime:
         ).evaluate_all(
             "nodes => nodes.slice(0, 100).map(node => (node.innerText || '').trim().slice(0, 500))"
         )
-        # Bind submission to the field's own form. A page-wide submit selector can
-        # accidentally target newsletter/cart forms and is not evidence of search.
-        form_info = await field.evaluate("""el => {
-            const form = el.form || el.closest('form');
-            window.__nwSearchSubmitObserved = false;
-            if (form) {
-                form.addEventListener('submit', () => {
-                    window.__nwSearchSubmitObserved = true;
-                }, {capture: true, once: true});
-            }
-            // Some storefronts use a JS-controlled search overlay: the input is
-            // not a form submitter and the adjacent magnifier button owns search.
-            let node = el.parentElement;
-            let iconButton = null;
-            for (let depth = 0; node && depth < 6; depth++, node = node.parentElement) {
-                const buttons = [...node.querySelectorAll('button, [role="button"], a')];
-                const visible = buttons.filter(b => {
-                    const s = getComputedStyle(b), r = b.getBoundingClientRect();
-                    return s.display !== 'none' && s.visibility !== 'hidden' &&
-                        r.width > 0 && r.height > 0 && !b.disabled;
-                });
-                const labelled = visible.filter(b =>
-                    /search|submit/i.test([
-                        b.getAttribute('aria-label'), b.getAttribute('title'),
-                        b.id, b.className, b.getAttribute('data-testid')
-                    ].join(' '))
-                );
-                if (labelled.length === 1) { iconButton = labelled[0]; break; }
-                const iconOnly = visible.filter(b =>
-                    b.querySelector('svg, i, [class*="icon"], [class*="search"]') &&
-                    !b.innerText.trim()
-                );
-                if (iconOnly.length === 1) { iconButton = iconOnly[0]; break; }
-                if (form && node === form) break;
-            }
-            if (iconButton) {
-                iconButton.setAttribute('data-nw-search-submit', 'true');
-            }
-            return {has_form: !!form, has_icon_button: !!iconButton};
-        }""")
-        submit_performed = False
-        submit_method = None
+        # Use real browser input events in the same order as a person:
+        # move/click the pointer on the field, type with the keyboard, then Enter.
+        # Do not use fill(), requestSubmit(), or synthetic form submission here;
+        # those bypass the interaction path that QA is intended to exercise.
         try:
-            # Prefer the actual magnifier/search control when one is associated
-            # with this field, even if it is type=button rather than submit.
-            icon_submit = page.locator('[data-nw-search-submit="true"]')
-            if await icon_submit.count() == 1:
-                await icon_submit.click(timeout=5000)
-                submit_method = "search_icon_click"
-            elif form_info.get("has_form"):
-                form = field.locator("xpath=ancestor::form[1]")
-                submit = form.locator(
-                    'button[type="submit"], input[type="submit"], '
-                    'button#submit_search, button[aria-label*="search" i]'
-                )
-                visible_submit = []
-                for index in range(min(await submit.count(), 8)):
-                    button = submit.nth(index)
-                    try:
-                        if await button.is_visible() and await button.is_enabled():
-                            visible_submit.append(button)
-                    except Exception:
-                        continue
-                if len(visible_submit) == 1:
-                    await visible_submit[0].click(timeout=5000)
-                    submit_method = "form_submit_button"
-                elif len(visible_submit) == 0:
-                    await form.evaluate("(form) => form.requestSubmit()")
-                    submit_method = "form_request_submit"
-                else:
-                    return {
-                        "query": query, "performed": False, "status": "ambiguous_search_submit",
-                        "route": route, "result_count": 0, "matches": [],
-                        "reason": "The search form contains multiple possible submit controls."
-                    }
-            else:
-                await field.press("Enter", timeout=5000)
-                submit_method = "enter_key"
+            await field.click(timeout=5000, force=False)
+            route.append({
+                "url": page.url, "action": "mouse_clicked_search_input",
+                "query": query,
+            })
+            focused = await field.evaluate("(el) => document.activeElement === el")
+            if not focused:
+                return {
+                    "query": query, "performed": False, "status": "search_input_focus_failed",
+                    "route": route, "result_count": 0, "matches": [],
+                    "reason": "The search field did not receive browser keyboard focus after the mouse click."
+                }
+            await page.keyboard.type(query, delay=35)
+            route.append({
+                "url": page.url, "action": "keyboard_typed_search_query",
+                "typed_length": len(query),
+            })
+            typed_value = await field.input_value()
+            if typed_value.strip().casefold() != query.strip().casefold():
+                return {
+                    "query": query, "performed": False, "status": "search_input_text_mismatch",
+                    "route": route, "result_count": 0, "matches": [],
+                    "observed_input_value": typed_value[:240],
+                    "reason": "The visible search field value did not match the requested query after keyboard typing."
+                }
+            await page.keyboard.press("Enter")
+            submit_method = "mouse_click_type_enter"
+            route.append({
+                "url": page.url, "action": "keyboard_pressed_enter_to_submit_search",
+            })
         except Exception as exc:
             return {
-                "query": query, "performed": False, "status": "search_submit_failed",
+                "query": query, "performed": False, "status": "search_keyboard_interaction_failed",
                 "route": route, "result_count": 0, "matches": [],
-                "submit_method": submit_method, "error": str(exc)[:300],
+                "submit_method": "mouse_click_type_enter", "error": str(exc)[:300],
             }
         try:
             await page.wait_for_load_state("domcontentloaded", timeout=5000)
@@ -687,12 +643,6 @@ class BrowserRuntime:
             pass
         await page.wait_for_timeout(settle_ms)
         submit_event_observed = False
-        try:
-            submit_event_observed = bool(await page.evaluate(
-                "() => window.__nwSearchSubmitObserved === true"
-            ))
-        except Exception:
-            pass
         after_url = page.url
         matches = await page.locator(
             '.productinfo, .product-image-wrapper, .single-products, .product-card, '
