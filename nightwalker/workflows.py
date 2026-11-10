@@ -267,6 +267,49 @@ def build_product_search_blueprint(objective: str) -> ExecutionBlueprint:
     if not query:
         raise ValueError("A quoted product-search query is required for this workflow")
 
+    # Product identity is always required. Other fields are required only when
+    # the user asks for them; the browser may still capture additional visible
+    # attributes, but unrequested fields never block task completion.
+    requested_fields = {"name"}
+    field_patterns = {
+        "image": r"\\b(image|images|photo|photos|picture|pictures)\\b",
+        "price": r"\\b(price|prices|cost|costs|pricing)\\b",
+        "product_url": r"\\b(product\\s+(?:url|link|page)|url|link)\\b",
+    }
+    explicit_field_request = any(
+        re.search(pattern, objective, re.IGNORECASE)
+        for pattern in field_patterns.values()
+    )
+    for field, pattern in field_patterns.items():
+        if re.search(pattern, objective, re.IGNORECASE):
+            requested_fields.add(field)
+    if not explicit_field_request:
+        requested_fields.update({"image", "price"})
+
+    field_criteria = {
+        "name": SuccessCriterion(
+            criterion_id="sc-product-name",
+            description=f"A result with a product name matching {query!r} is identified.",
+            acceptance_test="Extract the actual product title from a matching result; incidental page or card text is insufficient.",
+        ),
+        "image": SuccessCriterion(
+            criterion_id="sc-product-image",
+            description="The matching product image source and load state are captured.",
+            acceptance_test="Capture the image source associated with the matched product and distinguish present, loaded and unconfirmed states.",
+        ),
+        "price": SuccessCriterion(
+            criterion_id="sc-product-price",
+            description="The matching product's displayed price is captured.",
+            acceptance_test="Capture the visible price associated with the matched product result; do not infer missing prices.",
+        ),
+        "product_url": SuccessCriterion(
+            criterion_id="sc-product-url",
+            description="The matching product's destination URL is captured.",
+            acceptance_test="Capture the product link from the matched result and retain its exact destination.",
+        ),
+    }
+    requested_criteria = [field_criteria[field] for field in ("name", "image", "price", "product_url") if field in requested_fields]
+    product_criterion_ids = [item.criterion_id for item in requested_criteria]
     criteria = [
         SuccessCriterion(
             criterion_id="sc-navigation",
@@ -278,21 +321,7 @@ def build_product_search_blueprint(objective: str) -> ExecutionBlueprint:
             description=f"The exact search query {query!r} is submitted to the website.",
             acceptance_test=f"Capture the search control containing {query!r} and confirm the search action and resulting navigation/outcome.",
         ),
-        SuccessCriterion(
-            criterion_id="sc-product-name",
-            description=f"A result with a product name matching {query!r} is identified.",
-            acceptance_test="Extract the actual product title from a matching result; incidental page or card text is insufficient.",
-        ),
-        SuccessCriterion(
-            criterion_id="sc-product-image",
-            description="The matching product has an image in the search results.",
-            acceptance_test="Capture a non-empty image source associated with the matched product result.",
-        ),
-        SuccessCriterion(
-            criterion_id="sc-product-price",
-            description="The matching product has a displayed price.",
-            acceptance_test="Capture the numerical price associated with the matched product result.",
-        ),
+        *requested_criteria,
     ]
     subtasks = [
         PlannedSubtask(
@@ -312,35 +341,32 @@ def build_product_search_blueprint(objective: str) -> ExecutionBlueprint:
         ),
         PlannedSubtask(
             subtask_id="qa-content",
-            objective=f'Extract the actual matching product name, image source and displayed price from the search results for "{query}".',
+            objective=f'Extract only the requested product fields ({", ".join(sorted(requested_fields))}) from the matching search result for "{query}". Preserve exact values and provenance.',
             capability=Capability.EXTRACT,
             depends_on=["qa-availability"],
-            success_criteria=["sc-product-name", "sc-product-image", "sc-product-price"],
-            expected_output="Product title, associated image source and displayed price, each independently captured.",
+            success_criteria=product_criterion_ids,
+            expected_output="Each requested product field captured independently with its source and exact value; missing fields remain explicitly unverified.",
         ),
         PlannedSubtask(
             subtask_id="qa-validate",
-            objective=f'Validate the extracted product title, image source and price against the search results for "{query}" and the captured browser evidence.',
+            objective=f'Validate each requested product field ({", ".join(sorted(requested_fields))}) against the matching result card and captured browser evidence for "{query}".',
             capability=Capability.EXTRACT,
             depends_on=["qa-content"],
-            success_criteria=["sc-product-name", "sc-product-image", "sc-product-price"],
-            expected_output="Evidence-linked validation verdict for each requested product field.",
+            success_criteria=product_criterion_ids,
+            expected_output="Evidence-linked validation verdict for every requested product field.",
         ),
         PlannedSubtask(
             subtask_id="qa-synthesise",
             objective="Summarize the search submission and each independently verified product field; clearly distinguish confirmed, failed and unverified checks.",
             capability=Capability.EXTRACT,
             depends_on=["qa-validate"],
-            success_criteria=[
-                "sc-navigation", "sc-search-submission", "sc-product-name",
-                "sc-product-image", "sc-product-price",
-            ],
+            success_criteria=["sc-navigation", "sc-search-submission", *product_criterion_ids],
             expected_output="Concise evidence-constrained QA report with no unsupported product claims.",
         ),
     ]
     return ExecutionBlueprint(
         original_objective=objective,
-        interpretation=f"Search the supplied website for {query!r} and verify the matching product name, image and price.",
+        interpretation=f"Search the supplied website for {query!r} and extract the requested product fields: {', '.join(sorted(requested_fields))}.",
         success_criteria=criteria,
         subtasks=subtasks,
         completion_policy="all_criteria_verified",
