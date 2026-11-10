@@ -647,7 +647,13 @@ class TaskManager:
             record["low_information_rounds"] = 0
         try:
             if not checkpoint:
-                workflow = WorkflowType(record.get("workflow_type") or classify_workflow(objective).value)
+                # An explicitly requested cart journey is functional QA even if
+                # the general intent classifier labels the wording ambiguously.
+                if is_ecommerce_cart_workflow(objective):
+                    workflow = WorkflowType.QA
+                    record["workflow_type"] = WorkflowType.QA.value
+                else:
+                    workflow = WorkflowType(record.get("workflow_type") or classify_workflow(objective).value)
                 if workflow == WorkflowType.UNSUPPORTED:
                     message = "This Night Walker beta currently supports SEO audits and website/application QA. General research and other task types are deferred."
                     record["status"] = "blocked"
@@ -724,10 +730,7 @@ class TaskManager:
                 # language model's generic blueprint has repeatedly mislabelled
                 # this step as NAVIGATE/EXTRACT, causing the evidence gate to
                 # block it before the browser could perform the search.
-                if (
-                    classify_workflow(objective) == WorkflowType.QA
-                    and is_ecommerce_cart_workflow(objective)
-                ):
+                if is_ecommerce_cart_workflow(objective):
                     blueprint = build_cart_journey_blueprint(objective)
                     self._log(
                         task_id,
