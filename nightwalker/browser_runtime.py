@@ -166,8 +166,25 @@ class BrowserRuntime:
         return {"closed": closed, "remaining": remaining, "reason": reason[:300]}
 
     async def close_task_session(self, task_id: str) -> None:
+        """End task ownership while retaining Steel's live viewer for report review."""
+        mcp_session_id = self.steel_mcp._sessions.get(task_id)
+        if mcp_session_id:
+            state = self._task_sessions.get(task_id)
+            retention_ms = max(60_000, int(os.getenv("STEEL_SESSION_RETENTION_MS", "600000")))
+            retained_until = datetime.now(UTC).timestamp() + retention_ms / 1000
+            if state is not None:
+                state["status"] = "retained"
+                state["active"] = True
+                state["finished_at"] = datetime.now(UTC).isoformat()
+                state["retained_until"] = datetime.fromtimestamp(retained_until, UTC).isoformat()
+            self._browser_event(
+                task_id,
+                f"Steel browser retained for report review ({retention_ms // 60000} minute(s))",
+                status="retained",
+            )
+            # Steel session TTL handles final cleanup; do not release the live viewer here.
+            return
         await self.steel_mcp.release_task_session(task_id)
-        """End task ownership while briefly retaining Steel for its live report preview."""
         context = self._task_contexts.pop(task_id, None)
         primary_page = self._task_pages.pop(task_id, None)
         if primary_page is not None:
@@ -1305,6 +1322,16 @@ class BrowserRuntime:
             task_id, url, step_objective, capability,
             ollama.propose_steel_mcp_tool_call,
         )
+        session_id = str(result.get("session_id") or "")
+        api_base = os.getenv("STEEL_API_BASE_URL", "http://steel-browser:3000/v1").rstrip("/")
+        if session_id:
+            state["session_id"] = session_id
+            state["debug_url"] = self._normalise_steel_debug_url(
+                f"{api_base}/sessions/{session_id}/debug", session_id,
+            )
+            state["steel_ui_url"] = self._steel_ui_url(api_base)
+            state["status"] = "active"
+            state["active"] = True
         snapshots = result.get("snapshot") or {}
         content = snapshots.get("content") or []
         captured_text = "\n".join(
