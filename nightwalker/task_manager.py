@@ -727,10 +727,15 @@ class TaskManager:
                 }
                 self._persist(task_id)
                 self._log(task_id, f"Round {round_count}/{record.get('max_rounds', self.max_rounds)}: {next_assignment}")
-                attempt = loop_guard.begin(next_url, next_assignment)
-                # A dependency-ready mission step is a new authorised action, even when it
-                # operates on a page captured by an earlier step. URL deduplication
-                # applies to exploratory crawl rounds, not sequential actions in a plan.
+                # The repeat guard protects exploratory discovery, not the Decider's
+                # authorised sequence. Multiple distinct plan steps may legitimately act
+                # on the same storefront URL; counting those as URL retries prevents the
+                # model-authored mission from ever reaching its later actions.
+                attempt = (
+                    loop_guard.begin(next_url, next_assignment)
+                    if active_plan_step is None
+                    else {"should_skip": False, "attempt": 0, "action_repeat": 0}
+                )
                 already_visited = (
                     loop_guard.is_visited(next_url, visited_urls)
                     and not resume_plan_source
