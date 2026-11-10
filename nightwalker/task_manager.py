@@ -1183,7 +1183,33 @@ class TaskManager:
                                         )
                                     )
                                     if requested_product_search:
-                                        smoke_complete = smoke_complete and product_search_captured
+                                        # Search submission alone is not product verification.
+                                        # The extraction step must reuse the prior round's
+                                        # captured cards and prove name, image and price on
+                                        # at least one matching result.
+                                        matching_product_cards = (
+                                            product_search.get("matches", [])
+                                            if isinstance(product_search, dict) else []
+                                        )
+                                        complete_product_card = next((
+                                            item for item in matching_product_cards
+                                            if isinstance(item, dict)
+                                            and str(item.get("name_match") or item.get("product_title") or "").strip()
+                                            and bool(item.get("image_src"))
+                                            and bool(item.get("image_loaded"))
+                                            and bool(item.get("price"))
+                                        ), None)
+                                        smoke_complete = (
+                                            smoke_complete
+                                            and product_search_captured
+                                            and complete_product_card is not None
+                                        )
+                                        if product_search_captured and complete_product_card is None:
+                                            self._log(
+                                                task_id,
+                                                "Product search was submitted, but no matching card has all three verified fields (name, loaded image and displayed price); extraction remains unverified.",
+                                                "warning",
+                                            )
                                     if smoke_complete and result.get("evidence_id"):
                                         verified_result = (
                                             f"Captured title, {page_smoke.get('h1_count')} H1 heading(s), "
