@@ -1812,6 +1812,7 @@ class BrowserRuntime:
             # Suppress unrelated homepage DOM, accessibility, metadata and content findings.
             focused_product_search = (
                 workflow_type == "qa"
+                and not cart_workflow
                 and self._extract_product_search_query(objective) is not None
             )
             audit_findings = (
