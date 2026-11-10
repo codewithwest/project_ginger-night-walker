@@ -1957,7 +1957,28 @@ class TaskManager:
                             step_id.endswith("qa-content")
                             and step.get("status") not in {"completed", "blocked", "failed", "skipped"}
                         ):
-                            if search_record:
+                            product_search_required = (
+                                extract_product_search_query(str(record.get("objective") or "")) is not None
+                            )
+                            cart_workflow = is_ecommerce_cart_workflow(str(record.get("objective") or ""))
+                            if not product_search_required and not cart_workflow:
+                                # Ordinary single-page QA inspects controls, links, forms,
+                                # images and runtime behaviour. It must not be blocked waiting
+                                # for a product-search record that this workflow never requests.
+                                smoke = structured_data.get("qa_page_smoke") or {}
+                                checks = structured_data.get("qa_checks") or {}
+                                start_step(execution_plan, step_id)
+                                complete_step(
+                                    execution_plan, step_id,
+                                    evidence_refs=all_evidence_refs,
+                                    result=(
+                                        "Captured the requested page for usability inspection; "
+                                        f"page-smoke signals={len(smoke) if isinstance(smoke, dict) else 0}, "
+                                        f"QA checks={len(checks) if isinstance(checks, dict) else 0}. "
+                                        "Product search is not part of this QA objective."
+                                    ),
+                                )
+                            elif search_record:
                                 matches = search_record.get("matches") or []
                                 product_outcomes = []
                                 for match in matches[:12]:
