@@ -1,6 +1,7 @@
 from nightwalker.workflows import (
-    WorkflowType, build_workflow_blueprint, classify_workflow,
-    qa_requires_site_crawl, qa_scope_for_objective, target_url_from_objective,
+    WorkflowType, _qa_content_objective, build_workflow_blueprint, classify_workflow,
+    extract_product_search_query, qa_requires_site_crawl, qa_scope_for_objective,
+    target_url_from_objective,
 )
 
 
@@ -97,3 +98,30 @@ def test_routes_product_search_result_verification_to_qa():
 
 def test_product_noun_without_testing_intent_is_not_qa():
     assert classify_workflow('Tell me about Blue Top on https://example.com/products') == WorkflowType.UNSUPPORTED
+
+
+def test_extract_product_search_query_matches_supported_patterns():
+    assert extract_product_search_query('Search for "Blue Top"') == "Blue Top"
+    assert extract_product_search_query('Submit the search query "Dark Grey".') == "Dark Grey"
+    assert extract_product_search_query("Submit search query Dark Grey.") == "Dark Grey"
+    assert extract_product_search_query("Verify the presence of 'Blue Top' on https://example.com") == "Blue Top"
+    assert extract_product_search_query('Confirm that "Blue Top" product appears on https://example.com') == "Blue Top"
+    assert extract_product_search_query('Open "https://example.com" and check for "Blue Top"') == "Blue Top"
+    assert extract_product_search_query('Check page title, h1 headings and broken images on https://example.com') is None
+
+
+def test_qa_content_objective_injects_extracted_product():
+    obj_with_product = 'Open https://example.com/products. Search for "Blue Top". Verify the product appears.'
+    content_obj = _qa_content_objective(obj_with_product)
+    assert 'Search for "Blue Top" when a usable control is found' in content_obj
+
+    obj_without_product = 'Open https://example.com and check page title and console errors'
+    fallback_obj = _qa_content_objective(obj_without_product)
+    assert 'Search for the requested product only when a usable control is found' in fallback_obj
+
+    # Quoted URL must not be mistakenly extracted as the product query
+    obj_with_quoted_url = 'Open "https://example.com" and check page title and h1 headings'
+    url_fallback_obj = _qa_content_objective(obj_with_quoted_url)
+    assert 'Search for "https://example.com"' not in url_fallback_obj
+    assert 'Search for the requested product only when a usable control is found' in url_fallback_obj
+

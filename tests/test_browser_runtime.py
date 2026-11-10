@@ -131,3 +131,34 @@ def test_extract_products_from_visible_text_returns_names_and_prices_in_order():
         "name": "Moyo Coffee & Side Table",
         "price": "R 6,995.00",
     }
+
+
+def test_browser_runtime_extract_product_search_query():
+    assert BrowserRuntime._extract_product_search_query('Search for "Blue Top"') == "Blue Top"
+    assert BrowserRuntime._extract_product_search_query('Submit the search query "Dark Grey".') == "Dark Grey"
+    assert BrowserRuntime._extract_product_search_query("Verify the presence of 'Blue Top' on https://example.com") == "Blue Top"
+    assert BrowserRuntime._extract_product_search_query('Open "https://example.com" and check for "Blue Top"') == "Blue Top"
+    assert BrowserRuntime._extract_product_search_query('Check page title and console errors on https://example.com') is None
+
+
+@pytest.mark.asyncio
+async def test_interact_step_executes_requested_qa_search(monkeypatch):
+    runtime = BrowserRuntime()
+    expected = {"query": "Dark Grey", "performed": True, "status": "matched"}
+    calls = []
+
+    async def search(page, objective):
+        calls.append((page, objective))
+        return expected
+
+    monkeypatch.setattr(runtime, "_run_product_search_smoke", search)
+    page = object()
+
+    result, destination = await runtime._execute_interaction(
+        page, 'Submit search query "Dark Grey".', "qa",
+    )
+
+    assert result is expected
+    assert destination is None
+    assert calls == [(page, 'Submit search query "Dark Grey".')]
+

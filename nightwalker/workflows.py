@@ -106,6 +106,13 @@ def extract_product_search_query(objective: str) -> str | None:
     if m:
         return m.group(1).strip()
     m = re.search(
+        r"(?i)\b(?:submit|run|perform|execute)\s+(?:the\s+)?search(?:\s+query)?\s+(?:for\s+)?"
+        r"[“”\"'\u2018\u2019]?([^“”\"'\u2018\u2019\n.!?]{1,100})",
+        objective,
+    )
+    if m:
+        return m.group(1).strip()
+    m = re.search(
         r"(?i)(?:verify|check|confirm|test)\s+(?:the\s+)?(?:presence|existence|display|appearance)\s+of\s+"
         r"[“”\"'\u2018\u2019]([^“”\"'\u2018\u2019]{1,100})[“”\"'\u2018\u2019]",
         objective,

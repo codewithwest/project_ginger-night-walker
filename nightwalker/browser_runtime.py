@@ -745,6 +745,21 @@ class BrowserRuntime:
             "searched_url": page.url, "route": route,
         }
 
+    async def _execute_interaction(
+        self, page: Page, objective: str, workflow_type: str,
+        existing_product_search: dict[str, Any] | None = None,
+    ) -> tuple[dict[str, Any] | None, str | None]:
+        """Execute a requested QA search, or fall back to a grounded same-site link."""
+        query = self._extract_product_search_query(objective)
+        if query and workflow_type in {"qa", "seo_qa"}:
+            if (
+                existing_product_search
+                and str(existing_product_search.get("query", "")).casefold() == query.casefold()
+            ):
+                return existing_product_search, None
+            return await self._run_product_search_smoke(page, objective), None
+        return None, await self._follow_relevant_link(page, objective)
+
     @staticmethod
     def _extract_products_from_text(text: str, limit: int = 12) -> list[dict[str, str]]:
         """Extract ordered product names and prices from visible page text."""
@@ -1197,11 +1212,25 @@ class BrowserRuntime:
                 if capability == "navigate":
                     continue
                 if capability == "interact":
-                    destination = await self._follow_relevant_link(page, step_objective)
+                    search_result, destination = await self._execute_interaction(
+                        page, step_objective, workflow_type, qa_product_search,
+                    )
+                    if search_result is not None:
+                        qa_product_search = search_result
+                        if search_result.get("performed"):
+                            self._browser_event(
+                                task_id, f"Submitted requested product search: {search_result.get('query', '')}",
+                                url=search_result.get("searched_url") or page.url,
+                                title=(await page.title())[:500],
+                            )
+                        else:
+                            issues.append(
+                                f"Product search interaction was not confirmed: {search_result.get('status')}"
+                            )
                     if destination:
                         visited.append(destination)
                         self._browser_event(task_id, "Followed a relevant same-site link", url=page.url, title=(await page.title())[:500])
-                    else:
+                    elif search_result is None:
                         issues.append(
                             f"No sufficiently relevant same-site link found for: {step_objective}"
                         )

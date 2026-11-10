@@ -11,8 +11,119 @@ from typing import Any
 
 TERMINAL = {"completed", "blocked", "failed", "skipped"}
 
+# Canonical step IDs the runtime knows how to execute and verify.
+# The model-generated blueprint must only use IDs from this set.
+_QA_CANONICAL_STEP_IDS = {
+    "qa-discover", "qa-availability", "qa-content",
+    "qa-navigation", "qa-crawl", "qa-validate", "qa-synthesise",
+}
+_SEO_CANONICAL_STEP_IDS = {
+    "seo-discover", "seo-technical", "seo-page",
+    "seo-links", "seo-crawl", "seo-validate", "seo-synthesise",
+}
+_COMBINED_CANONICAL_STEP_IDS = {
+    f"combined-{s}" for s in _QA_CANONICAL_STEP_IDS | _SEO_CANONICAL_STEP_IDS
+} | {"combined-audit-crawl"}
+
+
+def _canonical_step_id(step_id: str) -> str:
+    """Collapse a model-generated sub-suffixed step ID to its canonical form.
+
+    The goal-analyst sometimes produces step IDs like ``qa-validate-name``,
+    ``qa-validate-image`` or ``seo-validate-links`` when it is asked to treat
+    each verification dimension as a separate criterion.  Those IDs pass the
+    acyclic-graph validator in ``ExecutionBlueprint`` but break the runtime
+    because ``start_step`` / ``complete_step`` only recognise the stable
+    canonical IDs.
+
+    This function maps any such extended ID back to the nearest canonical parent
+    so that the plan can be executed without crashes.
+    """
+    all_canonical = (
+        _QA_CANONICAL_STEP_IDS
+        | _SEO_CANONICAL_STEP_IDS
+        | _COMBINED_CANONICAL_STEP_IDS
+    )
+    if step_id in all_canonical:
+        return step_id
+    for canonical in sorted(all_canonical, key=len, reverse=True):
+        if step_id.startswith(canonical + "-"):
+            return canonical
+    return step_id
+
+
+def normalise_blueprint_subtasks(blueprint: dict[str, Any]) -> dict[str, Any]:
+    """Rewrite sub-suffixed step IDs to their canonical counterparts.
+
+    When the model returns a blueprint with IDs like ``qa-validate-name`` or
+    ``qa-validate-image``, this function:
+
+    1. Builds a remapping table (old-id → canonical-id).
+    2. Merges duplicate canonical steps (combining ``depends_on`` and
+       ``success_criteria``).
+    3. Rewrites all ``depends_on`` lists in every subtask.
+
+    The returned blueprint dict is a new shallow copy; the original is not
+    mutated.
+    """
+    subtasks = list(blueprint.get("subtasks") or [])
+    if not subtasks:
+        return blueprint
+
+    # Build remapping: original ID → canonical ID
+    remap: dict[str, str] = {}
+    for item in subtasks:
+        original = str(item.get("subtask_id") or "")
+        canonical = _canonical_step_id(original)
+        if original != canonical:
+            remap[original] = canonical
+
+    if not remap:
+        return blueprint  # Nothing to fix
+
+    # Merge sub-steps into canonical steps.  Preserve the first occurrence of
+    # each canonical ID as the template; additional occurrences are merged in.
+    seen: dict[str, dict[str, Any]] = {}
+    merged: list[dict[str, Any]] = []
+    for item in subtasks:
+        original_id = str(item.get("subtask_id") or "")
+        canonical_id = remap.get(original_id, original_id)
+        rewritten = {
+            **item,
+            "subtask_id": canonical_id,
+            "depends_on": [remap.get(d, d) for d in (item.get("depends_on") or [])],
+            "success_criteria": list(item.get("success_criteria") or []),
+        }
+        if canonical_id in seen:
+            existing = seen[canonical_id]
+            # Extend deps and criteria, keeping uniqueness.
+            existing_deps = list(existing.get("depends_on") or [])
+            for dep in rewritten.get("depends_on", []):
+                if dep not in existing_deps and dep != canonical_id:
+                    existing_deps.append(dep)
+            existing["depends_on"] = existing_deps
+            existing_criteria = list(existing.get("success_criteria") or [])
+            for crit in rewritten.get("success_criteria", []):
+                if crit not in existing_criteria:
+                    existing_criteria.append(crit)
+            existing["success_criteria"] = existing_criteria
+        else:
+            seen[canonical_id] = rewritten
+            merged.append(rewritten)
+
+    # Rewrite depends_on in all merged steps (a canonical step must not depend
+    # on itself after merging).
+    for item in merged:
+        item["depends_on"] = [
+            d for d in item.get("depends_on", [])
+            if d != item["subtask_id"]
+        ]
+
+    return {**blueprint, "subtasks": merged}
+
 
 def initialise_plan(blueprint: dict[str, Any]) -> dict[str, Any]:
+    blueprint = normalise_blueprint_subtasks(blueprint)
     steps = []
     for index, item in enumerate(blueprint.get("subtasks") or [], 1):
         steps.append({

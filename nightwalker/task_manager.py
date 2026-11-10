@@ -43,6 +43,7 @@ from nightwalker.task_timing import TaskTiming
 from nightwalker.workflows import (
     WorkflowType,
     classify_workflow,
+    extract_product_search_query,
     qa_scope_for_objective,
     target_url_from_objective,
 )
@@ -1065,6 +1066,16 @@ class TaskManager:
                             elif capability == "extract" and str(step.get("step_id", "")).endswith("qa-availability"):
                                 if result.get("http_status") is not None and result.get("http_status", 0) < 400 and result.get("evidence_id"):
                                     verified_result = f"Target page returned HTTP {result.get('http_status')}; visible-content issues are tracked separately"
+                            elif capability == "interact" and str(step.get("step_id", "")).endswith("qa-availability"):
+                                product_search = (result.get("structured_data") or {}).get("qa_product_search") or {}
+                                requested_query = extract_product_search_query(str(step.get("objective") or ""))
+                                if (
+                                    requested_query
+                                    and product_search.get("performed") is True
+                                    and str(product_search.get("query", "")).casefold() == requested_query.casefold()
+                                    and result.get("evidence_id")
+                                ):
+                                    verified_result = f"Submitted search query {requested_query!r} and captured its navigation outcome"
                             elif capability == "extract" and str(step.get("step_id", "")).endswith("qa-content"):
                                 result_data = result.get("structured_data") or {}
                                 qa_checks = result_data.get("qa_checks") or {}
@@ -1076,10 +1087,7 @@ class TaskManager:
                                         "console_error_count", "page_error_count",
                                     ))
                                     objective_text = str(objective or record.get("objective") or record.get("original_objective") or "")
-                                    requested_product_search = bool(re.search(
-                                        r'(?i)search\s+for\s+[“"\'][^”"\']{1,100}[”"\']',
-                                        objective_text,
-                                    ))
+                                    requested_product_search = extract_product_search_query(objective_text) is not None
                                     product_search = result_data.get("qa_product_search")
                                     product_search_captured = (
                                         isinstance(product_search, dict)
