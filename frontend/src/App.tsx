@@ -329,8 +329,8 @@ function ResearchReport({ result }: { result: BrowserResult }) {
             </div>
             <small>{finding.type?.replaceAll("_", " ") || "observation"} · {finding.validation?.verdict?.replaceAll("_", " ") || "not validated"}</small>
             {finding.validation?.reason && <p className="finding-impact">{finding.validation.reason}</p>}
-            {finding.affected_urls?.length > 0 && <div className="finding-urls">{finding.affected_urls.slice(0, 5).map((url) => <a href={url} target="_blank" rel="noreferrer" key={url}>{url}</a>)}</div>}
-            {finding.evidence_ids?.length > 0 && <details className="raw-data"><summary>View supporting evidence</summary><small>{finding.evidence_ids.join(", ")}</small></details>}
+            {(finding.affected_urls?.length ?? 0) > 0 && <div className="finding-urls">{finding.affected_urls?.slice(0, 5).map((url) => <a href={url} target="_blank" rel="noreferrer" key={url}>{url}</a>)}</div>}
+            {(finding.evidence_ids?.length ?? 0) > 0 && <details className="raw-data"><summary>View supporting evidence</summary><small>{finding.evidence_ids?.join(", ")}</small></details>}
           </li>)}</ul>
         </div>
       </details>}
