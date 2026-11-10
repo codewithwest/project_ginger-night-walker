@@ -272,6 +272,7 @@ def build_product_search_blueprint(objective: str) -> ExecutionBlueprint:
     # attributes, but unrequested fields never block task completion.
     requested_fields = {"name"}
     field_patterns = {
+        "name": r"\b(name|title)\b",
         "image": r"\b(image|images|photo|photos|picture|pictures)\b",
         "price": r"\b(price|prices|cost|costs|pricing)\b",
         "product_url": r"\b(product\s+(?:url|link|page)|url|link)\b",
