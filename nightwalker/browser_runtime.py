@@ -224,8 +224,9 @@ class BrowserRuntime:
         if not host:
             return debug_url
         netloc = f"[{host}]" if ":" in host else host
-        if parsed.port:
-            netloc += f":{parsed.port}"
+        port = parsed.port or api.port
+        if port:
+            netloc += f":{port}"
         scheme = "https" if api.scheme == "https" else "http"
         return parsed._replace(scheme=scheme, netloc=netloc).geturl()
 
