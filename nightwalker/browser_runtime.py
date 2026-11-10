@@ -732,7 +732,8 @@ class BrowserRuntime:
                     image_src: image ? (image.currentSrc || image.src || image.getAttribute('src') || '') : '',
                     image_alt: image ? (image.getAttribute('alt') || '') : '',
                     image_complete: image ? !!image.complete : false,
-                    image_natural_width: image ? (image.naturalWidth || 0) : 0
+                    image_natural_width: image ? (image.naturalWidth || 0) : 0,
+                    product_url: (node.querySelector('a[href]') && node.querySelector('a[href]').href) || ''
                 };
             })"""
         )
@@ -750,7 +751,7 @@ class BrowserRuntime:
             if not (phrase_match or token_match):
                 continue
             text_value = str(item.get("text") or "")
-            price = re.search(r'(?i)(?:Rs\\.?\\s*|R\\s*)[\\d,]+(?:\\.\\d{1,2})?', text_value)
+            price = re.search(r'(?i)(?:Rs\\.?\\s*|R\\s*)[\\d][\\d,\\s]*(?:\\.\\d{1,2})?', text_value)
             matched.append({
                 **item, "name_match": title_value,
                 "query_match": "phrase" if phrase_match else "all_query_tokens",
