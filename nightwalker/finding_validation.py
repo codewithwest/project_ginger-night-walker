@@ -44,22 +44,15 @@ def _support_for_type(
                    and any(i.get("load_status") == "broken" and
                            (not finding.get("image_url") or i.get("src") == finding.get("image_url"))
                            for i in r.get("images", []) if isinstance(i, dict))]
-    elif kind == "qa_browser_error":
-        def event_matches(event: dict[str, Any]) -> bool:
-            event_kind = str(event.get("kind") or "")
-            message = str(event.get("message") or "").casefold()
-            if event_kind not in {"console_error", "page_error"}:
-                return False
-            if message and (message in claim or claim in message):
-                return True
-            return ("console error" in claim and event_kind == "console_error") or (
-                "page error" in claim or "page exception" in claim
-            ) and event_kind == "page_error"
-        matched = [r for r in records if r.get("dataset") == "qa_runtime_events"
-                   and event_matches(r)]
-        matched += [r for r in records if r.get("dataset") == "qa_runtime_events"
-                    and any(event_matches(e) for e in (r.get("events") or r.get("runtime_events") or [])
-                            if isinstance(e, dict))]
+    elif kind in {"qa_browser_error", "qa_runtime_observation"}:
+        # A console/page exception proves only that the browser emitted an
+        # event. It does not prove user-visible breakage or failed behaviour.
+        # Keep it as an observation until a separate interaction/navigation
+        # check demonstrates a reproducible functional impact.
+        return False, (
+            "A browser runtime event was observed, but no user-visible or "
+            "functional impact has been demonstrated."
+        ), []
     elif kind in {"broken_internal_link", "qa_navigation_failure"}:
         matched = [r for r in records if r.get("dataset") in {"internal_link_checks", "qa_navigation_journeys"}
                    and any(c.get("ok") is False and not c.get("off_origin_redirect")
