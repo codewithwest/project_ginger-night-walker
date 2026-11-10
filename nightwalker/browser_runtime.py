@@ -301,7 +301,9 @@ class BrowserRuntime:
         if self.backend == "steel":
             api_key = os.getenv("STEEL_API_KEY", "").strip()
             api_base = os.getenv("STEEL_API_BASE_URL", "http://steel-browser:3000/v1").rstrip("/")
-            timeout_ms = max(60_000, int(os.getenv("STEEL_SESSION_TIMEOUT_MS", "1800000")) )
+            task_timeout_ms = max(60_000, int(os.getenv("STEEL_SESSION_TIMEOUT_MS", "300000")))
+            retention_ms = max(60_000, int(os.getenv("STEEL_SESSION_RETENTION_MS", "600000")))
+            timeout_ms = task_timeout_ms + retention_ms
             headers = {"Content-Type": "application/json"}
             if api_key:
                 headers["steel-api-key"] = api_key
