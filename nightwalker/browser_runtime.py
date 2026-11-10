@@ -853,36 +853,70 @@ class BrowserRuntime:
                             el.getAttribute('value') || el.getAttribute('title') || '').trim())};
                 })"""
                 )
+            # Always submit the requested variant/product query through the visible
+            # storefront search before inspecting cards. Previously this was skipped
+            # whenever a loose text match happened to exist on the current page, and
+            # Playwright.fill() made the action less observable as a real user journey.
+            search_attempted = False
+            search_status = "search_control_not_found"
+            self._browser_event(
+                task_id, f"Searching the storefront for {name!r}",
+                url=page.url, action="cart_search_start", plan_step_id=step_id,
+            )
+            search_fields = page.locator(
+                'input[type="search"], input[name*="search" i], '
+                'input[placeholder*="search" i], input[aria-label*="search" i]'
+            )
+            visible_fields = []
+            for index in range(min(await search_fields.count(), 8)):
+                field = search_fields.nth(index)
+                try:
+                    if await field.is_visible() and await field.is_enabled():
+                        visible_fields.append(field)
+                except Exception:
+                    continue
+
+            if len(visible_fields) == 1:
+                field = visible_fields[0]
+                try:
+                    await field.click(timeout=5000, force=False)
+                    focused = await field.evaluate("(el) => document.activeElement === el")
+                    if not focused:
+                        search_status = "search_input_focus_failed"
+                    else:
+                        await page.keyboard.type(name, delay=45)
+                        typed_value = await field.input_value()
+                        if typed_value.strip().casefold() != name.strip().casefold():
+                            search_status = "search_input_text_mismatch"
+                        else:
+                            self._browser_event(
+                                task_id, f"Typed {name!r} into the visible storefront search",
+                                url=page.url, action="cart_search_typed", plan_step_id=step_id,
+                            )
+                            await page.keyboard.press("Enter")
+                            search_attempted = True
+                            search_status = "submitted"
+                            self._browser_event(
+                                task_id, f"Submitted storefront search for {name!r}",
+                                url=page.url, action="cart_search_submitted", plan_step_id=step_id,
+                            )
+                            try:
+                                await page.wait_for_load_state("domcontentloaded", timeout=8000)
+                            except Exception:
+                                pass
+                            await page.wait_for_timeout(1200)
+                except Exception as exc:
+                    search_status = "search_interaction_failed:" + type(exc).__name__
+            elif len(visible_fields) > 1:
+                search_status = "ambiguous_search_controls"
+
             cards = await matching_product_cards()
             matches = [item for item in cards if normal(name) == normal(item.get("title")) or normal(name) in normal(item.get("text"))]
-            search_attempted = False
-            # A storefront homepage rarely contains every SKU. If the exact card
-            # is absent, use one uniquely visible site-search field and submit the
-            # requested product name before attempting discovery again.
-            if not matches:
-                search_fields = page.locator(
-                    'input[type="search"], input[name*="search" i], '
-                    'input[placeholder*="search" i], input[aria-label*="search" i]'
+            if not search_attempted:
+                self._browser_event(
+                    task_id, f"Storefront search was not submitted ({search_status}); checking visible catalogue content without claiming a search",
+                    url=page.url, status="warning", action="cart_search_unavailable", plan_step_id=step_id,
                 )
-                visible_fields = []
-                for index in range(min(await search_fields.count(), 8)):
-                    field = search_fields.nth(index)
-                    try:
-                        if await field.is_visible() and await field.is_enabled():
-                            visible_fields.append(field)
-                    except Exception:
-                        continue
-                if len(visible_fields) == 1:
-                    search_attempted = True
-                    await visible_fields[0].fill(name, timeout=4000)
-                    await visible_fields[0].press("Enter", timeout=4000)
-                    try:
-                        await page.wait_for_load_state("domcontentloaded", timeout=8000)
-                    except Exception:
-                        pass
-                    await page.wait_for_timeout(1200)
-                    cards = await matching_product_cards()
-                    matches = [item for item in cards if normal(name) == normal(item.get("title")) or normal(name) in normal(item.get("text"))]
 
             # Search is not always available or reliable. If it did not produce
             # an exact match, inspect the listing by scrolling through it. This
