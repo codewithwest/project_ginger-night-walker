@@ -136,6 +136,93 @@ def extract_product_search_query(objective: str) -> str | None:
     return None
 
 
+def build_product_search_blueprint(objective: str) -> ExecutionBlueprint:
+    """Build a deterministic, correctly authorised plan for exact product-search QA."""
+    query = extract_product_search_query(objective)
+    if not query:
+        raise ValueError("A quoted product-search query is required for this workflow")
+
+    criteria = [
+        SuccessCriterion(
+            criterion_id="sc-navigation",
+            description="The supplied website loads and its search interface or actual catalogue route is identified.",
+            acceptance_test="Capture the supplied site's successful navigation and identify a rendered search control or a grounded same-origin catalogue route.",
+        ),
+        SuccessCriterion(
+            criterion_id="sc-search-submission",
+            description=f"The exact search query {query!r} is submitted to the website.",
+            acceptance_test=f"Capture the search control containing {query!r} and confirm the search action and resulting navigation/outcome.",
+        ),
+        SuccessCriterion(
+            criterion_id="sc-product-name",
+            description=f"A result with a product name matching {query!r} is identified.",
+            acceptance_test="Extract the actual product title from a matching result; incidental page or card text is insufficient.",
+        ),
+        SuccessCriterion(
+            criterion_id="sc-product-image",
+            description="The matching product has an image in the search results.",
+            acceptance_test="Capture a non-empty image source associated with the matched product result.",
+        ),
+        SuccessCriterion(
+            criterion_id="sc-product-price",
+            description="The matching product has a displayed price.",
+            acceptance_test="Capture the numerical price associated with the matched product result.",
+        ),
+    ]
+    subtasks = [
+        PlannedSubtask(
+            subtask_id="qa-navigation",
+            objective="Navigate to the supplied website and identify its rendered search interface; if absent, discover the actual same-origin catalogue route from site navigation.",
+            capability=Capability.NAVIGATE,
+            success_criteria=["sc-navigation"],
+            expected_output="Captured target page and grounded search-interface or catalogue-route evidence.",
+        ),
+        PlannedSubtask(
+            subtask_id="qa-availability",
+            objective=f'Search for "{query}" using the rendered search control, discover the actual same-origin catalogue route if necessary, submit the query and capture the search outcome.',
+            capability=Capability.INTERACT,
+            depends_on=["qa-navigation"],
+            success_criteria=["sc-search-submission"],
+            expected_output="Evidence that the exact query was entered and the site's search action was triggered, or a precise recorded failure outcome.",
+        ),
+        PlannedSubtask(
+            subtask_id="qa-content",
+            objective=f'Extract the actual matching product name, image source and displayed price from the search results for "{query}".',
+            capability=Capability.EXTRACT,
+            depends_on=["qa-availability"],
+            success_criteria=["sc-product-name", "sc-product-image", "sc-product-price"],
+            expected_output="Product title, associated image source and displayed price, each independently captured.",
+        ),
+        PlannedSubtask(
+            subtask_id="qa-validate",
+            objective=f'Validate the extracted product title, image source and price against the search results for "{query}" and the captured browser evidence.',
+            capability=Capability.EXTRACT,
+            depends_on=["qa-content"],
+            success_criteria=["sc-product-name", "sc-product-image", "sc-product-price"],
+            expected_output="Evidence-linked validation verdict for each requested product field.",
+        ),
+        PlannedSubtask(
+            subtask_id="qa-synthesise",
+            objective="Summarize the search submission and each independently verified product field; clearly distinguish confirmed, failed and unverified checks.",
+            capability=Capability.EXTRACT,
+            depends_on=["qa-validate"],
+            success_criteria=[
+                "sc-navigation", "sc-search-submission", "sc-product-name",
+                "sc-product-image", "sc-product-price",
+            ],
+            expected_output="Concise evidence-constrained QA report with no unsupported product claims.",
+        ),
+    ]
+    return ExecutionBlueprint(
+        original_objective=objective,
+        interpretation=f"Search the supplied website for {query!r} and verify the matching product name, image and price.",
+        success_criteria=criteria,
+        subtasks=subtasks,
+        completion_policy="all_criteria_verified",
+        research_queries=[],
+    )
+
+
 def _qa_content_objective(objective: str) -> str:
     """Build the qa-content step objective, injecting the product name when present."""
     product = extract_product_search_query(objective)
