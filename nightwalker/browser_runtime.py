@@ -221,19 +221,26 @@ class BrowserRuntime:
             pass
 
     @staticmethod
-    def _normalise_steel_debug_url(debug_url: str) -> str:
-        """Rewrite Steel viewer URLs to the externally configured Steel host."""
+    def _normalise_steel_debug_url(debug_url: str, session_id: str = "") -> str:
+        """Pin the viewer to Steel's host and repair legacy unscoped debug routes."""
         parsed = urlparse(debug_url)
         api = urlparse(os.getenv("STEEL_API_BASE_URL", "http://steel-browser:3000/v1"))
         host = (api.hostname or "").strip("[]")
+        path = parsed.path
+        # Steel's session-aware viewer routes require the session ID in the path.
+        # Some versions advertise the old shared /sessions/debug endpoint, which
+        # then causes the viewer to request /sessions/cast (no session ID).
+        if session_id and re.fullmatch(r"/(?:v1/)?sessions/debug/?", path):
+            prefix = "/v1" if path.startswith("/v1/") else ""
+            path = f"{prefix}/sessions/{session_id}/debug"
         if not host:
-            return debug_url
+            return parsed._replace(path=path).geturl()
         netloc = f"[{host}]" if ":" in host else host
         port = parsed.port or api.port
         if port:
             netloc += f":{port}"
         scheme = "https" if api.scheme == "https" else "http"
-        return parsed._replace(scheme=scheme, netloc=netloc).geturl()
+        return parsed._replace(scheme=scheme, netloc=netloc, path=path).geturl()
 
     @staticmethod
     def _steel_ui_url(api_base: str) -> str:
@@ -321,7 +328,7 @@ class BrowserRuntime:
                 self._task_sessions[task_id] = {
                     "backend": "steel", "status": "connecting", "active": True,
                     "session_id": session_id,
-                    "debug_url": self._normalise_steel_debug_url(debug_url) if debug_url else None,
+                    "debug_url": self._normalise_steel_debug_url(debug_url, session_id) if debug_url else None,
                     "steel_ui_url": self._steel_ui_url(api_base),
                     "activity": [],
                     "started_at": datetime.now(UTC).isoformat(),
