@@ -1582,7 +1582,18 @@ class BrowserRuntime:
                     task_id, "QA product search skipped: plan contains no authorised interact step",
                     url=page.url,
                 )
-            self._browser_event(task_id, "Navigated to target page", url=page.url, title=(await page.title())[:500])
+            navigation_objective = next((
+                str(step.get("objective") or "").strip()
+                for step in steps
+                if step.get("capability") == "navigate" and str(step.get("objective") or "").strip()
+            ), "")
+            self._browser_event(
+                task_id,
+                f"Completed navigation: {navigation_objective}" if navigation_objective
+                else "Navigated to target page",
+                url=page.url, title=(await page.title())[:500],
+                action="plan_step_completed",
+            )
             visited = [page.url]
             issues: list[str] = []
             if response and response.status >= 400:
