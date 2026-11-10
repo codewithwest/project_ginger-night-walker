@@ -235,17 +235,19 @@ function ResearchReport({ result }: { result: BrowserResult }) {
         <span className="answer-highlight__label">ANSWER</span>
         <MarkdownContent className="markdown-content--answer">{result.answer || "The page was captured. Review the findings and source evidence below."}</MarkdownContent>
       </div>
-      {result.goal_state && <div className="research-section">
-        <h3>Goal coverage · {result.goal_state.completed.length}/{result.goal_state.criteria.length} verified</h3>
-        <ul className="finding-list">{result.goal_state.criteria.map((criterion) => {
-          const proof = result.goal_state?.evidence_by_criterion[criterion];
-          return <li key={criterion}>
-            <span>{criterion}</span>
-            <small>{proof ? "Verified · " + proof.evidence_id : "Evidence still required"}</small>
-            {proof && <blockquote>{proof.quote}</blockquote>}
-          </li>;
-        })}</ul>
-      </div>}
+      {result.goal_state && <details className="report-details research-section">
+        <summary><h3>Goal coverage · {result.goal_state.completed.length}/{result.goal_state.criteria.length} verified</h3><span>View criteria and proof</span></summary>
+        <div className="report-details__body">
+          <ul className="finding-list">{result.goal_state.criteria.map((criterion) => {
+            const proof = result.goal_state?.evidence_by_criterion[criterion];
+            return <li key={criterion}>
+              <span>{criterion}</span>
+              <small>{proof ? "Verified" : "Evidence still required"}</small>
+              {proof && <details className="raw-data"><summary>View supporting evidence</summary><small>{proof.evidence_id}</small><blockquote>{proof.quote}</blockquote></details>}
+            </li>;
+          })}</ul>
+        </div>
+      </details>}
       {productSearchRecords.length > 0 && <div className="research-section product-search-report">
         <div className="product-search-report__heading">
           <div><h3>Product search verification</h3><p>Search actions and product attributes captured by the browser</p></div>
@@ -280,7 +282,7 @@ function ResearchReport({ result }: { result: BrowserResult }) {
                     <span className={product.image_loaded ? "is-confirmed" : "is-missing"}>{product.image_loaded ? "Image loaded" : "Image not confirmed loaded"}</span>
                     <span className={product.price ? "is-confirmed" : "is-missing"}>{product.price ? "Price captured" : "Price missing"}</span>
                   </div>
-                  {product.evidence_ids?.length > 0 && <small>Evidence: {product.evidence_ids.join(", ")}</small>}
+                  {product.evidence_ids?.length > 0 && <details className="raw-data"><summary>View product evidence</summary><small>{product.evidence_ids.join(", ")}</small></details>}
                 </div>
               </div>
             ))}
@@ -311,7 +313,7 @@ function ResearchReport({ result }: { result: BrowserResult }) {
           {finding.affected_urls && finding.affected_urls.length > 0 && <div className="finding-urls">
             {finding.affected_urls.slice(0, 5).map((url) => <a href={url} target="_blank" rel="noreferrer" key={url}>{url}</a>)}
           </div>}
-          {finding.evidence_ids && finding.evidence_ids.length > 0 && <small>Evidence: {finding.evidence_ids.join(", ")}</small>}
+          {finding.evidence_ids && finding.evidence_ids.length > 0 && <details className="raw-data"><summary>View supporting evidence</summary><small>{finding.evidence_ids.join(", ")}</small></details>}
         </li>)}</ul>
       </div>}
       {Object.entries(structuredData).filter(([kind]) => kind !== "qa_product_search").map(([kind, value]) => (
@@ -333,20 +335,24 @@ function ResearchReport({ result }: { result: BrowserResult }) {
           )}
         </div>
       ))}
-      {sources.length > 0 && <div className="research-section">
-        <h3>Sources</h3>
-        {sources.map((source, index) => <a className="source-link" href={source.url} target="_blank" rel="noreferrer" key={source.url + index}>
-          <ExternalLink size={14} />{source.title || new URL(source.url).hostname}<span>{source.retrieved_at ? new Date(source.retrieved_at).toLocaleString() : new URL(source.url).hostname}</span>
-        </a>)}
-      </div>}
-      {result.evidence && result.evidence.length > 0 && <div className="research-section">
-        <h3>Captured evidence</h3>
-        {result.evidence.map((item, index) => <details className="raw-data" key={item.evidence_id || index}>
-          <summary>{item.evidence_id || "Browser capture"} · {item.source_url || "Source"}</summary>
-          {item.visited_urls && <p>{item.visited_urls.join(" → ")}</p>}
-          <pre>{item.captured_text || "No text capture available."}</pre>
-        </details>)}
-      </div>}
+      {sources.length > 0 && <details className="report-details research-section">
+        <summary><h3>Sources · {sources.length}</h3><span>View pages inspected</span></summary>
+        <div className="report-details__body">
+          {sources.map((source, index) => <a className="source-link" href={source.url} target="_blank" rel="noreferrer" key={source.url + index}>
+            <ExternalLink size={14} />{source.title || new URL(source.url).hostname}<span>{source.retrieved_at ? new Date(source.retrieved_at).toLocaleString() : new URL(source.url).hostname}</span>
+          </a>)}
+        </div>
+      </details>}
+      {result.evidence && result.evidence.length > 0 && <details className="report-details research-section">
+        <summary><h3>Evidence · {result.evidence.length} captures</h3><span>Open only when needed</span></summary>
+        <div className="report-details__body">
+          {result.evidence.map((item, index) => <details className="raw-data" key={item.evidence_id || index}>
+            <summary>{item.evidence_id || "Browser capture"} · {item.source_url || "Source"}</summary>
+            {item.visited_urls && <p>{item.visited_urls.join(" → ")}</p>}
+            <pre>{item.captured_text || "No text capture available."}</pre>
+          </details>)}
+        </div>
+      </details>}
       {limitations.length > 0 && <div className="research-section research-section--limitations">
         <h3>Limitations</h3><ul>{limitations.map((item, index) => <li key={index}>{item}</li>)}</ul>
       </div>}
@@ -861,7 +867,7 @@ export default function App() {
                 )}
 
                 {selected.execution_plan?.steps?.length ? (
-                  <details className="report-details" open>
+                  <details className="report-details">
                     <summary>
                       <span><Check size={15} /> Mission plan · {selected.execution_plan.steps.filter((step) => step.status === "completed").length}/{selected.execution_plan.steps.length} verified</span>
                       <ArrowDownRight size={15} />
@@ -888,7 +894,7 @@ export default function App() {
                 ) : null}
 
                 {selected.checklist_markdown && (
-                  <details className="report-details" open>
+                  <details className="report-details">
                     <summary>
                       <span><Check size={15} /> Goal &amp; progress checklist</span>
                       <ArrowDownRight size={15} />
@@ -902,7 +908,7 @@ export default function App() {
 
                 <details className="report-details">
                   <summary>
-                    <span><Terminal size={15} /> Execution details &amp; evidence</span>
+                    <span><Terminal size={15} /> Technical details &amp; evidence</span>
                     <ArrowDownRight size={15} />
                   </summary>
                   <div className="report-details__body">
