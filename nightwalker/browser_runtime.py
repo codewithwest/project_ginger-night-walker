@@ -883,9 +883,42 @@ class BrowserRuntime:
                     await page.wait_for_timeout(1200)
                     cards = await matching_product_cards()
                     matches = [item for item in cards if normal(name) == normal(item.get("title"))]
+
+            # Search is not always available or reliable. If it did not produce
+            # an exact match, inspect the listing by scrolling through it. This
+            # also gives lazy-loaded and infinite-scroll product grids time to
+            # render before deciding that the requested product is absent.
+            scroll_attempted = False
+            scroll_steps = 0
+            stable_bottom_steps = 0
+            previous_height = 0
+            while not matches and scroll_steps < 40:
+                scroll_attempted = True
+                await page.evaluate(
+                    "() => window.scrollBy(0, Math.max(Math.floor(window.innerHeight * 0.75), 500))"
+                )
+                await page.wait_for_timeout(700)
+                scroll_steps += 1
+                cards = await matching_product_cards()
+                matches = [item for item in cards if normal(name) == normal(item.get("title"))]
+                if matches:
+                    break
+                position = await page.evaluate(
+                    "() => ({top: window.scrollY, height: document.documentElement.scrollHeight, "
+                    "viewport: window.innerHeight})"
+                )
+                at_bottom = position["top"] + position["viewport"] >= position["height"] - 8
+                if at_bottom and position["height"] == previous_height:
+                    stable_bottom_steps += 1
+                else:
+                    stable_bottom_steps = 0
+                previous_height = position["height"]
+                if stable_bottom_steps >= 3:
+                    break
+
             if len(matches) != 1:
                 result = {"status": "blocked", "reason": "Expected one exact product card; found "
-                          + str(len(matches)), "candidate_count": len(matches), "search_attempted": search_attempted}
+                          + str(len(matches)), "candidate_count": len(matches), "search_attempted": search_attempted,\n                          "scroll_attempted": scroll_attempted, "scroll_steps": scroll_steps}
             elif matches[0]["addCount"] != 1:
                 result = {"status": "blocked", "reason": "The matching card does not contain exactly one Add to Cart control.",
                           "product_name": matches[0]["title"], "add_control_count": matches[0]["addCount"]}
@@ -893,7 +926,7 @@ class BrowserRuntime:
                 journey["card_index"] = matches[0]["index"]
                 journey["card_selector"] = selector
                 result = {"status": "verified", "product_name": matches[0]["title"],
-                          "add_control": matches[0]["addText"][0], "card_index": matches[0]["index"], "search_attempted": search_attempted, "page_url": page.url}
+                          "add_control": matches[0]["addText"][0], "card_index": matches[0]["index"],\n                          "search_attempted": search_attempted, "scroll_attempted": scroll_attempted,\n                          "scroll_steps": scroll_steps, "page_url": page.url}
             journey["steps"]["discovery"] = result
             return result
         if step_id.endswith("qa-availability"):
