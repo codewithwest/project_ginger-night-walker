@@ -244,6 +244,7 @@ def test_loaded_legacy_cart_task_is_migrated_before_snapshot_or_retry(tmp_path):
             ],
             "history": [],
         },
+        "result": {"evidence": [{"evidence_id": "ev-storefront"}]},
         "progress_events": [],
     }
 
@@ -295,6 +296,7 @@ def test_cart_plan_with_canonical_ids_but_stale_capabilities_is_migrated(tmp_pat
             ],
             "history": [],
         },
+        "result": {"evidence": [{"evidence_id": "ev-storefront"}]},
         "progress_events": [],
     }
 
