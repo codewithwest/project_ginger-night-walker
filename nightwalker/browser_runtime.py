@@ -1324,8 +1324,17 @@ class BrowserRuntime:
                             f"{audit_signals['qa_page_smoke']['pending_image_count']} image(s) were still loading at capture time; "
                             "they are marked pending and are not counted as confirmed broken images."
                         )
-            audit_findings = page_signal_findings(audit_signals, workflow_type)
-            for check in audit_signals["internal_link_checks"].get("checks", []):
+            # A named product search is a focused user journey, not a general QA audit.
+            # Suppress unrelated homepage DOM, accessibility, metadata and content findings.
+            focused_product_search = (
+                workflow_type == "qa"
+                and self._extract_product_search_query(objective) is not None
+            )
+            audit_findings = (
+                [] if focused_product_search
+                else page_signal_findings(audit_signals, workflow_type)
+            )
+            for check in ([] if focused_product_search else audit_signals["internal_link_checks"].get("checks", [])):
                 if check.get("off_origin_redirect"):
                     audit_findings.append({
                         "claim": f"Internal link redirects outside the audited origin: {check.get('url')} → {check.get('final_url')}",
@@ -1338,7 +1347,7 @@ class BrowserRuntime:
                         "type": "broken_internal_link", "severity": "high",
                         "affected_urls": [check.get("url")], "source_url": page.url,
                     })
-            for journey in (audit_signals.get("qa_navigation_journeys") or {}).get("checks", [])[:20]:
+            for journey in ([] if focused_product_search else (audit_signals.get("qa_navigation_journeys") or {}).get("checks", [])[:20]):
                 if journey.get("ok") is False:
                     audit_findings.append({
                         "claim": f"Same-origin navigation journey failed for {journey.get('url')}: "
@@ -1346,25 +1355,25 @@ class BrowserRuntime:
                         "type": "qa_navigation_failure", "severity": "high",
                         "affected_urls": [journey.get("url")],
                     })
-            for interaction in (audit_signals.get("qa_interaction_journeys") or {}).get("checks", [])[:10]:
+            for interaction in ([] if focused_product_search else (audit_signals.get("qa_interaction_journeys") or {}).get("checks", [])[:10]):
                 if interaction.get("ok") is False:
                     audit_findings.append({
                         "claim": f"Reversible disclosure interaction did not complete and restore cleanly: {interaction.get('label') or 'unnamed control'}",
                         "type": "qa_interaction_issue", "severity": "low",
                         "affected_urls": [page.url],
                     })
-            for event in (audit_signals.get("qa_runtime_events") or [])[:20]:
+            for event in ([] if focused_product_search else (audit_signals.get("qa_runtime_events") or [])[:20]):
                 if event.get("kind") in {"console_error", "page_error"}:
                     audit_findings.append({
                         "claim": f"Browser {event.get('kind')}: {event.get('message', '')[:240]}",
                         "type": "qa_browser_error", "severity": "medium",
                         "affected_urls": [event.get("url") or page.url],
                     })
-            if workflow_type in {"qa", "seo_qa"}:
+            if workflow_type in {"qa", "seo_qa"} and not focused_product_search:
                 audit_findings.extend(qa_extended_findings(
                     audit_signals.get("qa_extended") or {}, page.url
                 ))
-            wants_products = bool(re.search(r"(?i)\b(product|products|item|items|price|pricing)\b", objective))
+            wants_products = bool(re.search(r"(?i)\b(product|products|item|items|price|pricing)\b", objective)) and not focused_product_search
             products = self._extract_products_from_text(body_text, limit=200) if wants_products else []
             if wants_products:
                 try:
@@ -1410,33 +1419,35 @@ class BrowserRuntime:
             findings = list(audit_findings)
             for finding in findings:
                 finding.setdefault("affected_urls", [page.url])
-            if title:
+            if title and not focused_product_search:
                 findings.append({
                     "claim": f"Page title: {title}",
                     "type": "page_metadata",
                     "confidence": "observed",
                 })
-            findings.extend(
-                {
-                    "claim": heading,
-                    "type": "page_heading",
-                    "confidence": "observed",
-                }
-                for heading in headings
-            )
+            if not focused_product_search:
+                findings.extend(
+                    {
+                        "claim": heading,
+                        "type": "page_heading",
+                        "confidence": "observed",
+                    }
+                    for heading in headings
+                )
             excerpt_lines = [
                 re.sub(r"\s+", " ", line).strip()
                 for line in body_text.splitlines()
                 if len(line.strip()) >= 35
             ][:8]
-            findings.extend(
-                {
-                    "claim": "Visible page text: " + line[:400],
-                    "type": "visible_text_excerpt",
-                    "confidence": "observed",
-                }
-                for line in excerpt_lines
-            )
+            if not focused_product_search:
+                findings.extend(
+                    {
+                        "claim": "Visible page text: " + line[:400],
+                        "type": "visible_text_excerpt",
+                        "confidence": "observed",
+                    }
+                    for line in excerpt_lines
+                )
             sources = [{
                 "source_id": "s-001",
                 "url": page.url,
@@ -1444,6 +1455,9 @@ class BrowserRuntime:
                 "retrieved_at": retrieved_at,
             }]
             structured_data = {"products": products} if products else {}
+            if focused_product_search:
+                # The product-search result records below are the only relevant data.
+                structured_data = {}
             if workflow_type in {"seo", "seo_qa"}:
                 structured_data["seo_checks"] = audit_signals.get("seo", {})
                 discovery_signals = audit_signals.get("seo_discovery", {})
