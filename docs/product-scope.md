@@ -21,7 +21,7 @@ Task intake must classify the requested outcome, not the nouns appearing in the 
 - Route to QA when the requested outcome concerns whether a website or application works: journeys, forms, navigation, links, controls, responsive behaviour, browser errors, visual/rendering defects, accessibility checks or regression scenarios.
 - If a request clearly asks for both, create a combined task with distinct SEO and QA workstreams and independent completion criteria.
 - Ask one focused clarification only when the target website or an essential test scope cannot be inferred safely.
-- Do not route a task to a shopping/product workflow merely because it mentions a product, price, brand or named entity. Product extraction is not a first-class product capability in this phase.
+- A product mentioned inside a QA objective remains part of the user journey: search, identify the matching product card, and extract only the attributes the user requests. This is functional product-discovery QA, not a standalone shopping or price-comparison workflow.
 - Do not launch general web research as a fallback when SEO/QA discovery fails. Recover within the selected workflow and report the blocker if recovery is exhausted.
 
 ## SEO audit workflow
@@ -60,6 +60,10 @@ Task intake must classify the requested outcome, not the nouns appearing in the 
 - Accessibility smoke checks: labels, names, keyboard reachability, focus visibility, heading landmarks and image alternatives where observable.
 - Reproducible defect records with URL, steps, expected result, actual result, severity, evidence and environment.
 - Regression re-runs for previously recorded scenarios.
+
+### Product discovery within QA journeys
+
+When a QA objective includes finding or verifying a product, the QA workflow may capture the exact matching product title, visible price, image source/load state and product destination URL. The browser preserves the exact displayed values and their evidence/provenance. The plan requires only the fields explicitly requested (product identity is always required); other visible fields may be displayed as additional observations but must not block completion. Missing or ambiguous fields remain unverified, never inferred. Product results are rendered as structured product cards near the top of the report, separate from defect findings. This does not authorise checkout or other transactions unless the user explicitly requests a safe, bounded action.
 
 ### QA safety and evidence rules
 
@@ -113,7 +117,7 @@ Agents may help plan, inspect and interpret evidence, but they cannot grant them
 The current code path is a partial implementation of the initial scope, not a completed audit product:
 
 - **SEO — implemented foundation, still partial:** same-origin crawling with a configurable page budget, robots.txt and bounded sitemap-index discovery, evidence-gated discovered-URL coverage, page-level metadata/indexability observations, internal-link destination checks, duplicate canonical/title/meta-description/visible-text groups, evidence-linked findings and deterministic prioritisation. Exhaustive site discovery, field/lab Core Web Vitals, full Schema.org validation and image performance analysis are not implemented.
-- **QA — implemented read-only smoke layer, still partial:** same-origin GET navigation samples, reversible local disclosure toggles, browser console/page/network diagnostics, policy-checked same-origin link status/redirect checks, 375/768/1280px overflow measurements, accessible-name and ARIA-reference heuristics, nested-control/tab-order/table/landmark checks and a short keyboard focus sample. Stateful/authenticated journeys, form validation execution, SPA interaction coverage, visual regression, exhaustive keyboard testing and automated WCAG conformance are not implemented.
+- **QA — implemented read-only smoke layer and bounded journeys, still partial:** same-origin navigation, browser console/page/network diagnostics, policy-checked link checks, responsive overflow measurements, accessible-name and ARIA heuristics, and dedicated product-search/cart journeys. SEO metadata, heading hierarchy, canonical/indexing and schema findings belong to SEO workflows, not functional QA. Stateful/authenticated journeys, form validation execution, broad SPA interaction coverage, visual regression, exhaustive keyboard testing and automated WCAG conformance are not implemented.
 - **Combined workflow — routed and planned:** both workstreams are represented in the execution blueprint; end-to-end combined completion still requires live validation.
 - **Reporting — improved foundation:** evidence-linked findings include P0-P4 priorities, impact rationale, effort and remediation defaults. The report includes discovered/sitemap coverage and duplicate/link/QA summary metrics; these metrics are bounded by crawl and sampling limits.
 - **Validation — not yet verified end to end:** unit tests have been added for deterministic analysis and page-signal helpers, but tests/build have not been executed in the current implementation session and no live Night Walker run against a public website has been verified.
