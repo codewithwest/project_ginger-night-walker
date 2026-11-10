@@ -164,10 +164,8 @@ def page_signal_findings(signals: dict[str, Any], workflow_type: str) -> list[di
         levels = seo.get("heading_levels", [])
         if any(current > previous + 1 for previous, current in zip(levels, levels[1:])): findings.append({"claim": "Heading levels skip one or more ranks; review document outline.", "type": "seo_warning", "severity": "low"})
     if workflow_type in {"qa", "seo_qa"}:
-        if not seo.get("title"):
-            findings.append({"claim": "The page has no non-empty document title.", "type": "qa_page_issue", "severity": "medium"})
-        if seo.get("h1_count", 0) == 0:
-            findings.append({"claim": "No H1 heading was found on the requested page.", "type": "qa_page_issue", "severity": "medium"})
+        # Document titles and heading hierarchy are SEO/content-structure checks,
+        # not functional usability defects. QA retains actual rendering failures.
         broken_images = [item for item in seo.get("images", []) if item.get("load_status") == "broken"]
         for image in broken_images:
             findings.append({
