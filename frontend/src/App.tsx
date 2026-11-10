@@ -236,7 +236,7 @@ function ResearchReport({ result }: { result: BrowserResult }) {
         <MarkdownContent className="markdown-content--answer">{result.answer || "The page was captured. Review the findings and source evidence below."}</MarkdownContent>
       </div>
       {result.goal_state && <details className="report-details research-section">
-        <summary><h3>Goal coverage · {result.goal_state.completed.length}/{result.goal_state.criteria.length} verified</h3><span>View criteria and proof</span></summary>
+        <summary><span>Goal coverage · {result.goal_state.completed.length}/{result.goal_state.criteria.length} verified</span><span>View criteria and proof</span></summary>
         <div className="report-details__body">
           <ul className="finding-list">{result.goal_state.criteria.map((criterion) => {
             const proof = result.goal_state?.evidence_by_criterion[criterion];
@@ -336,7 +336,7 @@ function ResearchReport({ result }: { result: BrowserResult }) {
         </div>
       ))}
       {sources.length > 0 && <details className="report-details research-section">
-        <summary><h3>Sources · {sources.length}</h3><span>View pages inspected</span></summary>
+        <summary><span>Sources · {sources.length}</span><span>View pages inspected</span></summary>
         <div className="report-details__body">
           {sources.map((source, index) => <a className="source-link" href={source.url} target="_blank" rel="noreferrer" key={source.url + index}>
             <ExternalLink size={14} />{source.title || new URL(source.url).hostname}<span>{source.retrieved_at ? new Date(source.retrieved_at).toLocaleString() : new URL(source.url).hostname}</span>
@@ -344,7 +344,7 @@ function ResearchReport({ result }: { result: BrowserResult }) {
         </div>
       </details>}
       {result.evidence && result.evidence.length > 0 && <details className="report-details research-section">
-        <summary><h3>Evidence · {result.evidence.length} captures</h3><span>Open only when needed</span></summary>
+        <summary><span>Evidence · {result.evidence.length} captures</span><span>Open only when needed</span></summary>
         <div className="report-details__body">
           {result.evidence.map((item, index) => <details className="raw-data" key={item.evidence_id || index}>
             <summary>{item.evidence_id || "Browser capture"} · {item.source_url || "Source"}</summary>
