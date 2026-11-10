@@ -215,3 +215,19 @@ def ready_steps(plan: dict[str, Any]) -> list[dict[str, Any]]:
         if s["status"] in {"pending", "ready", "in_progress"}
         and all(by_id.get(dep, {}).get("status") == "completed" for dep in s.get("depends_on", []))
     ]
+
+
+def ready_steps_for_capture(
+    plan: dict[str, Any], active_step_id: str, *, one_step_per_capture: bool = False,
+) -> list[dict[str, Any]]:
+    """Return steps that may be verified from this browser capture.
+
+    Most read-only extraction steps can share one captured page. A focused
+    product-search journey cannot: navigation, query submission and result
+    extraction each require a distinct browser action/capture. In that mode,
+    never advance a dependent step using evidence captured before that step ran.
+    """
+    ready = ready_steps(plan)
+    if not one_step_per_capture:
+        return ready
+    return [step for step in ready if step.get("step_id") == active_step_id]
