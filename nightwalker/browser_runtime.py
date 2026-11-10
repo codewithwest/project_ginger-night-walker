@@ -879,11 +879,11 @@ class BrowserRuntime:
             return result
         if step_id.endswith("qa-content"):
             body = (await page.locator("body").inner_text())[:30000]
-            lines = [re.sub(r"\\s+", " ", line).strip() for line in body.splitlines() if line.strip()]
+            lines = [re.sub(r"\s+", " ", line).strip() for line in body.splitlines() if line.strip()]
             matching_lines = [line for line in lines if normal(name) in normal(line)]
-            price_pattern = re.compile(r"(?i)(?:R\\s*)[0-9][0-9,]*(?:\\.[0-9]{2})?")
+            price_pattern = re.compile(r"(?i)(?:R\s*)[0-9][0-9,]*(?:\.[0-9]{2})?")
             prices = [price_pattern.search(line).group(0) for line in matching_lines if price_pattern.search(line)]
-            qty = re.search(r"(?i)(?:quantity|qty)\\s*[:：]?\\s*(\\d+)", "\\n".join(matching_lines))
+            qty = re.search(r"(?i)(?:quantity|qty)\s*[:：]?\s*(\d+)", "\n".join(matching_lines))
             result = {"status": "verified" if matching_lines and prices and qty else "unconfirmed",
                       "product_name": name, "matching_lines": matching_lines[:8],
                       "price": prices[0] if len(set(prices)) == 1 else None,
