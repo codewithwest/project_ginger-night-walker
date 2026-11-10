@@ -147,18 +147,18 @@ async def test_interact_step_executes_requested_qa_search(monkeypatch):
     expected = {"query": "Dark Grey", "performed": True, "status": "matched"}
     calls = []
 
-    async def search(page, objective):
-        calls.append((page, objective))
+    async def search(page, objective, task_id=None):
+        calls.append((page, objective, task_id))
         return expected
 
     monkeypatch.setattr(runtime, "_run_product_search_smoke", search)
     page = object()
 
     result, destination = await runtime._execute_interaction(
-        page, 'Submit search query "Dark Grey".', "qa",
+        page, 'Submit search query "Dark Grey".', "qa", task_id="task-qa-search",
     )
 
     assert result is expected
     assert destination is None
-    assert calls == [(page, 'Submit search query "Dark Grey".')]
+    assert calls == [(page, 'Submit search query "Dark Grey".', "task-qa-search")]
 
