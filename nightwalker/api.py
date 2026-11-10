@@ -78,6 +78,11 @@ async def health():
     return {"status": "ok", "service": "ginger-night-walker"}
 
 
+@app.get("/health/steel-mcp")
+async def steel_mcp_health():
+    return browser.steel_mcp_status()
+
+
 @app.get("/health/ollama")
 async def ollama_health():
     try:
