@@ -220,6 +220,7 @@ class TaskManager:
             workflow = WorkflowType(record.get("workflow_type") or classify_workflow(objective_text).value)
             canonical_blueprint = None
             if is_ecommerce_cart_workflow(objective_text):
+                record["workflow_type"] = WorkflowType.QA.value
                 canonical_blueprint = build_cart_journey_blueprint(objective_text)
             elif workflow == WorkflowType.QA and extract_product_search_query(objective_text):
                 canonical_blueprint = build_product_search_blueprint(objective_text)
@@ -426,6 +427,7 @@ class TaskManager:
         objective = str(record.get("objective") or "")
         if not is_ecommerce_cart_workflow(objective):
             return False
+        record["workflow_type"] = WorkflowType.QA.value
         canonical = build_cart_journey_blueprint(objective)
         saved = record.get("execution_blueprint") or {}
         if self._workflow_blueprint_matches(saved, canonical):
