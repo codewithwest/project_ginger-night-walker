@@ -608,8 +608,7 @@ class TaskManager:
                 }
                 # A separate goal analyst turns the Decider's routing plan into
                 # evidence-testable criteria and dependent subtasks. This is also
-                # model-generated; build_workflow_blueprint is no longer the runtime
-                # source of the task checklist.
+                # model-generated and remains the authoritative execution checklist.
                 blueprint = await self.orchestrator.ollama.create_execution_blueprint(
                     objective, task_id=task_id
                 )
@@ -2267,7 +2266,8 @@ class TaskManager:
             return None
         if record.get("status") not in {"failed", "blocked"}:
             raise ValueError("Only failed or blocked tasks can be resumed")
-        if self._migrate_legacy_cart_plan(record):
+        if is_ecommerce_cart_workflow(str(record.get("objective") or "")) and record.get("workflow_type") != WorkflowType.QA.value:
+            record["workflow_type"] = WorkflowType.QA.value
             self._persist(task_id)
         reset_steps = reset_retryable_steps(record.get("execution_plan") or {})
         if reset_steps:
