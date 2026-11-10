@@ -1631,11 +1631,20 @@ class BrowserRuntime:
                 step_objective = str(step.get("objective", ""))[:500]
                 if capability == "navigate":
                     continue
+                step_id = str(step.get("step_id") or "")
+                # Steel SESSION ACTIVITY is the operator-facing action feed.
+                # Show the actual model-authored instruction, not an opaque step ID.
+                if not step_id.endswith(("qa-discover", "qa-availability", "qa-validate", "qa-content", "qa-synthesise")):
+                    self._browser_event(
+                        task_id,
+                        f"Next action ({capability or 'execute'}): {step_objective or 'Follow the planned step'}",
+                        url=page.url, action="plan_step_start", plan_step_id=step_id or None,
+                    )
                 if capability == "interact":
-                    step_id = str(step.get("step_id") or "")
                     if step_id.endswith(("qa-discover", "qa-availability", "qa-validate")):
                         self._browser_event(
-                            task_id, "Starting cart journey step: " + step_id,
+                            task_id,
+                            f"Next action (interact): {step_objective or 'Perform the planned cart interaction'}",
                             url=page.url, action="cart_step_start", plan_step_id=step_id,
                         )
                         cart_result = await self._run_cart_journey_step(page, step_id, objective, task_id)
@@ -1695,7 +1704,8 @@ class BrowserRuntime:
                     step_id = str(step.get("step_id") or "")
                     if step_id.endswith(("qa-content", "qa-synthesise")):
                         self._browser_event(
-                            task_id, "Starting cart journey step: " + step_id,
+                            task_id,
+                            f"Next action (extract): {step_objective or 'Verify the planned cart state'}",
                             url=page.url, action="cart_step_start", plan_step_id=step_id,
                         )
                         cart_result = await self._run_cart_journey_step(page, step_id, objective, task_id)
