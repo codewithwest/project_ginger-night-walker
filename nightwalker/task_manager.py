@@ -1433,33 +1433,28 @@ class TaskManager:
                         next_url="", next_assignment=next_assignment, research_complete=True,
                     )
                     break
-                # Focused product-search QA is a sequential browser journey,
-                # not a crawl. The next authorised mission action must run on the
-                # already captured page even when it yielded no crawl candidates.
-                if focused_product_search or focused_cart_journey:
-                    pending_actions = [
-                        step for step in ready_steps(record.get("execution_plan") or {})
-                        if focused_cart_journey or not str(step.get("step_id", "")).endswith((
-                            "qa-validate", "qa-synthesise",
-                        ))
-                    ]
-                    if pending_actions and round_count < int(record.get("max_rounds", self.max_rounds)):
-                        next_step = pending_actions[0]
-                        next_url = str(final_url or result.get("final_url") or next_url)
-                        record.setdefault("plan_step_urls", {})[next_step["step_id"]] = next_url
-                        next_assignment = next_step["objective"]
-                        self._save_checkpoint(
-                            task_id, initial_plan, sources=sources, findings=findings,
-                            evidence=evidence, visited_urls=visited_urls, candidates=candidates,
-                            structured_data=structured_data, limitations=limitations,
-                            loop_guard=loop_guard, round_count=round_count,
-                            next_url=next_url, next_assignment=next_assignment,
-                        )
-                        self._log(
-                            task_id,
-                            f"Continuing focused product-search journey with authorised step {next_step['step_id']}",
-                        )
-                        continue
+                # Continue the Decider-authored sequence on the live page even
+                # when that page exposes no crawl candidates. Whether the next action
+                # searches, navigates, configures, verifies or mutates state belongs to
+                # the model-authored step, not a task-category-specific runtime branch.
+                pending_actions = ready_steps(record.get("execution_plan") or {})
+                if pending_actions and round_count < int(record.get("max_rounds", self.max_rounds)):
+                    next_step = pending_actions[0]
+                    next_url = str(final_url or result.get("final_url") or next_url)
+                    record.setdefault("plan_step_urls", {})[next_step["step_id"]] = next_url
+                    next_assignment = next_step["objective"]
+                    self._save_checkpoint(
+                        task_id, initial_plan, sources=sources, findings=findings,
+                        evidence=evidence, visited_urls=visited_urls, candidates=candidates,
+                        structured_data=structured_data, limitations=limitations,
+                        loop_guard=loop_guard, round_count=round_count,
+                        next_url=next_url, next_assignment=next_assignment,
+                    )
+                    self._log(
+                        task_id,
+                        f"Continuing Decider-authored mission with authorised step {next_step['step_id']}",
+                    )
+                    continue
 
                 if not candidates or round_count >= int(record.get("max_rounds", self.max_rounds)):
                     next_url = ""
