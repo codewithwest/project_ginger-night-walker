@@ -848,13 +848,13 @@ class BrowserRuntime:
                         (el.innerText || '') + ' ' + (el.getAttribute('aria-label') || '') + ' ' +
                         (el.getAttribute('value') || '') + ' ' + (el.getAttribute('title') || '')
                     ));
-                    return {index, title: titleText.trim(), addCount: add.length,
+                    return {index, title: titleText.trim(), text: (node.innerText || node.textContent || '').trim().slice(0, 4000), addCount: add.length,
                         addText: add.map(el => (el.innerText || el.getAttribute('aria-label') ||
                             el.getAttribute('value') || el.getAttribute('title') || '').trim())};
                 })"""
                 )
             cards = await matching_product_cards()
-            matches = [item for item in cards if normal(name) == normal(item.get("title"))]
+            matches = [item for item in cards if normal(name) == normal(item.get("title")) or normal(name) in normal(item.get("text"))]
             search_attempted = False
             # A storefront homepage rarely contains every SKU. If the exact card
             # is absent, use one uniquely visible site-search field and submit the
@@ -882,7 +882,7 @@ class BrowserRuntime:
                         pass
                     await page.wait_for_timeout(1200)
                     cards = await matching_product_cards()
-                    matches = [item for item in cards if normal(name) == normal(item.get("title"))]
+                    matches = [item for item in cards if normal(name) == normal(item.get("title")) or normal(name) in normal(item.get("text"))]
 
             # Search is not always available or reliable. If it did not produce
             # an exact match, inspect the listing by scrolling through it. This
@@ -900,7 +900,7 @@ class BrowserRuntime:
                 await page.wait_for_timeout(700)
                 scroll_steps += 1
                 cards = await matching_product_cards()
-                matches = [item for item in cards if normal(name) == normal(item.get("title"))]
+                matches = [item for item in cards if normal(name) == normal(item.get("title")) or normal(name) in normal(item.get("text"))]
                 if matches:
                     break
                 position = await page.evaluate(
