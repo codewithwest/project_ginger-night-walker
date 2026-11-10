@@ -58,3 +58,44 @@ def test_workflow_criteria_do_not_complete_from_pending_steps():
 
     assert result["completed"] == []
     assert result["remaining"] == [description]
+
+
+def test_cart_criteria_are_reconciled_against_specific_verified_steps():
+    descriptions = {
+        "sc-navigation": "The requested storefront is reached.",
+        "sc-product-discovery": "The requested product and its add-to-cart control are identified.",
+        "sc-product-addition": "The requested product is added to the cart.",
+    }
+    state = GoalStateManager.initialise("Cart QA", list(descriptions.values()))
+    # Simulate an LLM proposal that incorrectly marked product discovery and addition
+    # complete using the same generic homepage evidence as navigation.
+    state["completed"] = list(descriptions.values())
+    state["remaining"] = []
+    state["evidence_by_criterion"] = {
+        descriptions[key]: {"evidence_id": "ev-home", "verification": "model_proposal"}
+        for key in descriptions
+    }
+    blueprint = {
+        "success_criteria": [
+            {"criterion_id": key, "description": value}
+            for key, value in descriptions.items()
+        ]
+    }
+    plan = {
+        "steps": [{
+            "step_id": "qa-navigation",
+            "status": "completed",
+            "success_criteria": ["sc-navigation"],
+            "evidence_refs": ["ev-home"],
+        }]
+    }
+    result = GoalStateManager.apply_verified_workflow_results(
+        state, blueprint, plan,
+        [{"evidence_id": "ev-home", "captured_text": "Weylandts homepage"}],
+    )
+    assert result["completed"] == [descriptions["sc-navigation"]]
+    assert result["remaining"] == [
+        descriptions["sc-product-discovery"],
+        descriptions["sc-product-addition"],
+    ]
+    assert descriptions["sc-product-addition"] not in result["evidence_by_criterion"]
