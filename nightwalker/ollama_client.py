@@ -415,7 +415,7 @@ class OllamaClient:
             "(3) whether the requested search was actually submitted, and (4) each requested product attribute "
             "as an independent evidence-backed check. Never mark a search or product check complete merely because "
             "the page loaded or unrelated products were extracted. Preserve the supplied URL and user query verbatim. "
-            "For ecommerce cart QA, plan the user's actual requested journey: distinguish product identity from "
+            "For ecommerce cart QA, define success criteria for the user's actual requested journey: distinguish product identity from "
             "requested attributes or variants (for example, a colour may be a variant rather than the product title); "
             "discover candidates using search, catalogue navigation, scrolling and product detail pages as appropriate; "
             "verify the requested variant is selected and available before adding; verify cart contents, price and "
