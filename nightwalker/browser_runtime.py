@@ -312,6 +312,7 @@ class BrowserRuntime:
     def steel_mcp_status(self) -> dict:
         return {
             "enabled": os.getenv("STEEL_MCP_ENABLED", "false").strip().lower() == "true",
+            "mission_execution_enabled": os.getenv("STEEL_MCP_MISSION_ENABLED", "true").strip().lower() == "true",
             "connected": self.steel_mcp.connected,
             "tool_count": len(self.steel_mcp.tools),
             "tools": [item["name"] for item in self.steel_mcp.tools],
