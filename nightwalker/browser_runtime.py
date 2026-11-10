@@ -443,7 +443,9 @@ class BrowserRuntime:
         )
         return page.url
 
-    async def _run_product_search_smoke(self, page: Page, objective: str) -> dict[str, Any] | None:
+    async def _run_product_search_smoke(
+        self, page: Page, objective: str, task_id: str | None = None,
+    ) -> dict[str, Any] | None:
         """Find a usable product search from the supplied page or the site's real catalogue."""
         query = self._extract_product_search_query(objective)
         if not query:
@@ -485,15 +487,17 @@ class BrowserRuntime:
                     arg=selector,
                     timeout=timeout_ms,
                 )
-                self._browser_event(
-                    task_id, f"Search UI became available after dynamic page rendering ({stage})",
-                    url=page.url,
-                )
+                if task_id:
+                    self._browser_event(
+                        task_id, f"Search UI became available after dynamic page rendering ({stage})",
+                        url=page.url,
+                    )
             except Exception:
-                self._browser_event(
-                    task_id, f"Search UI did not appear within {timeout_ms}ms ({stage}); inspecting current DOM",
-                    url=page.url,
-                )
+                if task_id:
+                    self._browser_event(
+                        task_id, f"Search UI did not appear within {timeout_ms}ms ({stage}); inspecting current DOM",
+                        url=page.url,
+                    )
 
         async def visible_search_fields():
             locator = page.locator(
@@ -764,6 +768,7 @@ class BrowserRuntime:
     async def _execute_interaction(
         self, page: Page, objective: str, workflow_type: str,
         existing_product_search: dict[str, Any] | None = None,
+        task_id: str | None = None,
     ) -> tuple[dict[str, Any] | None, str | None]:
         """Execute a requested QA search, or fall back to a grounded same-site link."""
         query = self._extract_product_search_query(objective)
@@ -773,6 +778,8 @@ class BrowserRuntime:
                 and str(existing_product_search.get("query", "")).casefold() == query.casefold()
             ):
                 return existing_product_search, None
+            if task_id:
+                return await self._run_product_search_smoke(page, objective, task_id), None
             return await self._run_product_search_smoke(page, objective), None
         return None, await self._follow_relevant_link(page, objective)
 
@@ -1214,7 +1221,7 @@ class BrowserRuntime:
             # The objective identifies search intent; an explicit interaction
             # step anywhere in the plan authorises the bounded mouse/keyboard flow.
             qa_product_search = (
-                await self._run_product_search_smoke(page, objective)
+                await self._run_product_search_smoke(page, objective, task_id)
                 if workflow_type == "qa"
                 and product_search_requested
                 and has_authorized_search_interaction
@@ -1248,7 +1255,7 @@ class BrowserRuntime:
                         search_result, destination = qa_product_search, None
                     else:
                         search_result, destination = await self._execute_interaction(
-                            page, step_objective, workflow_type, qa_product_search,
+                            page, step_objective, workflow_type, qa_product_search, task_id,
                         )
                     if search_result is not None:
                         qa_product_search = search_result
