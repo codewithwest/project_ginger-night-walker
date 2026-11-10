@@ -122,6 +122,48 @@ def normalise_blueprint_subtasks(blueprint: dict[str, Any]) -> dict[str, Any]:
     return {**blueprint, "subtasks": merged}
 
 
+def initialise_decision_plan(decision_steps: list[Any]) -> dict[str, Any]:
+    """Build the execution ledger from the accepted Decider sequence without rewriting it."""
+    steps = []
+    seen: set[str] = set()
+    previous_id: str | None = None
+    for index, item in enumerate(decision_steps, 1):
+        if isinstance(item, dict):
+            step_id = str(item.get("step_id") or "")
+            objective = str(item.get("objective") or "")
+            capability = item.get("capability") or ""
+        else:
+            step_id = str(getattr(item, "step_id", "") or "")
+            objective = str(getattr(item, "objective", "") or "")
+            capability = getattr(item, "capability", "")
+        capability = str(getattr(capability, "value", capability))
+        if not step_id or not objective or not capability:
+            raise ValueError("Decider execution steps require an ID, objective and capability")
+        if step_id in seen:
+            raise ValueError(f"Decider returned duplicate step ID: {step_id}")
+        seen.add(step_id)
+        steps.append({
+            "step_id": step_id,
+            "index": index,
+            "objective": objective,
+            "capability": capability,
+            # The Decider contract specifies an ordered list, not a dependency
+            # graph. Preserve that order as a sequential execution chain.
+            "depends_on": [previous_id] if previous_id else [],
+            "success_criteria": [],
+            "expected_output": "Evidence-backed result for the Decider-authored step",
+            "status": "pending",
+            "attempts": 0,
+            "evidence_refs": [],
+            "result": None,
+            "updated_at": datetime.now(UTC).isoformat(),
+        })
+        previous_id = step_id
+    if not steps:
+        raise ValueError("Cannot initialise an execution plan without Decider steps")
+    return {"version": 1, "status": "pending", "steps": steps, "history": [],
+            "source": "decider_plan", "ordering": "decider_authored"}
+
 def initialise_plan(blueprint: dict[str, Any]) -> dict[str, Any]:
     blueprint = normalise_blueprint_subtasks(blueprint)
     steps = []
