@@ -162,6 +162,23 @@ async def test_interact_step_executes_requested_qa_search(monkeypatch):
     assert destination is None
     assert calls == [(page, 'Submit search query "Dark Grey".', "task-qa-search")]
 
+def test_browser_event_preserves_action_and_plan_step_metadata():
+    runtime = BrowserRuntime()
+
+    runtime._browser_event(
+        "task-events",
+        "Opening the planned target page",
+        url="https://example.com/",
+        action="navigate",
+        plan_step_id="qa-navigation",
+    )
+
+    event = runtime.task_session("task-events")["activity"][-1]
+    assert event["action"] == "navigate"
+    assert event["plan_step_id"] == "qa-navigation"
+    assert event["url"] == "https://example.com/"
+
+
 class FakeSteelBrowser:
     def __init__(self, connected=True):
         self.connected = connected
