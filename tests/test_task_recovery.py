@@ -207,3 +207,56 @@ async def test_restart_retries_legacy_website_only_clarification(tmp_path):
     assert called["task_id"] == "old-site-prompt"
     assert called["resume"] is True
     assert manager.snapshot("old-site-prompt")["status"] == "completed"
+
+
+
+def test_loaded_legacy_cart_task_is_migrated_before_snapshot_or_retry(tmp_path):
+    manager = TaskManager(NoExecutionOrchestrator())
+    manager.state_store = TaskStateStore(str(tmp_path / "tasks"))
+    manager.scratchpad = TaskScratchpad(str(tmp_path / "evidence"))
+    manager.tasks["legacy-cart"] = {
+        "task_id": "legacy-cart",
+        "objective": (
+            'Open https://www.weylandts.co.za/. Add "Dark Grey" to the cart, '
+            "verify price and quantity, remove it, and confirm the cart is empty. Do not checkout."
+        ),
+        "status": "failed",
+        "execution_blueprint": {
+            "version": 1,
+            "subtasks": [
+                {"subtask_id": "qa-navigation"},
+                {"subtask_id": "qa-availability"},
+                {"subtask_id": "qa-content"},
+                {"subtask_id": "qa-validate"},
+                {"subtask_id": "qa-crawl"},
+                {"subtask_id": "qa-synthesise"},
+            ],
+        },
+        "execution_plan": {
+            "steps": [
+                {
+                    "step_id": "qa-navigation",
+                    "status": "completed",
+                    "evidence_refs": ["ev-storefront"],
+                    "result": "Storefront loaded",
+                },
+                {"step_id": "qa-availability", "status": "blocked", "evidence_refs": []},
+            ],
+            "history": [],
+        },
+        "progress_events": [],
+    }
+
+    record = manager.tasks["legacy-cart"]
+    assert manager._migrate_legacy_cart_plan(record) is True
+    ids = [item["subtask_id"] for item in record["execution_blueprint"]["subtasks"]]
+    assert ids == [
+        "qa-navigation", "qa-discover", "qa-availability",
+        "qa-content", "qa-validate", "qa-synthesise",
+    ]
+    steps = record["execution_plan"]["steps"]
+    assert steps[0]["status"] == "completed"
+    assert steps[0]["evidence_refs"] == ["ev-storefront"]
+    assert steps[1]["step_id"] == "qa-discover"
+    assert steps[1]["status"] == "pending"
+    assert record["active_plan_step_id"] is None
