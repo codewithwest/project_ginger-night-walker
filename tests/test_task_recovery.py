@@ -260,3 +260,48 @@ def test_loaded_legacy_cart_task_is_migrated_before_snapshot_or_retry(tmp_path):
     assert steps[1]["step_id"] == "qa-discover"
     assert steps[1]["status"] == "pending"
     assert record["active_plan_step_id"] is None
+
+
+def test_cart_plan_with_canonical_ids_but_stale_capabilities_is_migrated(tmp_path):
+    from nightwalker.workflows import build_cart_journey_blueprint
+
+    manager = TaskManager(NoExecutionOrchestrator())
+    manager.state_store = TaskStateStore(str(tmp_path / "tasks"))
+    manager.scratchpad = TaskScratchpad(str(tmp_path / "evidence"))
+    objective = (
+        'Open https://www.weylandts.co.za/. Add "Dark Grey" to the cart, '
+        "verify price and quantity, remove it, and confirm the cart is empty. Do not checkout."
+    )
+    canonical = build_cart_journey_blueprint(objective).model_dump(mode="json")
+    stale = {
+        **canonical,
+        "subtasks": [
+            {**item, "capability": "navigate"} if item["subtask_id"] == "qa-discover" else item
+            for item in canonical["subtasks"]
+        ],
+    }
+    manager.tasks["stale-semantics"] = {
+        "task_id": "stale-semantics",
+        "objective": objective,
+        "status": "failed",
+        "execution_blueprint": stale,
+        "execution_plan": {
+            "steps": [
+                {"step_id": "qa-navigation", "status": "completed",
+                 "evidence_refs": ["ev-storefront"], "result": "Storefront loaded"},
+                {"step_id": "qa-discover", "status": "completed",
+                 "evidence_refs": ["ev-storefront"], "result": "Captured homepage"},
+            ],
+            "history": [],
+        },
+        "progress_events": [],
+    }
+
+    record = manager.tasks["stale-semantics"]
+    assert manager._migrate_legacy_cart_plan(record) is True
+    steps = record["execution_plan"]["steps"]
+    assert steps[0]["status"] == "completed"
+    assert steps[0]["evidence_refs"] == ["ev-storefront"]
+    assert steps[1]["step_id"] == "qa-discover"
+    assert steps[1]["capability"] == "interact"
+    assert steps[1]["status"] == "pending"
