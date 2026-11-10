@@ -832,7 +832,8 @@ class BrowserRuntime:
         normal = lambda value: re.sub(r"[^a-z0-9]+", " ", str(value or "").casefold()).strip()
         if step_id.endswith("qa-discover"):
             selector = '[data-product-id], [data-product], .product-card, .product-item, .productinfo, .single-products, li.product'
-            cards = await page.locator(selector).evaluate_all(
+            async def matching_product_cards():
+                return await page.locator(selector).evaluate_all(
                 """nodes => nodes.map((node, index) => {
                     const title = node.querySelector('[itemprop="name"], .product-name, .product-title, h2, h3, h4, a[title]');
                     const titleText = (title && (title.innerText || title.getAttribute('content') || title.title)) || '';
@@ -841,11 +842,40 @@ class BrowserRuntime:
                     return {index, title: titleText.trim(), addCount: add.length,
                         addText: add.map(el => (el.innerText || el.getAttribute('aria-label') || '').trim())};
                 })"""
-            )
+                )
+            cards = await matching_product_cards()
             matches = [item for item in cards if normal(name) == normal(item.get("title"))]
+            search_attempted = False
+            # A storefront homepage rarely contains every SKU. If the exact card
+            # is absent, use one uniquely visible site-search field and submit the
+            # requested product name before attempting discovery again.
+            if not matches:
+                search_fields = page.locator(
+                    'input[type="search"], input[name*="search" i], '
+                    'input[placeholder*="search" i], input[aria-label*="search" i]'
+                )
+                visible_fields = []
+                for index in range(min(await search_fields.count(), 8)):
+                    field = search_fields.nth(index)
+                    try:
+                        if await field.is_visible() and await field.is_enabled():
+                            visible_fields.append(field)
+                    except Exception:
+                        continue
+                if len(visible_fields) == 1:
+                    search_attempted = True
+                    await visible_fields[0].fill(name, timeout=4000)
+                    await visible_fields[0].press("Enter", timeout=4000)
+                    try:
+                        await page.wait_for_load_state("domcontentloaded", timeout=8000)
+                    except Exception:
+                        pass
+                    await page.wait_for_timeout(1200)
+                    cards = await matching_product_cards()
+                    matches = [item for item in cards if normal(name) == normal(item.get("title"))]
             if len(matches) != 1:
                 result = {"status": "blocked", "reason": "Expected one exact product card; found "
-                          + str(len(matches)), "candidate_count": len(matches)}
+                          + str(len(matches)), "candidate_count": len(matches), "search_attempted": search_attempted}
             elif matches[0]["addCount"] != 1:
                 result = {"status": "blocked", "reason": "The matching card does not contain exactly one Add to Cart control.",
                           "product_name": matches[0]["title"], "add_control_count": matches[0]["addCount"]}
@@ -853,7 +883,7 @@ class BrowserRuntime:
                 journey["card_index"] = matches[0]["index"]
                 journey["card_selector"] = selector
                 result = {"status": "verified", "product_name": matches[0]["title"],
-                          "add_control": matches[0]["addText"][0], "card_index": matches[0]["index"]}
+                          "add_control": matches[0]["addText"][0], "card_index": matches[0]["index"], "search_attempted": search_attempted, "page_url": page.url}
             journey["steps"]["discovery"] = result
             return result
         if step_id.endswith("qa-availability"):
