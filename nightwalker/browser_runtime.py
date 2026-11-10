@@ -843,10 +843,14 @@ class BrowserRuntime:
                 """nodes => nodes.map((node, index) => {
                     const title = node.querySelector('[itemprop="name"], .product-name, .product-title, h2, h3, h4, a[title]');
                     const titleText = (title && (title.innerText || title.getAttribute('content') || title.title)) || '';
-                    const buttons = Array.from(node.querySelectorAll('button, [role="button"]'));
-                    const add = buttons.filter(el => /add to cart/i.test((el.innerText || '') + ' ' + (el.getAttribute('aria-label') || '')));
+                    const controls = Array.from(node.querySelectorAll('button, a, input[type="submit"], [role="button"]'));
+                    const add = controls.filter(el => /add to cart/i.test(
+                        (el.innerText || '') + ' ' + (el.getAttribute('aria-label') || '') + ' ' +
+                        (el.getAttribute('value') || '') + ' ' + (el.getAttribute('title') || '')
+                    ));
                     return {index, title: titleText.trim(), addCount: add.length,
-                        addText: add.map(el => (el.innerText || el.getAttribute('aria-label') || '').trim())};
+                        addText: add.map(el => (el.innerText || el.getAttribute('aria-label') ||
+                            el.getAttribute('value') || el.getAttribute('title') || '').trim())};
                 })"""
                 )
             cards = await matching_product_cards()
@@ -900,11 +904,18 @@ class BrowserRuntime:
             if discovery.get("status") != "verified":
                 return {"status": "blocked", "reason": "A unique product card was not verified."}
             card = page.locator(journey["card_selector"]).nth(int(journey["card_index"]))
-            button = card.get_by_role("button", name=re.compile(r"add to cart", re.I))
-            if await button.count() != 1:
+            controls = card.locator('button, a, input[type="submit"], [role="button"]')
+            add_indexes = await controls.evaluate_all(
+                """nodes => nodes.map((el, index) => ({
+                    index,
+                    label: ((el.innerText || '') + ' ' + (el.getAttribute('aria-label') || '') + ' ' +
+                        (el.getAttribute('value') || '') + ' ' + (el.getAttribute('title') || '')).trim()
+                })).filter(item => /add to cart/i.test(item.label))"""
+            )
+            if len(add_indexes) != 1:
                 return {"status": "blocked", "reason": "Add to Cart control is no longer unique."}
             before = (await page.locator("body").inner_text())[:20000]
-            await button.click(timeout=5000)
+            await controls.nth(add_indexes[0]["index"]).click(timeout=5000)
             await page.wait_for_timeout(800)
             after = (await page.locator("body").inner_text())[:20000]
             confirmed = normal(name) in normal(after) and (
