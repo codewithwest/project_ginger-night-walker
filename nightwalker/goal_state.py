@@ -155,6 +155,27 @@ class GoalStateManager:
                         "plan_step_id": step.get("step_id"),
                     }
                     completed_criteria.add(description)
+        # Cart journeys must never inherit model-proposed completion from generic
+        # page evidence (for example, a homepage capture cannot prove an item was added).
+        # Reconcile every cart criterion strictly against its linked completed plan step.
+        if "sc-product-discovery" in criteria_by_id:
+            trusted_cart_criteria = set()
+            for step in execution_plan.get("steps", []):
+                if not isinstance(step, dict) or step.get("status") != "completed":
+                    continue
+                refs = [str(ref) for ref in step.get("evidence_refs", []) if str(ref) in evidence_ids]
+                if refs:
+                    trusted_cart_criteria.update(
+                        criteria_by_id.get(str(criterion_id), "")
+                        for criterion_id in step.get("success_criteria", [])
+                    )
+            cart_descriptions = set(criteria_by_id.values())
+            completed_criteria = {
+                item for item in completed_criteria
+                if item not in cart_descriptions or item in trusted_cart_criteria
+            }
+            for item in cart_descriptions - trusted_cart_criteria:
+                evidence_map.pop(item, None)
         state["completed"] = [
             item for item in state.get("criteria", []) if item in completed_criteria
         ]
