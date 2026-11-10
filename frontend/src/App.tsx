@@ -301,6 +301,7 @@ function ResearchReport({ result }: { result: BrowserResult }) {
           </div>
         ))}</div>
       </div>}
+      {findings.length > 0 && confirmedFindings.length === 0 && <p className="finding-impact">No findings have passed validation yet. {unverifiedFindings.length} observation(s) remain unverified and are available below.</p>}
       {confirmedFindings.length > 0 && <div className="research-section">
         <h3>Validated findings · {confirmedFindings.length}</h3>
         <ul className="finding-list">{confirmedFindings.map((finding, index) => <li key={finding.claim + "-" + index}>
