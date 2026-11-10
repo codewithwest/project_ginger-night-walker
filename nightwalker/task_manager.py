@@ -28,6 +28,7 @@ from nightwalker.plan_execution import (
     initialise_plan,
     ready_steps,
     ready_steps_for_capture,
+    reset_retryable_steps,
     start_step,
 )
 from nightwalker.research_guard import ResearchLoopGuard, canonical_url_key
@@ -2386,6 +2387,14 @@ class TaskManager:
         if record.get("status") not in {"failed", "blocked"}:
             raise ValueError("Only failed or blocked tasks can be resumed")
         if self._migrate_legacy_cart_plan(record):
+            self._persist(task_id)
+        reset_steps = reset_retryable_steps(record.get("execution_plan") or {})
+        if reset_steps:
+            self._log(
+                task_id,
+                "Retry requeued blocked steps with verified dependencies: " + ", ".join(reset_steps),
+                "warning",
+            )
             self._persist(task_id)
         active = self.running.get(task_id)
         if active and not active.done():
