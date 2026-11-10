@@ -77,7 +77,7 @@ class Orchestrator:
         ):
             raise PermissionError("Browser instructions do not match the active mission plan step")
         use_steel_mcp = (
-            self.browser.steel_mcp.connected
+            getattr(getattr(self.browser, "steel_mcp", None), "connected", False)
             and os.getenv("STEEL_MCP_MISSION_ENABLED", "true").strip().lower() == "true"
         )
         if use_steel_mcp:
