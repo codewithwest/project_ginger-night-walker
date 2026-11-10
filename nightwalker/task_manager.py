@@ -1551,29 +1551,88 @@ class TaskManager:
                     str(item.get("evidence_id")) for item in evidence if item.get("evidence_id")
                 ))
                 if isinstance(execution_plan, dict) and all_evidence_refs:
-                    for step in execution_plan.get("steps", []):
+                    plan_steps = execution_plan.get("steps", [])
+                    by_step_id = {str(item.get("step_id")): item for item in plan_steps}
+                    # The model may use a canonical-looking ID for a different task.
+                    # Never infer crawl/validation/synthesis semantics from the ID alone.
+                    for step in plan_steps:
                         step_id = str(step.get("step_id", ""))
-                        is_crawl_step = step_id.endswith(("seo-crawl", "qa-crawl", "audit-crawl"))
+                        step_objective = str(step.get("objective") or "").casefold()
+                        is_crawl_step = (
+                            step_id.endswith(("seo-crawl", "qa-crawl", "audit-crawl"))
+                            and any(term in step_objective for term in ("crawl", "coverage", "discover pages", "visit discovered urls"))
+                        )
                         is_validation_step = step_id.endswith(("seo-validate", "qa-validate"))
                         is_synthesis_step = step_id.endswith(("seo-synthesise", "qa-synthesise"))
+
+                        # A product-search content step can be satisfied by the already
+                        # captured search-result observation. Absence of a matching product
+                        # is a valid observed outcome, not a successful product criterion.
                         if (
-                            (is_crawl_step and crawl_complete or is_validation_step or is_synthesis_step)
+                            step_id.endswith("qa-content")
                             and step.get("status") not in {"completed", "blocked", "failed", "skipped"}
                         ):
-                            start_step(execution_plan, step_id)
-                            complete_step(
-                                execution_plan, step_id,
-                                evidence_refs=all_evidence_refs,
-                                result=(
-                                    "Crawl coverage acceptance satisfied; all known discovered and sampled sitemap URLs were visited or explicitly excluded."
-                                    if is_crawl_step else
-                                    (
-                                        "Validated every candidate finding against linked structured browser evidence; persisted verdicts and recommendation context."
-                                        if is_validation_step else
-                                        "Aggregated crawl coverage, duplicate analysis, finding validation and recommendations gated to confirmed findings."
+                            search_records = structured_data.get("qa_product_search", [])
+                            if isinstance(search_records, dict):
+                                search_records = [search_records]
+                            search_record = next((
+                                item for item in reversed(search_records)
+                                if isinstance(item, dict) and item.get("performed") is True
+                            ), None)
+                            if search_record:
+                                matches = search_record.get("matches") or []
+                                product_outcomes = []
+                                for match in matches[:12]:
+                                    product_outcomes.append(
+                                        "name=" + str(match.get("name_match") or match.get("text") or "unconfirmed")[:160]
+                                        + "; image=" + ("present" if match.get("image_present") else "missing")
+                                        + "; image_loaded=" + str(bool(match.get("image_loaded")))
+                                        + "; price=" + str(match.get("price") or "not captured")
                                     )
-                                ),
+                                outcome = (
+                                    "Search-result content extraction was attempted. "
+                                    + ("Captured candidate card(s): " + " | ".join(product_outcomes)
+                                       if product_outcomes else
+                                       "No matching product card was captured; product name, image and price remain unverified.")
+                                )
+                                start_step(execution_plan, step_id)
+                                complete_step(
+                                    execution_plan, step_id,
+                                    evidence_refs=all_evidence_refs, result=outcome,
+                                )
+
+                        should_complete = (
+                            (is_crawl_step and crawl_complete)
+                            or is_validation_step
+                            or is_synthesis_step
+                        )
+                        if not should_complete or step.get("status") in {"completed", "blocked", "failed", "skipped"}:
+                            continue
+                        unmet = [
+                            str(dep) for dep in step.get("depends_on", [])
+                            if by_step_id.get(str(dep), {}).get("status") != "completed"
+                        ]
+                        if unmet:
+                            message = (
+                                f"Finalisation deferred: prerequisite step(s) are not verified: {', '.join(unmet)}"
                             )
+                            limitations.append(message)
+                            self._log(task_id, f"Plan finalisation deferred for {step_id}: {', '.join(unmet)}", "warning")
+                            continue
+                        start_step(execution_plan, step_id)
+                        complete_step(
+                            execution_plan, step_id,
+                            evidence_refs=all_evidence_refs,
+                            result=(
+                                "Crawl coverage acceptance satisfied; all known discovered and sampled sitemap URLs were visited or explicitly excluded."
+                                if is_crawl_step else
+                                (
+                                    "Validated candidate findings against linked structured browser evidence; recommendation eligibility remains gated by confirmed verdicts."
+                                    if is_validation_step else
+                                    "Aggregated crawl coverage, finding validation and recommendations gated to confirmed findings."
+                                )
+                            ),
+                        )
                     if record.get("goal_state"):
                         GoalStateManager.apply_verified_workflow_results(
                             record["goal_state"], record.get("execution_blueprint"),
