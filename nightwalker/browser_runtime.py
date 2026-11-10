@@ -650,8 +650,17 @@ class BrowserRuntime:
         ).evaluate_all(
             """nodes => nodes.slice(0, 100).map(node => {
                 const image = node.querySelector('img');
+                const titleNode = node.querySelector(
+                    '[class*="product-name"], [class*="product-title"], h2, h3, h4, ' +
+                    '[itemprop="name"], a[title]'
+                );
+                const title = (
+                    (titleNode && (titleNode.innerText || titleNode.getAttribute('title'))) ||
+                    (image && image.getAttribute('alt')) || ''
+                ).trim();
                 return {
                     text: (node.innerText || '').trim().slice(0, 1200),
+                    product_title: title.slice(0, 240),
                     image_src: image ? (image.currentSrc || image.src || image.getAttribute('src') || '') : '',
                     image_alt: image ? (image.getAttribute('alt') || '') : '',
                     image_complete: image ? !!image.complete : false,
@@ -659,15 +668,24 @@ class BrowserRuntime:
                 };
             })"""
         )
-        query_lower = query.casefold()
+        normalise = lambda value: re.sub(r"[^a-z0-9]+", " ", str(value or "").casefold()).strip()
+        query_normal = normalise(query)
+        query_tokens = set(query_normal.split())
         matched = []
         for item in matches:
-            text_value = str(item.get("text") or "")
-            if query_lower not in text_value.casefold():
+            title_value = str(item.get("product_title") or "")
+            title_normal = normalise(title_value)
+            title_tokens = set(title_normal.split())
+            # Match the product title, not incidental mentions in card copy or page chrome.
+            phrase_match = bool(query_normal and query_normal in title_normal)
+            token_match = bool(query_tokens and query_tokens.issubset(title_tokens))
+            if not (phrase_match or token_match):
                 continue
-            price = re.search(r'(?i)(?:Rs\.?\s*|R\s*)[\d,]+(?:\.\d{1,2})?', text_value)
+            text_value = str(item.get("text") or "")
+            price = re.search(r'(?i)(?:Rs\\.?\\s*|R\\s*)[\\d,]+(?:\\.\\d{1,2})?', text_value)
             matched.append({
-                **item, "name_match": query,
+                **item, "name_match": title_value,
+                "query_match": "phrase" if phrase_match else "all_query_tokens",
                 "price": price.group(0).strip() if price else None,
                 "image_present": bool(item.get("image_src")),
                 "image_loaded": bool(item.get("image_complete") and item.get("image_natural_width", 0) > 0),
