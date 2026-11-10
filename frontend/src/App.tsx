@@ -255,7 +255,7 @@ function ResearchReport({ result }: { result: BrowserResult }) {
           <span className="product-search-report__count">{productSearchRecords.length} search capture{productSearchRecords.length === 1 ? "" : "s"}</span>
         </div>
         {productSearchRecords.map((search, searchIndex) => {
-          const matches = Array.isArray(search.matches) ? search.matches : [];
+          const matches = search.performed === true && Array.isArray(search.matches) ? search.matches : [];
           const route = Array.isArray(search.route) ? search.route : [];
           const status = String(search.status || "outcome_not_recorded");
           const didSearch = search.performed === true;
