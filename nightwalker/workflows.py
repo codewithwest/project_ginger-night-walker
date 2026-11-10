@@ -32,7 +32,7 @@ _QA_TERMS = {
     # Explicit QA/audit language and concrete test activities only. Generic
     # nouns such as "bugs", "products", "basket", "quantity" or "search results"
     # must never turn an ordinary question into an audit.
-    "quality assurance", "website qa", "web app qa", "web application qa",
+    "qa", "quality assurance", "website qa", "web app qa", "web application qa",
     "qa audit", "qa testing", "qa test", "website testing", "web app testing",
     "web application testing", "test website", "test the website",
     "test web app", "test the web app", "test web application",
