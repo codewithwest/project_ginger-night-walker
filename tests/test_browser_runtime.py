@@ -196,3 +196,15 @@ async def test_steel_session_is_retained_for_report_preview_then_marked_offline(
     offline = runtime.task_session("task-steel")
     assert offline["status"] == "offline"
     assert offline["active"] is False
+
+def test_steel_urls_use_configured_remote_host_and_api_port(monkeypatch):
+    api_base = "http://192.168.100.18:3000/v1"
+    monkeypatch.setenv("STEEL_API_BASE_URL", api_base)
+    debug = BrowserRuntime._normalise_steel_debug_url(
+        "http://localhost/v1/sessions/session-1/debug"
+    )
+    websocket = BrowserRuntime._normalise_steel_websocket_url(
+        "ws://localhost:3000/v1/sessions/session-1/cdp", api_base
+    )
+    assert debug == "http://192.168.100.18:3000/v1/sessions/session-1/debug"
+    assert websocket == "ws://192.168.100.18:3000/v1/sessions/session-1/cdp"
