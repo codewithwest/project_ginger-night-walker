@@ -1342,14 +1342,22 @@ class BrowserRuntime:
             str(item.get("text") or "") for item in tool_content if isinstance(item, dict)
         )[:12000]
         combined_text = "\n".join(part for part in (action_text, captured_text) if part).strip()
+        # Steel's snapshot identifies the actual live URL and document title.
+        # Prefer that observed state over the task's original/previous URL.
+        page_match = re.search(
+            r"(https?://[^\\s<>]+?)\\s+—\\s+(.+?)\\s+\\(snapshot",
+            captured_text,
+        )
+        final_url = page_match.group(1).rstrip(".,)") if page_match else url
+        page_title = page_match.group(2).strip()[:240] if page_match else ""
         evidence_payload = {
-            "url": url, "final_url": url, "title": "",
+            "url": final_url, "final_url": final_url, "title": page_title,
             "text": combined_text, "headings": [],
             "evidence": [{
-                "url": url, "title": "", "captured_text": combined_text[:15000],
+                "url": final_url, "title": page_title, "captured_text": combined_text[:15000],
                 "capture_method": "steel_mcp_snapshot",
             }],
-            "sources": [{"url": url, "title": "", "source_type": "webpage"}],
+            "sources": [{"url": final_url, "title": page_title, "source_type": "webpage"}],
             "structured_data": {
                 "browser_backend": "steel-mcp",
                 "steel_tool": result.get("tool_name"),
@@ -1365,7 +1373,7 @@ class BrowserRuntime:
         )
         return {
             "status": "completed" if combined_text else "blocked",
-            "final_url": url, "http_status": None, "title": "",
+            "final_url": final_url, "http_status": None, "title": page_title,
             "headings": [], "text": combined_text,
             "evidence": evidence_payload["evidence"],
             "sources": evidence_payload["sources"],
