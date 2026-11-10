@@ -574,21 +574,42 @@ class BrowserRuntime:
                     )
 
         async def visible_search_fields():
+            # Storefronts frequently use an unlabelled text input inside a search
+            # form. Inspect visible inputs and their form/container semantics rather
+            # than requiring the input itself to contain the word "search".
             locator = page.locator(
-                'input[type="search"], input[name*="search" i], input[id*="search" i], '
-                'input[placeholder*="search" i], input[aria-label*="search" i], '
-                'form[role="search"] input, [role="search"] input, '
-                'form[action*="search" i] input, form[id*="search" i] input, form[class*="search" i] input'
+                'input:not([type="hidden"]):not([type="submit"]):not([type="button"]), textarea'
             )
-            found = []
-            for index in range(min(await locator.count(), 12)):
+            ranked = []
+            for index in range(min(await locator.count(), 40)):
                 field = locator.nth(index)
                 try:
-                    if await field.is_visible() and await field.is_enabled():
-                        found.append(field)
+                    if not await field.is_visible() or not await field.is_enabled():
+                        continue
+                    score = await field.evaluate("""el => {
+                        const attrs = [
+                            el.type, el.name, el.id, el.placeholder, el.getAttribute('aria-label'),
+                            el.getAttribute('autocomplete'), el.className,
+                            el.form && [el.form.getAttribute('role'), el.form.getAttribute('action'),
+                                el.form.id, el.form.className].join(' ')
+                        ].join(' ').toLowerCase();
+                        let value = 0;
+                        if (/search|query|keyword|find/.test(attrs)) value += 8;
+                        if (el.type === 'search') value += 12;
+                        if (el.form && (el.form.getAttribute('role') === 'search' ||
+                            /search/i.test([el.form.action, el.form.id, el.form.className].join(' ')))) value += 10;
+                        if (el.type === 'text' || el.tagName === 'TEXTAREA') value += 1;
+                        if (el.disabled || el.readOnly) value = -100;
+                        return value;
+                    }""")
+                    if score > 0:
+                        ranked.append((score, index, field))
                 except Exception:
                     continue
-            return found
+            ranked.sort(key=lambda item: (-item[0], item[1]))
+            # Prefer the strongest semantic match; multiple search boxes (e.g.
+            # desktop/mobile duplicates) are not a reason to abandon the search.
+            return [ranked[0][2]] if ranked else []
 
         async def discover_catalogue_links():
             links = await page.locator("a[href]").evaluate_all(
@@ -625,23 +646,35 @@ class BrowserRuntime:
             fields = await visible_search_fields()
             if fields:
                 return fields
-            triggers = page.locator(
-                'button[aria-label*="search" i], a[aria-label*="search" i], '
-                'button[title*="search" i], a[title*="search" i], '
-                '[role="button"][aria-label*="search" i]'
-            )
-            visible = []
-            for index in range(min(await triggers.count(), 8)):
+            # Many themes expose only an icon button (often an SVG with no
+            # accessible label). Score visible controls by their attributes and
+            # descendant SVG/icon markup; do not click arbitrary page buttons.
+            triggers = page.locator('button, [role="button"], a')
+            ranked = []
+            for index in range(min(await triggers.count(), 120)):
                 trigger = triggers.nth(index)
                 try:
-                    if await trigger.is_visible() and await trigger.is_enabled():
-                        visible.append(trigger)
+                    if not await trigger.is_visible() or not await trigger.is_enabled():
+                        continue
+                    score = await trigger.evaluate("""el => {
+                        const signal = [
+                            el.getAttribute('aria-label'), el.title, el.id, el.className,
+                            el.getAttribute('data-testid'), el.getAttribute('data-action'),
+                            el.innerText, el.querySelector('svg')?.outerHTML,
+                            el.querySelector('use')?.getAttribute('href')
+                        ].join(' ').toLowerCase();
+                        if (/search|magnif|\bfind\b/.test(signal)) return 10;
+                        return 0;
+                    }""")
+                    if score:
+                        ranked.append((score, index, trigger))
                 except Exception:
                     continue
-            if len(visible) == 1:
+            ranked.sort(key=lambda item: (-item[0], item[1]))
+            if ranked:
                 try:
-                    await visible[0].click(timeout=2500)
-                    await page.wait_for_timeout(300)
+                    await ranked[0][2].click(timeout=3000)
+                    await page.wait_for_timeout(500)
                 except Exception:
                     pass
             return await visible_search_fields()
