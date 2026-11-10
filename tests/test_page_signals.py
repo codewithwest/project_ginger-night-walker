@@ -236,3 +236,14 @@ def test_qa_smoke_reports_missing_title_and_h1():
     claims = [item["claim"] for item in findings]
     assert "The page has no non-empty document title." in claims
     assert "No H1 heading was found on the requested page." in claims
+
+
+
+def test_image_load_status_distinguishes_broken_pending_lazy_and_missing_sources():
+    from nightwalker.page_signals import classify_image_load_status
+
+    assert classify_image_load_status("https://example.com/ok.jpg", True, 640) == "loaded"
+    assert classify_image_load_status("https://example.com/broken.jpg", True, 0) == "broken"
+    assert classify_image_load_status("https://example.com/slow.jpg", False, 0) == "pending_timeout"
+    assert classify_image_load_status("", False, 0, "https://example.com/lazy.jpg") == "lazy_not_triggered"
+    assert classify_image_load_status("", True, 0) == "missing_source"
