@@ -1155,13 +1155,16 @@ class BrowserRuntime:
             )
             http_status = response.status if response else None
             product_search_requested = self._extract_product_search_query(objective) is not None
-            # An explicit product-presence request is itself authorisation for
-            # this bounded, read-only QA journey. Do not gate it on the planner's
-            # first capability: single-page plans commonly begin with navigate or
-            # extract, which previously caused the requested search to be skipped.
+            active_capability = str(steps[0].get("capability") or "") if steps else ""
+            # The task objective identifies intent, but the execution plan
+            # authorises actions. Product search must run only on an explicit
+            # interaction step, never as an implicit side effect of navigation
+            # or extraction.
             qa_product_search = (
                 await self._run_product_search_smoke(page, objective)
-                if workflow_type == "qa" and product_search_requested
+                if workflow_type == "qa"
+                and product_search_requested
+                and active_capability == "interact"
                 else None
             )
             if qa_product_search:
