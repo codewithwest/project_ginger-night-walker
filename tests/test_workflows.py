@@ -64,7 +64,7 @@ def test_explicit_site_wide_qa_blueprint_requires_discovered_url_coverage():
 
 
 def test_page_smoke_qa_defaults_to_single_requested_url():
-    objective = 'Open https://example.com and check page title, H1 headings, broken images and console errors'
+    objective = 'Open https://example.com and check broken images and console errors'
     assert qa_scope_for_objective(objective) == "single_page"
     assert not qa_requires_site_crawl(objective)
     blueprint = build_workflow_blueprint(objective, WorkflowType.QA)
@@ -76,8 +76,8 @@ def test_page_smoke_qa_defaults_to_single_requested_url():
     assert "qa-page-smoke" in criterion_ids
     assert "qa-validation" in criterion_ids
     product_step = next(item for item in blueprint.subtasks if item.subtask_id == "qa-content")
-    assert "If absent, discover a same-origin product/shop page" in product_step.objective
-    assert "Search for the requested product only when a usable control is found" in product_step.objective
+    assert "interactive controls" in product_step.objective
+    assert "Do not audit SEO metadata" in product_step.objective
 
 
 def test_explicit_site_wide_phrasing_enables_qa_crawl():
@@ -85,8 +85,12 @@ def test_explicit_site_wide_phrasing_enables_qa_crawl():
     assert qa_requires_site_crawl("Crawl the site at https://example.com")
 
 
-def test_page_title_image_and_console_smoke_request_routes_to_qa():
-    objective = "Check the page title, H1 headings, broken images and console errors on https://example.com"
+def test_seo_metadata_checks_route_to_seo_not_functional_qa():
+    objective = "Check the page title and H1 heading structure on https://example.com"
+    assert classify_workflow(objective) == WorkflowType.SEO
+
+def test_broken_images_and_console_errors_route_to_functional_qa():
+    objective = "Check broken images and console errors on https://example.com"
     assert classify_workflow(objective) == WorkflowType.QA
     assert qa_scope_for_objective(objective) == "single_page"
 
