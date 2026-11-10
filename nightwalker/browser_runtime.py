@@ -1214,23 +1214,13 @@ class BrowserRuntime:
                 str(step.get("capability") or "").strip().lower() == "interact"
                 for step in steps
             )
-            # Plans commonly begin with navigation and place interaction later.
-            # Inspect the whole plan rather than only steps[0], otherwise the
-            # dedicated search routine is silently skipped before the loop ever
-            # reaches its authorised interaction step.
-            # The objective identifies search intent; an explicit interaction
-            # step anywhere in the plan authorises the bounded mouse/keyboard flow.
-            qa_product_search = (
-                await self._run_product_search_smoke(page, objective, task_id)
-                if workflow_type == "qa"
-                and product_search_requested
-                and has_authorized_search_interaction
-                else None
-            )
-            if qa_product_search:
+            # A plan-level interaction authorises the action, but the action
+            # must execute at that interaction step, not before the plan loop.
+            qa_product_search = None
+            if workflow_type == "qa" and product_search_requested and not has_authorized_search_interaction:
                 self._browser_event(
-                    task_id, "Executed requested product search and captured matching product cards",
-                    url=page.url, title=(await page.title())[:500],
+                    task_id, "QA product search skipped: plan contains no authorised interact step",
+                    url=page.url,
                 )
             self._browser_event(task_id, "Navigated to target page", url=page.url, title=(await page.title())[:500])
             if response and response.status >= 400:
@@ -1248,11 +1238,13 @@ class BrowserRuntime:
                 if capability == "navigate":
                     continue
                 if capability == "interact":
-                    if qa_product_search is not None:
-                        # The authorised interaction step already executed the
-                        # task-level product query above. Do not reinterpret a
-                        # generic step label as an unrelated link-following task.
-                        search_result, destination = qa_product_search, None
+                    if workflow_type == "qa" and product_search_requested and qa_product_search is None:
+                        self._browser_event(
+                            task_id, "Executing requested product search at authorised interaction step",
+                            url=page.url,
+                        )
+                        search_result = await self._run_product_search_smoke(page, objective, task_id)
+                        destination = None
                     else:
                         search_result, destination = await self._execute_interaction(
                             page, step_objective, workflow_type, qa_product_search, task_id,
