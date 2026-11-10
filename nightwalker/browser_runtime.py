@@ -180,43 +180,20 @@ class BrowserRuntime:
 
     @staticmethod
     def _normalise_steel_websocket_url(websocket_url: str, api_base: str) -> str:
-        """Replace wildcard bind hosts in Steel's advertised CDP URL.
-
-        Steel may advertise 0.0.0.0 or ::, which are listen addresses and cannot
-        be used as a client destination. Resolve those to the hostname used for
-        the Steel API so Docker clients connect over the Compose network.
-        """
+        """Pin every advertised CDP URL to the host configured for Steel."""
         websocket = urlparse(websocket_url)
         api = urlparse(api_base)
-        host = (websocket.hostname or "").strip("[]").lower()
-        # Loopback addresses in Steel's advertised URL refer to the Steel
-        # container itself, not the Night Walker client. Use the API host for
-        # wildcard and loopback advertisements alike.
-        if host in {"0.0.0.0", "::", "", "localhost", "127.0.0.1", "::1"}:
-            host = (api.hostname or "").strip("[]").lower()
+        host = (api.hostname or "").strip("[]")
         if not host:
             raise RuntimeError("STEEL_API_BASE_URL must include a reachable hostname")
-
-        # Steel's self-hosted CDP gateway rejects DNS-name Host headers. Resolve
-        # the Compose service name and connect using its container IP instead.
-        try:
-            ipaddress.ip_address(host)
-            connect_host = host
-        except ValueError:
-            port = websocket.port or api.port or 80
-            addresses = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
-            if not addresses:
-                raise RuntimeError(f"Could not resolve Steel browser host: {host}")
-            connect_host = addresses[0][4][0]
-
-        if ":" in connect_host:
-            netloc = f"[{connect_host}]"
-        else:
-            netloc = connect_host
+        netloc = f"[{host}]" if ":" in host else host
+        # Keep Steel's advertised CDP port/path/token, but never its internal,
+        # loopback, or stale hostname. The environment is the source of truth.
         port = websocket.port or api.port
         if port:
             netloc += f":{port}"
-        return websocket._replace(netloc=netloc).geturl()
+        scheme = "wss" if api.scheme == "https" else "ws"
+        return websocket._replace(scheme=scheme, netloc=netloc).geturl()
 
     async def _release_steel_session(self, session_id: str) -> None:
         api_base = os.getenv("STEEL_API_BASE_URL", "http://steel-browser:3000/v1").rstrip("/")
@@ -236,24 +213,29 @@ class BrowserRuntime:
 
     @staticmethod
     def _normalise_steel_debug_url(debug_url: str) -> str:
-        """Make Steel's viewer URL reachable from the browser displaying Night Walker.
-
-        Remote Steel hosts must remain remote; local Compose service names must
-        become localhost because the UI browser cannot resolve Docker DNS names.
-        """
+        """Rewrite Steel viewer URLs to the externally configured Steel host."""
         parsed = urlparse(debug_url)
-        host = (parsed.hostname or "").strip("[]").lower()
-        if host in {"steel-browser", "ginger-steel-browser", "0.0.0.0", "::", "", "localhost", "127.0.0.1", "::1"}:
-            api = urlparse(os.getenv("STEEL_API_BASE_URL", "http://steel-browser:3000/v1"))
-            api_host = (api.hostname or "").strip("[]").lower()
-            viewer_host = "localhost" if api_host in {"steel-browser", "ginger-steel-browser"} else api_host
-            if not viewer_host:
-                return debug_url
-            netloc = f"[{viewer_host}]" if ":" in viewer_host else viewer_host
-            if parsed.port:
-                netloc += f":{parsed.port}"
-            return parsed._replace(netloc=netloc).geturl()
-        return debug_url
+        api = urlparse(os.getenv("STEEL_API_BASE_URL", "http://steel-browser:3000/v1"))
+        host = (api.hostname or "").strip("[]")
+        if not host:
+            return debug_url
+        netloc = f"[{host}]" if ":" in host else host
+        if parsed.port:
+            netloc += f":{parsed.port}"
+        scheme = "https" if api.scheme == "https" else "http"
+        return parsed._replace(scheme=scheme, netloc=netloc).geturl()
+
+    @staticmethod
+    def _steel_ui_url(api_base: str) -> str:
+        """Build the externally reachable Steel UI URL from the configured API."""
+        api = urlparse(api_base)
+        if not api.hostname:
+            return ""
+        netloc = f"[{api.hostname}]" if ":" in api.hostname else api.hostname
+        if api.port:
+            netloc += f":{api.port}"
+        scheme = "https" if api.scheme == "https" else "http"
+        return api._replace(scheme=scheme, netloc=netloc, path="/ui", params="", query="", fragment="").geturl()
 
     def _browser_event(
         self, task_id: str, message: str, *, url: str | None = None,
@@ -311,6 +293,7 @@ class BrowserRuntime:
                     "backend": "steel", "status": "connecting", "active": True,
                     "session_id": session_id,
                     "debug_url": self._normalise_steel_debug_url(debug_url) if debug_url else None,
+                    "steel_ui_url": self._steel_ui_url(api_base),
                     "activity": [],
                     "started_at": datetime.now(UTC).isoformat(),
                 }
