@@ -1,6 +1,6 @@
 import pytest
 
-from nightwalker.plan_execution import complete_step, fail_step, initialise_plan, ready_steps, ready_steps_for_capture, reset_retryable_steps, start_step
+from nightwalker.plan_execution import complete_step, fail_step, initialise_plan, ready_steps, ready_steps_for_capture, reset_retryable_steps, start_step, validate_plan_dependencies
 
 
 def sample_plan():
@@ -13,23 +13,30 @@ def sample_plan():
     })
 
 
-def test_plan_steps_follow_dependencies_and_require_evidence():
+def test_plan_steps_execute_in_authored_order_and_require_evidence():
     plan = sample_plan()
-    assert [step["step_id"] for step in ready_steps(plan)] == ["open"]
+    assert [step["step_id"] for step in ready_steps(plan)] == ["open", "extract"]
     start_step(plan, "open")
     with pytest.raises(ValueError, match="evidence references"):
         complete_step(plan, "open", evidence_refs=[], result="Opened")
     complete_step(plan, "open", evidence_refs=["ev-home"], result="Homepage captured")
     assert [step["step_id"] for step in ready_steps(plan)] == ["extract"]
     start_step(plan, "extract")
+    complete_step(plan, "extract", evidence_refs=["ev-products"], result="Extracted")
     assert plan["steps"][0]["status"] == "completed"
-    assert plan["steps"][1]["status"] == "in_progress"
+    assert plan["steps"][1]["status"] == "completed"
+    assert validate_plan_dependencies(plan) == []
 
 
-def test_plan_cannot_complete_dependent_step_before_parent():
+def test_dependency_validation_is_deferred_until_after_execution():
     plan = sample_plan()
-    with pytest.raises(ValueError, match="dependencies"):
-        complete_step(plan, "extract", evidence_refs=["ev-1"], result="Extracted")
+    start_step(plan, "extract")
+    complete_step(plan, "extract", evidence_refs=["ev-1"], result="Executed with evidence")
+    issues = validate_plan_dependencies(plan)
+
+    assert issues == [{"step_id": "extract", "unmet_dependencies": ["open"]}]
+    assert plan["dependency_validation"]["status"] == "failed"
+    assert plan["status"] == "blocked"
 
 
 
@@ -74,4 +81,5 @@ def test_retry_does_not_requeue_step_with_unverified_dependency():
     assert plan["steps"][0]["status"] == "blocked"
     assert plan["steps"][0]["result"] == "Navigation failed"
     assert plan["steps"][1]["status"] == "pending"
-    assert ready_steps(plan) == []
+    # A later step can still execute; dependency integrity is reported afterwards.
+    assert [step["step_id"] for step in ready_steps(plan)] == ["extract"]
