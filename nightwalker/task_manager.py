@@ -2053,12 +2053,12 @@ class TaskManager:
         await self._execute_decided(task_id, objective, resume=True)
 
     def retry(self, task_id: str) -> dict[str, Any] | None:
-        """Retry a failed natural-language task from its latest durable checkpoint."""
+        """Retry failed work or continue blocked work from its latest durable checkpoint."""
         record = self.tasks.get(task_id)
         if record is None:
             return None
-        if record.get("status") != "failed":
-            raise ValueError("Only failed tasks can be retried")
+        if record.get("status") not in {"failed", "blocked"}:
+            raise ValueError("Only failed or blocked tasks can be resumed")
         active = self.running.get(task_id)
         if active and not active.done():
             raise ValueError("This task is already running")
