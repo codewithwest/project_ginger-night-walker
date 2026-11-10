@@ -451,6 +451,50 @@ class BrowserRuntime:
         route = [{"url": page.url, "action": "opened_requested_url"}]
         origin = urlparse(page.url)
 
+        async def wait_for_search_ui(stage: str) -> None:
+            """Wait for the SPA to render its search UI; DOMContentLoaded is not enough."""
+            try:
+                await page.wait_for_load_state(
+                    "domcontentloaded",
+                    timeout=int(os.getenv("QA_SEARCH_DOM_TIMEOUT_MS", "8000")),
+                )
+            except Exception:
+                # Some pages are already past DOMContentLoaded or expose unusual
+                # navigation lifecycles. The bounded selector wait below is decisive.
+                pass
+            selector = (
+                'input[type="search"], input[name*="search" i], input[id*="search" i], '
+                'input[placeholder*="search" i], input[aria-label*="search" i], '
+                'form[role="search"] input, [role="search"] input, '
+                'form[action*="search" i] input, form[id*="search" i] input, '
+                'form[class*="search" i] input, button[aria-label*="search" i], '
+                'a[aria-label*="search" i], button[title*="search" i], a[title*="search" i], '
+                '[role="button"][aria-label*="search" i]'
+            )
+            timeout_ms = max(1000, min(
+                20000, int(os.getenv("QA_SEARCH_UI_TIMEOUT_MS", "10000"))
+            ))
+            try:
+                await page.wait_for_function(
+                    """selector => Array.from(document.querySelectorAll(selector)).some(el => {
+                        const style = getComputedStyle(el);
+                        const rect = el.getBoundingClientRect();
+                        return style.visibility !== 'hidden' && style.display !== 'none' &&
+                            rect.width > 0 && rect.height > 0 && !el.disabled;
+                    })""",
+                    arg=selector,
+                    timeout=timeout_ms,
+                )
+                self._browser_event(
+                    task_id, f"Search UI became available after dynamic page rendering ({stage})",
+                    url=page.url,
+                )
+            except Exception:
+                self._browser_event(
+                    task_id, f"Search UI did not appear within {timeout_ms}ms ({stage}); inspecting current DOM",
+                    url=page.url,
+                )
+
         async def visible_search_fields():
             locator = page.locator(
                 'input[type="search"], input[name*="search" i], input[id*="search" i], '
@@ -524,6 +568,9 @@ class BrowserRuntime:
                     pass
             return await visible_search_fields()
 
+        # The search control is injected asynchronously on some storefronts.
+        # Wait for the SPA's actual control, not just the navigation lifecycle.
+        await wait_for_search_ui("requested page")
         fields = await reveal_search_if_needed()
         if not fields:
             candidates = await discover_catalogue_links()
@@ -571,6 +618,7 @@ class BrowserRuntime:
                 "http_status": response.status if response else None,
                 "discovered_from": route[-1]["url"], "link_label": candidates[0]["label"]
             })
+            await wait_for_search_ui("discovered catalogue")
             fields = await reveal_search_if_needed()
 
         if len(fields) != 1:
