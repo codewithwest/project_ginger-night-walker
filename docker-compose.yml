@@ -14,6 +14,7 @@ services:
       STEEL_CDP_HOST: ${STEEL_CDP_HOST:-auto}
       STEEL_VIEWER_HOST: ${STEEL_VIEWER_HOST:-localhost}
       STEEL_MCP_ENABLED: ${STEEL_MCP_ENABLED:-false}
+      STEEL_MCP_MISSION_ENABLED: ${STEEL_MCP_MISSION_ENABLED:-true}
       STEEL_MCP_PROFILE: ${STEEL_MCP_PROFILE:-browse}
       STEEL_MCP_BASE_URL: ${STEEL_MCP_BASE_URL:-http://steel-browser:3000/v1}
     volumes:
