@@ -279,7 +279,10 @@ function ResearchReport({ result }: { result: BrowserResult }) {
               </div>
             ))}</div>
           ) : (
-            <pre className="structured-data">{JSON.stringify(value, null, 2)}</pre>
+            <details className="raw-data">
+              <summary>View JSON · {kind.replaceAll("_", " ")}</summary>
+              <pre className="structured-data">{JSON.stringify(value, null, 2)}</pre>
+            </details>
           )}
         </div>
       ))}
@@ -465,7 +468,7 @@ export default function App() {
   }
 
   async function retryTask() {
-    if (!selected || selected.status !== "failed" || retrying) return;
+    if (!selected || !["failed", "blocked"].includes(selected.status) || retrying) return;
     setRetrying(true);
     setError("");
     try {
@@ -476,6 +479,23 @@ export default function App() {
       await refreshSelected(selected.task_id);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Task retry failed");
+    } finally {
+      setRetrying(false);
+    }
+  }
+
+  async function restartTask() {
+    if (!selected || retrying) return;
+    setRetrying(true);
+    setError("");
+    try {
+      const task = await api<Task>("/tasks/" + encodeURIComponent(selected.task_id) + "/restart", {
+        method: "POST",
+      });
+      setTasks((current) => [task, ...current.filter((item) => item.task_id !== task.task_id)]);
+      setSelectedId(task.task_id);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Task restart failed");
     } finally {
       setRetrying(false);
     }
@@ -666,10 +686,15 @@ export default function App() {
                   </div>
                   <div className="result-header__actions">
                     <Status value={selected.status} />
-                    {selected.status === "failed" && (
+                    {["failed", "blocked"].includes(selected.status) && (
                       <button className="stop-button" onClick={() => void retryTask()} disabled={retrying}>
                         {retrying ? <LoaderCircle size={13} /> : <RefreshCw size={13} />}
-                        {retrying ? "Retrying…" : "Retry task"}
+                        {retrying ? "Resuming…" : selected.status === "blocked" ? "Continue task" : "Retry task"}
+                      </button>
+                    )}
+                    {isTerminal(selected.status) && selected.status !== "planned" && (
+                      <button className="stop-button" onClick={() => void restartTask()} disabled={retrying}>
+                        <Play size={12} /> Restart from beginning
                       </button>
                     )}
                     {!isTerminal(selected.status) && (
