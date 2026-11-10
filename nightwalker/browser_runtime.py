@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import copy
+import logging
 import os
 import re
 import socket
@@ -49,12 +50,21 @@ class BrowserRuntime:
         self.element_resolver = ElementResolver()
         self.evidence = EvidenceStore()
         self.steel_mcp = SteelMCPClient()
+        self._steel_mcp_start_error: str | None = None
 
     async def start(self) -> None:
         self._playwright = await async_playwright().start()
         if self.backend == "local":
             self._browser = await self._playwright.chromium.launch(headless=True)
-        await self.steel_mcp.start()
+        try:
+            await self.steel_mcp.start()
+            self._steel_mcp_start_error = None
+        except Exception as exc:  # noqa: BLE001 - MCP is optional; preserve the Playwright runtime
+            self._steel_mcp_start_error = f"{type(exc).__name__}: {str(exc)[:500]}"
+            logging.getLogger(__name__).warning(
+                "Optional Steel MCP startup failed; continuing with the configured browser backend: %s",
+                self._steel_mcp_start_error,
+            )
 
     async def close(self) -> None:
         await self.steel_mcp.close()
@@ -304,6 +314,7 @@ class BrowserRuntime:
             "connected": self.steel_mcp.connected,
             "tool_count": len(self.steel_mcp.tools),
             "tools": [item["name"] for item in self.steel_mcp.tools],
+            "startup_error": self._steel_mcp_start_error,
         }
 
     def task_session(self, task_id: str) -> dict | None:
