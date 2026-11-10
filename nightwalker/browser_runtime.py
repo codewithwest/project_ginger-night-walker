@@ -151,7 +151,7 @@ class BrowserRuntime:
         return {"closed": closed, "remaining": remaining, "reason": reason[:300]}
 
     async def close_task_session(self, task_id: str) -> None:
-        """Close the single browser context retained across this task's research rounds."""
+        """End task ownership while briefly retaining Steel for its live report preview."""
         context = self._task_contexts.pop(task_id, None)
         primary_page = self._task_pages.pop(task_id, None)
         if primary_page is not None:
@@ -161,20 +161,26 @@ class BrowserRuntime:
             for page in getattr(context, "pages", []):
                 self._qa_listener_pages.discard(id(page))
         state = self._task_sessions.get(task_id)
+        steel_session = self._steel_sessions.get(id(context)) if context is not None else None
+        if steel_session:
+            retention_ms = max(60_000, int(os.getenv("STEEL_SESSION_RETENTION_MS", "600000")))
+            retained_until = datetime.now(UTC).timestamp() + retention_ms / 1000
+            if state is not None:
+                state["finished_at"] = datetime.now(UTC).isoformat()
+                state["retained_until"] = datetime.fromtimestamp(retained_until, UTC).isoformat()
+            self._browser_event(
+                task_id,
+                f"Steel browser retained for report review ({retention_ms // 60000} minute(s))",
+                status="retained",
+            )
+            # Leave the remote context alive for the report iframe. Steel session TTL
+            # is the final cleanup guard; app shutdown releases retained sessions.
+            return
         if state:
             self._browser_event(task_id, "Browser session closed after task completion", status="finished")
             state["finished_at"] = datetime.now(UTC).isoformat()
-        if context is None:
-            return
-        steel_session = self._steel_sessions.pop(id(context), None)
-        try:
+        if context is not None:
             await context.close()
-        finally:
-            if steel_session:
-                session_id, browser = steel_session
-                if browser.is_connected():
-                    await browser.close()
-                await self._release_steel_session(session_id)
 
     @staticmethod
     def _normalise_steel_websocket_url(websocket_url: str, api_base: str) -> str:
@@ -249,7 +255,7 @@ class BrowserRuntime:
             state["page_title"] = title
         if status:
             state["status"] = status
-            state["active"] = status in {"connecting", "active"}
+            state["active"] = status in {"connecting", "active", "retained"}
         state.setdefault("activity", []).append({
             "at": datetime.now(UTC).isoformat(),
             "message": message[:500],
@@ -262,6 +268,23 @@ class BrowserRuntime:
         state = self._task_sessions.get(task_id)
         if not state:
             return None
+        if state.get("status") == "retained":
+            retained_until = state.get("retained_until")
+            expired = False
+            if retained_until:
+                try:
+                    expired = datetime.now(UTC) >= datetime.fromisoformat(retained_until)
+                except ValueError:
+                    expired = True
+            session_id = state.get("session_id")
+            browser = next(
+                (item for sid, item in self._steel_sessions.values() if sid == session_id),
+                None,
+            )
+            if expired or browser is None or not browser.is_connected():
+                state["status"] = "offline"
+                state["active"] = False
+                state["last_error"] = "The retained Steel session has expired or disconnected."
         return {key: value for key, value in state.items() if key != "session_id"}
 
     async def _guarded_context(self, task_id: str | None = None) -> BrowserContext:
@@ -272,7 +295,7 @@ class BrowserRuntime:
         if self.backend == "steel":
             api_key = os.getenv("STEEL_API_KEY", "").strip()
             api_base = os.getenv("STEEL_API_BASE_URL", "http://steel-browser:3000/v1").rstrip("/")
-            timeout_ms = max(60_000, int(os.getenv("STEEL_SESSION_TIMEOUT_MS", "300000")))
+            timeout_ms = max(60_000, int(os.getenv("STEEL_SESSION_TIMEOUT_MS", "1800000")) )
             headers = {"Content-Type": "application/json"}
             if api_key:
                 headers["steel-api-key"] = api_key
