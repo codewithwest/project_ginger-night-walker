@@ -1170,9 +1170,15 @@ class BrowserRuntime:
                 if capability == "navigate":
                     continue
                 if capability == "interact":
-                    search_result, destination = await self._execute_interaction(
-                        page, step_objective, workflow_type, qa_product_search,
-                    )
+                    if qa_product_search is not None:
+                        # The authorised interaction step already executed the
+                        # task-level product query above. Do not reinterpret a
+                        # generic step label as an unrelated link-following task.
+                        search_result, destination = qa_product_search, None
+                    else:
+                        search_result, destination = await self._execute_interaction(
+                            page, step_objective, workflow_type, qa_product_search,
+                        )
                     if search_result is not None:
                         qa_product_search = search_result
                         if search_result.get("performed"):
