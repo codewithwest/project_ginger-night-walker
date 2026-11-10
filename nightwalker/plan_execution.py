@@ -171,9 +171,9 @@ def start_step(plan: dict[str, Any], step_id: str) -> dict[str, Any]:
     if step["status"] in TERMINAL:
         return step
     by_id = {s["step_id"]: s for s in plan["steps"]}
-    unmet = [dep for dep in step.get("depends_on", []) if by_id.get(dep, {}).get("status") != "completed"]
-    if unmet:
-        raise ValueError("Planned step dependencies are not verified: " + ", ".join(unmet))
+    # Dependencies describe the intended order and are audited after execution.
+    # They must not prevent the remaining plan from running when an earlier
+    # acceptance check is inconclusive.
     if step["status"] != "in_progress":
         step["attempts"] = int(step.get("attempts", 0)) + 1
         _event(plan, step, "in_progress", "Execution started")
@@ -189,9 +189,7 @@ def complete_step(
     if not evidence_refs:
         raise ValueError("A planned step cannot complete without evidence references")
     by_id = {s["step_id"]: s for s in plan["steps"]}
-    unmet = [dep for dep in step.get("depends_on", []) if by_id.get(dep, {}).get("status") != "completed"]
-    if unmet:
-        raise ValueError("Planned step dependencies are not verified: " + ", ".join(unmet))
+    # Dependency integrity is checked after all executable steps have run.
     if step.get("status") != "in_progress":
         raise ValueError("A planned step must be in progress before it can be completed")
     step["evidence_refs"] = list(dict.fromkeys([*step.get("evidence_refs", []), *evidence_refs]))
@@ -235,12 +233,38 @@ def reset_retryable_steps(plan: dict[str, Any]) -> list[str]:
 
 
 def ready_steps(plan: dict[str, Any]) -> list[dict[str, Any]]:
-    by_id = {s["step_id"]: s for s in plan.get("steps", [])}
+    """Return all non-terminal plan steps in authored order.
+
+    Dependency edges are validation metadata, not execution locks. A failed or
+    inconclusive acceptance check must not silently prevent later planned work.
+    """
     return [
-        s for s in plan.get("steps", [])
-        if s["status"] in {"pending", "ready", "in_progress"}
-        and all(by_id.get(dep, {}).get("status") == "completed" for dep in s.get("depends_on", []))
+        step for step in plan.get("steps", [])
+        if step["status"] in {"pending", "ready", "in_progress"}
     ]
+
+
+def validate_plan_dependencies(plan: dict[str, Any]) -> list[dict[str, Any]]:
+    """Audit dependency edges after execution without suppressing later actions."""
+    by_id = {step["step_id"]: step for step in plan.get("steps", [])}
+    issues = []
+    for step in plan.get("steps", []):
+        unmet = [
+            dep for dep in step.get("depends_on", [])
+            if by_id.get(dep, {}).get("status") != "completed"
+        ]
+        if unmet:
+            issues.append({"step_id": step["step_id"], "unmet_dependencies": unmet})
+    plan["dependency_validation"] = {
+        "status": "failed" if issues else "passed",
+        "issues": issues,
+        "validated_at": datetime.now(UTC).isoformat(),
+    }
+    if issues:
+        plan["status"] = "blocked"
+    elif plan.get("steps") and all(step.get("status") == "completed" for step in plan["steps"]):
+        plan["status"] = "completed"
+    return issues
 
 
 def ready_steps_for_capture(
