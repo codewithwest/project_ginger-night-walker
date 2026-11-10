@@ -151,3 +151,10 @@ def test_product_search_blueprint_authorises_search_as_interaction():
         "sc-navigation", "sc-search-submission", "sc-product-name",
         "sc-product-image", "sc-product-price",
     }
+
+
+
+def test_routes_ecommerce_cart_journey_to_qa_without_product_search_override():
+    objective = 'Open https://www.weylandts.co.za/products. Add “Dark Grey” to the cart. Verify its price and quantity, then remove it. Confirm the cart is empty and report any problems. Do not checkout.'
+    assert classify_workflow(objective) == WorkflowType.QA
+    assert extract_product_search_query(objective) is None
