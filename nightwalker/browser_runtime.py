@@ -1475,11 +1475,32 @@ class BrowserRuntime:
                 self._qa_listener_pages.add(id(page))
             # Secondary pages are reviewed by the AI janitor in Orchestrator;
             # this runtime only enforces the hard cap and protects the primary page.
-            response = await page.goto(
-                url,
-                wait_until="domcontentloaded",
-                timeout=int(os.getenv("NAVIGATION_TIMEOUT_MS", "45000")),
+            # Keep the same live page between sequential mission steps. Re-navigating
+            # on every round hides the user's view of the journey, resets page state,
+            # and can make an extraction step look like a fresh page-open action.
+            # Navigate only when there is no usable page at the requested URL.
+            response = None
+            current_url = str(getattr(page, "url", "") or "")
+            needs_navigation = (
+                not current_url
+                or current_url == "about:blank"
+                or current_url.rstrip("/") != str(url).rstrip("/")
             )
+            if needs_navigation:
+                self._browser_event(
+                    task_id, "Opening the planned target page",
+                    url=url, action="navigate", plan_step_id=str(steps[0].get("step_id") or ""),
+                )
+                response = await page.goto(
+                    url,
+                    wait_until="domcontentloaded",
+                    timeout=int(os.getenv("NAVIGATION_TIMEOUT_MS", "45000")),
+                )
+            else:
+                self._browser_event(
+                    task_id, "Reusing the live page for the next authorised plan step",
+                    url=page.url, action="reuse_page", plan_step_id=str(steps[0].get("step_id") or ""),
+                )
             http_status = response.status if response else None
             product_search_requested = self._extract_product_search_query(objective) is not None
             has_authorized_search_interaction = any(
@@ -1780,9 +1801,12 @@ class BrowserRuntime:
                     })
             for event in ([] if focused_product_search else (audit_signals.get("qa_runtime_events") or [])[:20]):
                 if event.get("kind") in {"console_error", "page_error"}:
+                    # Runtime errors are diagnostic observations, not automatically
+                    # user-facing defects. Keep them visible for investigation, but do
+                    # not let a console/page exception alone validate a QA failure.
                     audit_findings.append({
-                        "claim": f"Browser {event.get('kind')}: {event.get('message', '')[:240]}",
-                        "type": "qa_browser_error", "severity": "medium",
+                        "claim": f"Runtime observation ({event.get('kind')}): {event.get('message', '')[:240]}",
+                        "type": "qa_runtime_observation", "severity": "info",
                         "affected_urls": [event.get("url") or page.url],
                     })
             if workflow_type in {"qa", "seo_qa"} and not focused_product_search:
