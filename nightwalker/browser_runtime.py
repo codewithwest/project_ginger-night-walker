@@ -17,6 +17,7 @@ from nightwalker.evidence import EvidenceStore
 from nightwalker.execution_control import ElementResolver
 from nightwalker.policy import PolicyEngine
 from nightwalker.workflows import extract_product_search_query
+from nightwalker.steel_mcp import SteelMCPClient
 
 
 class BrowserRuntime:
@@ -47,13 +48,16 @@ class BrowserRuntime:
         self.policy = PolicyEngine()
         self.element_resolver = ElementResolver()
         self.evidence = EvidenceStore()
+        self.steel_mcp = SteelMCPClient()
 
     async def start(self) -> None:
         self._playwright = await async_playwright().start()
         if self.backend == "local":
             self._browser = await self._playwright.chromium.launch(headless=True)
+        await self.steel_mcp.start()
 
     async def close(self) -> None:
+        await self.steel_mcp.close()
         for task_id in list(self._task_contexts):
             await self.close_task_session(task_id)
         for context_id, (session_id, browser) in list(self._steel_sessions.items()):
@@ -293,6 +297,14 @@ class BrowserRuntime:
             event["plan_step_id"] = plan_step_id[:120]
         state.setdefault("activity", []).append(event)
         state["activity"] = state["activity"][-30:]
+
+    def steel_mcp_status(self) -> dict:
+        return {
+            "enabled": os.getenv("STEEL_MCP_ENABLED", "false").strip().lower() == "true",
+            "connected": self.steel_mcp.connected,
+            "tool_count": len(self.steel_mcp.tools),
+            "tools": [item["name"] for item in self.steel_mcp.tools],
+        }
 
     def task_session(self, task_id: str) -> dict | None:
         """Return safe, task-scoped live browser observability for the UI."""
