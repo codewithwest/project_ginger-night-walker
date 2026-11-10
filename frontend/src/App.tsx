@@ -1056,11 +1056,11 @@ export default function App() {
                 <ExternalLink size={12} />
               </a>
             )}
-            {selected?.browser?.debug_url && selected.browser.active ? (
+            {selected?.browser?.backend === "steel" && selected.browser.active && selected.browser.steel_ui_url ? (
               <div className="floating-browser__viewer">
                 <iframe
-                  title="Read-only live Steel browser session"
-                  src={`${selected.browser.debug_url}${selected.browser.debug_url.includes("?") ? "&" : "?"}interactive=false`}
+                  title="Steel browser interface"
+                  src={selected.browser.steel_ui_url}
                   allow="autoplay; fullscreen"
                   referrerPolicy="no-referrer"
                 />
@@ -1068,10 +1068,10 @@ export default function App() {
             ) : (
               <div className="floating-browser__viewer-empty">
                 {selected?.browser?.active
-                  ? "The browser is active. A live video URL was not provided by this Steel session; activity is still shown below."
+                  ? "The browser is active. The Steel UI is not available for embedding; session activity is still shown below."
                   : selected?.browser?.finished_at
                     ? "This browser session has finished. The activity timeline below remains available."
-                    : "Start a mission to see its live browser session here."}
+                    : "Start a mission to see browser activity here."}
               </div>
             )}
             {selected?.browser?.last_error && <div className="floating-browser__error">{selected.browser.last_error}</div>}
