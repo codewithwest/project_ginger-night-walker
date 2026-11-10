@@ -63,7 +63,7 @@ Task intake must classify the requested outcome, not the nouns appearing in the 
 
 ### Product discovery within QA journeys
 
-When a QA objective includes finding or verifying a product, the QA workflow may capture the exact matching product title, visible price, image source/load state and product destination URL. The browser preserves the exact displayed values and their evidence/provenance. The plan requires only the fields explicitly requested (product identity is always required); other visible fields may be displayed as additional observations but must not block completion. Missing or ambiguous fields remain unverified, never inferred. Product results are rendered as structured product cards near the top of the report, separate from defect findings. This does not authorise checkout or other transactions unless the user explicitly requests a safe, bounded action.
+When a QA objective includes finding or verifying a product, the QA workflow may capture the exact matching product title, visible price, image source/load state and product destination URL. The browser preserves the exact displayed values and their evidence/provenance. The plan requires only the fields explicitly requested (product identity is always required); when no fields are specified, it defaults to name, image and price. Other visible fields may be displayed as additional observations but must not block completion. Missing or ambiguous fields remain unverified, never inferred. Product results are rendered as structured product cards near the top of the report, separate from defect findings. This does not authorise checkout or other transactions unless the user explicitly requests a safe, bounded action.
 
 ### QA safety and evidence rules
 
