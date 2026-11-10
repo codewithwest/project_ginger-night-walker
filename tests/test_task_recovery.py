@@ -260,6 +260,7 @@ def test_loaded_legacy_cart_task_is_migrated_before_snapshot_or_retry(tmp_path):
     assert steps[1]["step_id"] == "qa-discover"
     assert steps[1]["status"] == "pending"
     assert record["active_plan_step_id"] is None
+    assert record["workflow_type"] == "qa"
 
 
 def test_cart_plan_with_canonical_ids_but_stale_capabilities_is_migrated(tmp_path):
