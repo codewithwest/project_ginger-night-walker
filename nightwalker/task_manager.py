@@ -228,7 +228,10 @@ class TaskManager:
                 canonical_blueprint = build_workflow_blueprint(objective_text, workflow)
             if canonical_blueprint is not None:
                 saved_blueprint = record.get("execution_blueprint") or {}
-                if not self._workflow_blueprint_matches(saved_blueprint, canonical_blueprint):
+                if (
+                    not self._workflow_blueprint_matches(saved_blueprint, canonical_blueprint)
+                    or not self._execution_plan_matches_blueprint(record.get("execution_plan") or {}, canonical_blueprint)
+                ):
                     old_steps = (record.get("execution_plan") or {}).get("steps") or []
                     expected_steps = {
                         str(item.get("subtask_id")): item
@@ -422,6 +425,29 @@ class TaskManager:
             ]
         return signature(saved_steps) == signature(expected_steps)
 
+    @staticmethod
+    def _execution_plan_matches_blueprint(plan: dict[str, Any], blueprint) -> bool:
+        """Detect stale persisted execution ledgers even when their blueprint is current."""
+        actual = plan.get("steps") or []
+        expected = blueprint.model_dump(mode="json").get("subtasks") or []
+        fields = ("objective", "capability", "depends_on", "success_criteria")
+        if len(actual) != len(expected):
+            return False
+        for saved, canonical in zip(actual, expected):
+            if not isinstance(saved, dict):
+                return False
+            if str(saved.get("step_id") or "") != str(canonical.get("subtask_id") or ""):
+                return False
+            for field in fields:
+                left = saved.get(field) or []
+                right = canonical.get(field) or []
+                if field in {"depends_on", "success_criteria"}:
+                    if list(left) != list(right):
+                        return False
+                elif str(left) != str(right):
+                    return False
+        return True
+
     def _migrate_legacy_cart_plan(self, record: dict[str, Any]) -> bool:
         """Bring an already-loaded legacy cart task onto the canonical safe workflow."""
         objective = str(record.get("objective") or "")
@@ -431,7 +457,10 @@ class TaskManager:
         record["workflow_type"] = WorkflowType.QA.value
         canonical = build_cart_journey_blueprint(objective)
         saved = record.get("execution_blueprint") or {}
-        if self._workflow_blueprint_matches(saved, canonical):
+        if (
+            self._workflow_blueprint_matches(saved, canonical)
+            and self._execution_plan_matches_blueprint(record.get("execution_plan") or {}, canonical)
+        ):
             return workflow_type_changed
 
         old_plan = record.get("execution_plan") or {}
