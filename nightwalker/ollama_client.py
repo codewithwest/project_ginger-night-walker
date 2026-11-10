@@ -424,24 +424,73 @@ class OllamaClient:
                          {"role": "user", "content": json.dumps(packet, ensure_ascii=False)}],
             "options": {
                 "num_ctx": int(os.getenv("OLLAMA_NUM_CTX", "8192")),"temperature": 0.1, "num_predict": int(os.getenv("OLLAMA_PLAN_MAX_TOKENS", "1800"))}}
+        max_retries = max(0, min(3, int(os.getenv("OLLAMA_BLUEPRINT_RETRIES", "3"))))
+        last_error: Exception | None = None
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await self._post_inference(client,
-                    f"{base_url}/api/chat",
-                    headers=self._headers(agent="goal-analyst-planner", capability="planning",
-                        operation="create-execution-blueprint", model=model, task_id=task_id),
-                    json=body,
-                )
-                response.raise_for_status()
-                raw = self._chat_content(response.json(), model=model, operation="Execution blueprint")
-                blueprint = ExecutionBlueprint.model_validate_json(raw)
-                # The user's objective is authoritative application state, not a
-                # planner-authored field. Some models paraphrase or truncate echoed
-                # input; never let that invalidate planning or overwrite the source.
-                # The complete objective is supplied above and restored verbatim here.
-                return blueprint.model_copy(update={"original_objective": objective})
+                for attempt in range(max_retries + 1):
+                    attempt_body = dict(body)
+                    attempt_body["options"] = dict(body["options"])
+                    # A length-truncated reasoning response can consume the entire
+                    # generation budget without emitting structured content. Give
+                    # each retry more room and explicitly request a concise answer.
+                    base_predict = max(512, int(body["options"]["num_predict"]))
+                    attempt_body["options"]["num_predict"] = min(
+                        12000, base_predict * (attempt + 1)
+                    )
+                    if attempt:
+                        attempt_body["messages"] = [
+                            *body["messages"],
+                            {
+                                "role": "user",
+                                "content": (
+                                    "Retry the structured plan. Do not explain or expose reasoning. "
+                                    "Return the complete, compact JSON object matching the supplied schema "
+                                    "immediately; include every required field and keep descriptions concise."
+                                ),
+                            },
+                        ]
+                        self.logger.warning(
+                            "Retrying execution blueprint generation (attempt %s/%s, num_predict=%s, model=%s, task_id=%s)",
+                            attempt, max_retries, attempt_body["options"]["num_predict"], model, task_id,
+                        )
+                    try:
+                        response = await self._post_inference(
+                            client,
+                            f"{base_url}/api/chat",
+                            headers=self._headers(
+                                agent="goal-analyst-planner", capability="planning",
+                                operation="create-execution-blueprint", model=model, task_id=task_id,
+                            ),
+                            json=attempt_body,
+                        )
+                        response.raise_for_status()
+                        raw = self._chat_content(
+                            response.json(), model=model, operation="Execution blueprint"
+                        )
+                        blueprint = ExecutionBlueprint.model_validate_json(raw)
+                        # The user's objective is authoritative application state, not a
+                        # planner-authored field. Restore it verbatim after validation.
+                        return blueprint.model_copy(update={"original_objective": objective})
+                    except OllamaUnavailable as exc:
+                        last_error = exc
+                        retryable = (
+                            "returned empty message.content" in str(exc)
+                            and "done_reason='length'" in str(exc)
+                        )
+                        if not retryable or attempt >= max_retries:
+                            raise
+                    except (json.JSONDecodeError, ValidationError) as exc:
+                        last_error = exc
+                        if attempt >= max_retries:
+                            raise
+                        # Malformed/truncated structured output gets the same
+                        # bounded retry treatment as an empty length-terminated reply.
+                if last_error:
+                    raise last_error
+                raise OllamaUnavailable("Execution blueprint generation exhausted its retry budget")
         except (httpx.HTTPError, ValueError, ValidationError, KeyError) as exc:
-            raise OllamaUnavailable(f"Execution blueprint planning failed: {exc}") from exc
+            raise OllamaUnavailable(f"Execution blueprint planning failed after automatic retries: {exc}") from exc
 
     async def cleanup_browser_tabs(
         self, objective: str, tabs: list[dict[str, Any]], task_id: str | None = None,
