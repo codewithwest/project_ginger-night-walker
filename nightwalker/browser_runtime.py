@@ -591,14 +591,14 @@ class BrowserRuntime:
                             el.type, el.name, el.id, el.placeholder, el.getAttribute('aria-label'),
                             el.getAttribute('autocomplete'), el.className,
                             el.form && [el.form.getAttribute('role'), el.form.getAttribute('action'),
-                                el.form.id, el.form.className].join(' ')
+                                el.form.id, el.form.className, el.form.innerHTML].join(' ')
                         ].join(' ').toLowerCase();
                         let value = 0;
                         if (/search|query|keyword|find/.test(attrs)) value += 8;
                         if (el.type === 'search') value += 12;
                         if (el.form && (el.form.getAttribute('role') === 'search' ||
                             /search/i.test([el.form.action, el.form.id, el.form.className].join(' ')))) value += 10;
-                        if (el.type === 'text' || el.tagName === 'TEXTAREA') value += 1;
+                        if (el.form && /search|query|keyword|magnif/.test(attrs)) value += 6;
                         if (el.disabled || el.readOnly) value = -100;
                         return value;
                     }""")
