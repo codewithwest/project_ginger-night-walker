@@ -1117,6 +1117,18 @@ class TaskManager:
                                     objective_text = str(objective or record.get("objective") or record.get("original_objective") or "")
                                     requested_product_search = extract_product_search_query(objective_text) is not None
                                     product_search = result_data.get("qa_product_search")
+                                    if not isinstance(product_search, dict):
+                                        # Search submission is its own authorised mission step.
+                                        # The later extraction step runs in a separate browser
+                                        # round, so reuse the previously captured search outcome
+                                        # rather than incorrectly requiring it in this round's
+                                        # fresh payload as well.
+                                        prior_searches = structured_data.get("qa_product_search", [])
+                                        if isinstance(prior_searches, list):
+                                            product_search = next(
+                                                (item for item in reversed(prior_searches) if isinstance(item, dict)),
+                                                None,
+                                            )
                                     product_search_captured = (
                                         isinstance(product_search, dict)
                                         and bool(product_search.get("query"))
