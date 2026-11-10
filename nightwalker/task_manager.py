@@ -427,11 +427,12 @@ class TaskManager:
         objective = str(record.get("objective") or "")
         if not is_ecommerce_cart_workflow(objective):
             return False
+        workflow_type_changed = record.get("workflow_type") != WorkflowType.QA.value
         record["workflow_type"] = WorkflowType.QA.value
         canonical = build_cart_journey_blueprint(objective)
         saved = record.get("execution_blueprint") or {}
         if self._workflow_blueprint_matches(saved, canonical):
-            return False
+            return workflow_type_changed
 
         old_plan = record.get("execution_plan") or {}
         old_steps = old_plan.get("steps") or []
