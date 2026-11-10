@@ -135,3 +135,33 @@ def test_qa_page_signals_confirm_broken_images_but_not_seo_title_claims():
     ], evidence, {"qa_page_signals": [signals]})
     assert findings[0]["validation"]["verdict"] == "insufficient_evidence"
     assert findings[1]["validation"]["verdict"] == "confirmed"
+
+
+def test_browser_runtime_event_alone_is_not_a_confirmed_qa_defect():
+    evidence = [{"evidence_id": "ev-runtime"}]
+    structured = {"qa_runtime_events": [{
+        "source_id": "s-runtime", "evidence_ids": ["ev-runtime"],
+        "kind": "page_error", "message": "initPriceBox is not defined",
+    }]}
+    findings, summary = validate_findings([{
+        "claim": "Browser page_error: initPriceBox is not defined",
+        "type": "qa_browser_error", "source_ids": ["s-runtime"],
+        "evidence_ids": ["ev-runtime"],
+    }], evidence, structured)
+    assert findings[0]["validation"]["verdict"] == "insufficient_evidence"
+    assert "functional impact" in findings[0]["validation"]["reason"]
+    assert summary["confirmed"] == 0
+
+
+def test_runtime_observation_type_is_never_confirmed_without_impact_evidence():
+    evidence = [{"evidence_id": "ev-console"}]
+    structured = {"qa_runtime_events": [{
+        "source_id": "s-console", "evidence_ids": ["ev-console"],
+        "kind": "console_error", "message": "Failed to load optional resource",
+    }]}
+    findings, _ = validate_findings([{
+        "claim": "Runtime observation (console_error): Failed to load optional resource",
+        "type": "qa_runtime_observation", "source_ids": ["s-console"],
+        "evidence_ids": ["ev-console"],
+    }], evidence, structured)
+    assert findings[0]["validation"]["verdict"] == "insufficient_evidence"
