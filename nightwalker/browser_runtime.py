@@ -1489,7 +1489,7 @@ class BrowserRuntime:
                 structured_data["qa_interaction_journeys"] = audit_signals.get("qa_interaction_journeys", {})
                 structured_data["qa_runtime_events"] = audit_signals.get("qa_runtime_events", [])
                 structured_data["internal_link_checks"] = audit_signals.get("internal_link_checks", {})
-            limitations = list(issues)
+            limitations = [] if focused_product_search else list(issues)
             if qa_product_search is not None:
                 if not qa_product_search.get("performed"):
                     limitations.append(
@@ -1517,7 +1517,7 @@ class BrowserRuntime:
                             )
             if workflow_type in {"seo", "seo_qa"}:
                 limitations.append("Crawl coverage is bounded by the configured round/page budget and discovered same-origin links/sitemap entries; inaccessible, JavaScript-only, orphaned and undiscovered URLs may be absent. Core Web Vitals are not measured.")
-            if workflow_type in {"qa", "seo_qa"}:
+            if workflow_type in {"qa", "seo_qa"} and not focused_product_search:
                 limitations.append("QA checks are read-only: forms are not submitted, state-changing controls are not activated, and keyboard focus is sampled rather than exhaustively tested. Automated WCAG conformance is not claimed.")
             if not body_text.strip():
                 limitations.append("No visible page text was available to analyse.")
