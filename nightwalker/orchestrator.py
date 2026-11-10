@@ -14,6 +14,7 @@ from nightwalker.contracts import (
 )
 from nightwalker.decision_contracts import DecisionPlan
 from nightwalker.ollama_client import OllamaClient, OllamaUnavailable
+from nightwalker.workflows import classify_workflow, is_ecommerce_cart_workflow, extract_product_search_query
 
 
 class Orchestrator:
@@ -76,9 +77,19 @@ class Orchestrator:
             or str(requested.get("objective") or "").strip() != step_objective
         ):
             raise PermissionError("Browser instructions do not match the active mission plan step")
+        workflow_type = classify_workflow(objective).value
+        # SEO/QA currently depend on richer Playwright-collected page signals and
+        # deterministic cart/search verification. Keep those specialised workflows
+        # on their established path until the MCP evidence adapters provide parity.
+        specialised_workflow = (
+            workflow_type in {"seo", "qa", "seo_qa"}
+            or is_ecommerce_cart_workflow(objective)
+            or extract_product_search_query(objective) is not None
+        )
         use_steel_mcp = (
             getattr(getattr(self.browser, "steel_mcp", None), "connected", False)
             and os.getenv("STEEL_MCP_MISSION_ENABLED", "true").strip().lower() == "true"
+            and not specialised_workflow
         )
         if use_steel_mcp:
             try:
