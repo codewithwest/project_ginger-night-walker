@@ -1043,9 +1043,7 @@ class BrowserRuntime:
                 if (current_parts.scheme, current_parts.hostname) != (product_parts.scheme, product_parts.hostname):
                     result = {"status": "blocked", "reason": "The matching product link is not same-origin; refusing cross-site navigation."}
                 else:
-                    await page.locator(selector).nth(int(matches[0]["index"])).locator("a[href]").filter(
-                        has=page.locator("img")
-                    ).first.click(timeout=7000)
+                    await page.locator(selector).nth(int(matches[0]["index"])).locator("a[href]").first.click(timeout=7000)
                     await page.wait_for_load_state("domcontentloaded", timeout=10000)
                     await page.wait_for_timeout(700)
                     pdp_identity = normal((await page.locator("body").inner_text())[:12000])
