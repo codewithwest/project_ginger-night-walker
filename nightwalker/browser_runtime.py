@@ -269,6 +269,7 @@ class BrowserRuntime:
     def _browser_event(
         self, task_id: str, message: str, *, url: str | None = None,
         title: str | None = None, status: str | None = None,
+        action: str | None = None, plan_step_id: str | None = None,
     ) -> None:
         state = self._task_sessions.setdefault(task_id, {
             "backend": self.backend, "status": "connecting", "active": True,
@@ -281,11 +282,16 @@ class BrowserRuntime:
         if status:
             state["status"] = status
             state["active"] = status in {"connecting", "active", "retained"}
-        state.setdefault("activity", []).append({
+        event = {
             "at": datetime.now(UTC).isoformat(),
             "message": message[:500],
             "url": url,
-        })
+        }
+        if action:
+            event["action"] = action[:80]
+        if plan_step_id:
+            event["plan_step_id"] = plan_step_id[:120]
+        state.setdefault("activity", []).append(event)
         state["activity"] = state["activity"][-30:]
 
     def task_session(self, task_id: str) -> dict | None:
