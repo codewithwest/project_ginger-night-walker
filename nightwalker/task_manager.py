@@ -1017,6 +1017,10 @@ class TaskManager:
                     execution_plan = record.get("execution_plan")
                     evidence_refs = [item.get("evidence_id") for item in round_evidence if item.get("evidence_id")]
                     products = result.get("products") or (result.get("structured_data") or {}).get("products") or []
+                    focused_product_search = (
+                        str(record.get("workflow_type") or "") == "qa"
+                        and extract_product_search_query(str(objective or "")) is not None
+                    )
                     if isinstance(execution_plan, dict) and evidence_refs:
                         # Advance all sequential steps that this single captured page
                         # can actually satisfy. The trusted runtime performs extraction
@@ -1028,10 +1032,6 @@ class TaskManager:
                             match = re.search(r"[\d,]+(?:\.\d{1,2})?", str(product.get("price") or ""))
                             return float(match.group(0).replace(",", "")) if match else None
 
-                        focused_product_search = (
-                            str(record.get("workflow_type") or "") == "qa"
-                            and extract_product_search_query(str(objective or "")) is not None
-                        )
                         while True:
                             ready = ready_steps_for_capture(
                                 execution_plan,
