@@ -899,15 +899,15 @@ class BrowserRuntime:
         phase_id = str(step_id or "").casefold()
         step_meaning = " ".join((str(step_id or "") + " " + str(objective or "")).casefold().split())
         if not phase_id.endswith(("qa-discover", "qa-availability", "qa-content", "qa-validate", "qa-synthesise")):
-            if re.search(r"\\b(remove|delete)\\b.{0,100}\\b(cart|basket)\\b", step_meaning):
+            if re.search(r"\b(remove|delete)\b.{0,100}\b(cart|basket)\b", step_meaning):
                 phase_id = "qa-validate"
-            elif re.search(r"\\b(empty cart|cart is empty|confirm.*empty)\\b", step_meaning):
+            elif re.search(r"\b(empty cart|cart is empty|confirm.*empty)\b", step_meaning):
                 phase_id = "qa-synthesise"
-            elif re.search(r"\\b(cart|basket).{0,60}\\b(price|quantity|line item|contents)\\b|\\b(price|quantity).{0,40}\\bcart\\b", step_meaning):
+            elif re.search(r"\b(cart|basket).{0,60}\b(price|quantity|line item|contents)\b|\b(price|quantity).{0,40}\bcart\b", step_meaning):
                 phase_id = "qa-content"
-            elif re.search(r"\\b(add to cart|add.*\\b(cart|basket)\\b|select.*(store|variant|size|colour|color|finish)|choose.*(store|variant|size|colour|color|finish)|availability|fulfilment|fulfillment|collection location)\\b", step_meaning):
+            elif re.search(r"\b(add to cart|add.*\b(cart|basket)\b|select.*(store|variant|size|colour|color|finish)|choose.*(store|variant|size|colour|color|finish)|availability|fulfilment|fulfillment|collection location)\b", step_meaning):
                 phase_id = "qa-availability"
-            elif re.search(r"\\b(find|discover|search|browse|identify|locate|open).{0,100}\\b(product|item|pdp|catalogue|catalog|listing)\\b", step_meaning):
+            elif re.search(r"\b(find|discover|search|browse|identify|locate|open|select).{0,100}\b(product|item|pdp|catalogue|catalog|listing)\b", step_meaning):
                 phase_id = "qa-discover"
         normal = lambda value: re.sub(r"[^a-z0-9]+", " ", str(value or "").casefold()).strip()
         if phase_id.endswith("qa-discover"):
