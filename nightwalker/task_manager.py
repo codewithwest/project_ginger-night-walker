@@ -1199,6 +1199,11 @@ class TaskManager:
                                 item for item in reversed(cart_results)
                                 if isinstance(item, dict) and item.get("step_id") == str(step.get("step_id") or "")
                             ), None)
+                            cart_failure_reason = (
+                                str(cart_step_result.get("reason") or cart_step_result.get("status") or "Cart action was not verified")
+                                if cart_step_result and cart_step_result.get("status") != "verified"
+                                else None
+                            )
                             if cart_step_result and cart_step_result.get("status") == "verified":
                                 cart_step_id = str(step.get("step_id") or "")
                                 cart_labels = {
@@ -1361,12 +1366,19 @@ class TaskManager:
                                     # the deterministic page queue has been exhausted.
                                     break
                                 if workflow_value in {"seo", "qa", "seo_qa"} and str(step.get("step_id", "")).startswith(("seo-", "qa-", "combined-")):
+                                    failure_detail = (
+                                        "Cart journey could not verify this step: " + cart_failure_reason
+                                        if str(step.get("step_id") or "").startswith("qa-") and cart_failure_reason
+                                        else "This step's acceptance test was not met by the available browser evidence. No success is assumed."
+                                    )
                                     fail_step(
                                         execution_plan, step["step_id"],
-                                        "This step's acceptance test was not met by the available read-only browser evidence; it is not being retried as if verified.",
+                                        failure_detail,
                                         blocked=True,
                                     )
-                                    self._log(task_id, f"Plan step blocked without evidence-backed acceptance: {step['step_id']}", "warning")
+                                    if cart_failure_reason:
+                                        limitations.append(f"{step['step_id']}: {cart_failure_reason}")
+                                    self._log(task_id, f"Plan step blocked: {step['step_id']} — {failure_detail}", "warning")
                                 break
                             complete_step(execution_plan, step["step_id"], evidence_refs=evidence_refs, result=verified_result)
                             self._log(task_id, f"Plan step verified: {step['step_id']}")
