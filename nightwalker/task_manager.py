@@ -26,6 +26,7 @@ from nightwalker.plan_execution import (
     complete_step,
     fail_step,
     initialise_plan,
+    initialise_decision_plan,
     ready_steps,
     ready_steps_for_capture,
     reset_retryable_steps,
@@ -604,26 +605,32 @@ class TaskManager:
                 record["decider_plan"] = decision_payload.model_dump(mode="json")
                 record["planner_provenance"] = {
                     "decider": "ollama.decide_task",
-                    "execution_blueprint": "ollama.create_execution_blueprint",
+                    "goal_analysis": "ollama.create_execution_blueprint",
+                    "execution_order_source": "decider_plan",
                     "objective_sha256": hashlib.sha256(objective.encode("utf-8")).hexdigest(),
                 }
-                # A separate goal analyst turns the Decider's routing plan into
-                # evidence-testable criteria and dependent subtasks. This is also
-                # model-generated and remains the authoritative execution checklist.
+                # The Decider's ordered steps are the sole executable sequence.
+                # Goal analysis may contribute acceptance criteria and interpretation,
+                # but its separately generated subtasks are never executable.
                 blueprint = await self.orchestrator.ollama.create_execution_blueprint(
                     objective, task_id=task_id
                 )
                 if blueprint.original_objective.strip() != objective.strip():
-                    raise ValueError("Execution planner changed the immutable task objective")
+                    raise ValueError("Goal analyst changed the immutable task objective")
+                criteria = [item.description for item in blueprint.success_criteria]
+                record["goal_analysis"] = {
+                    "interpretation": blueprint.interpretation,
+                    "success_criteria": [item.model_dump(mode="json") for item in blueprint.success_criteria],
+                    "completion_policy": blueprint.completion_policy,
+                }
+                record["execution_plan"] = initialise_decision_plan(decision.steps)
+                record["workflow_summary"] = decision.summary
+                record["research_queries"] = list(blueprint.research_queries)
                 self._log(
                     task_id,
-                    "Accepted the model-generated execution blueprint; runtime policy checks remain independent of the plan.",
+                    "Execution sequence locked to the Decider's " + str(len(decision.steps)) +
+                    " ordered steps; goal analysis supplies acceptance criteria only.",
                 )
-                record["execution_blueprint"] = blueprint.model_dump(mode="json")
-                record["execution_plan"] = initialise_plan(record["execution_blueprint"])
-                record["workflow_summary"] = decision.summary or blueprint.interpretation
-                criteria = [item.description for item in blueprint.success_criteria]
-                record["research_queries"] = list(blueprint.research_queries)
                 initial_plan = decision_payload
                 self._log(
                     task_id,
@@ -636,24 +643,6 @@ class TaskManager:
                 record["research_queries"] = []
                 record["plan"] = initial_plan.model_dump(mode="json")
                 record["goal_state"] = GoalStateManager.initialise(objective, criteria)
-                if record.get("execution_plan") is None:
-                    fallback_subtasks = []
-                    previous_id = None
-                    for index, step in enumerate(initial_plan.steps, 1):
-                        step_id = str(getattr(step, "step_id", None) or f"step-{index}")
-                        step_capability = getattr(step, "capability", None) or "extract"
-                        step_capability = getattr(step_capability, "value", step_capability)
-                        fallback_subtasks.append({
-                            "subtask_id": step_id,
-                            "objective": str(getattr(step, "objective", None) or step_id),
-                            "capability": str(step_capability),
-                            "depends_on": [previous_id] if previous_id else [],
-                            "success_criteria": [],
-                            "expected_output": "Evidence-backed output for this step",
-                        })
-                        previous_id = step_id
-                    if fallback_subtasks:
-                        record["execution_plan"] = initialise_plan({"version": 1, "subtasks": fallback_subtasks})
                 self._log(task_id, f"Goal State Manager established {len(criteria)} success criteria")
                 if initial_plan.status == DecisionStatus.READY and blueprint is not None:
                     record["agent_assignments"] = self.agent_allocator.assign(task_id, blueprint)
