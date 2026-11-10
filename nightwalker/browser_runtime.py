@@ -1447,8 +1447,19 @@ class BrowserRuntime:
             )
             # A plan-level interaction authorises the action, but the action
             # must execute at that interaction step, not before the plan loop.
-            qa_product_search = None
-            if workflow_type == "qa" and product_search_requested and not has_authorized_search_interaction:
+            # Product-search QA spans multiple mission-plan rounds. Keep the
+            # captured result in task-scoped state so extraction/validation rounds
+            # do not lose the result when this local variable is re-created.
+            stored_product_search = self._task_sessions[task_id].get("qa_product_search")
+            requested_query = self._extract_product_search_query(objective)
+            qa_product_search = (
+                copy.deepcopy(stored_product_search)
+                if isinstance(stored_product_search, dict)
+                and requested_query
+                and str(stored_product_search.get("query") or "").casefold() == requested_query.casefold()
+                else None
+            )
+            if workflow_type == "qa" and product_search_requested and not has_authorized_search_interaction and qa_product_search is None:
                 self._browser_event(
                     task_id, "QA product search skipped: plan contains no authorised interact step",
                     url=page.url,
@@ -1524,7 +1535,9 @@ class BrowserRuntime:
                             page, step_objective, workflow_type, qa_product_search, task_id,
                         )
                     if search_result is not None:
-                        qa_product_search = search_result
+                        qa_product_search = copy.deepcopy(search_result)
+                        self._task_sessions[task_id]["qa_product_search"] = copy.deepcopy(search_result)
+                        self._task_sessions[task_id]["qa_product_search_query"] = str(search_result.get("query") or "")
                         if search_result.get("performed"):
                             self._browser_event(
                                 task_id, f"Submitted requested product search: {search_result.get('query', '')}",
@@ -1858,7 +1871,7 @@ class BrowserRuntime:
                 if qa_product_search is not None:
                     structured_data["qa_product_search"] = qa_product_search
                     structured_data["qa_product_evidence"] = self._qa_product_evidence(
-                        qa_product_search, page.url,
+                        qa_product_search, qa_product_search.get("searched_url") or page.url,
                     )
                 structured_data["qa_extended"] = audit_signals.get("qa_extended", {})
                 structured_data["qa_navigation_journeys"] = audit_signals.get("qa_navigation_journeys", {})
@@ -1898,8 +1911,17 @@ class BrowserRuntime:
             if not body_text.strip():
                 limitations.append("No visible page text was available to analyse.")
             if focused_product_search and qa_product_search:
-                product_evidence = self._qa_product_evidence(qa_product_search, page.url)
+                product_evidence = self._qa_product_evidence(
+                    qa_product_search, qa_product_search.get("searched_url") or page.url,
+                )
                 if product_evidence:
+                    # Prefer an exact phrase match, then a result with all requested
+                    # fields present; preserve the remaining matches as alternatives.
+                    product_evidence.sort(key=lambda item: (
+                        0 if next((m.get("query_match") for m in qa_product_search.get("matches", [])
+                                   if str(m.get("name_match") or m.get("product_title") or "") == item["product_name"]), "") == "phrase" else 1,
+                        0 if item.get("price") and item.get("image_url") and item.get("image_status") == "loaded" else 1,
+                    ))
                     first_product = product_evidence[0]
                     answer = (
                         f"Found {len(product_evidence)} matching product card(s). "
