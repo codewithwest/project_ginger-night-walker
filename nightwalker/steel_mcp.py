@@ -176,7 +176,19 @@ class SteelMCPClient:
             if selected_tool not in allowed:
                 raise PermissionError("Model selected a Steel tool outside the capability allowlist")
             arguments = dict(proposal.get("arguments") or {})
-            arguments["session_id"] = session_id
+            selected_schema = next(
+                (tool.get("input_schema") or {} for tool in self._tools
+                 if tool.get("name") == selected_tool),
+                {},
+            )
+            schema_properties = selected_schema.get("properties") or {}
+            # Steel MCP tools do not all accept a session_id argument. Keep the
+            # session task-scoped here, and pass it only when the selected tool's
+            # published input schema explicitly declares it.
+            if "session_id" in schema_properties:
+                arguments["session_id"] = session_id
+            else:
+                arguments.pop("session_id", None)
             result = await self.call_tool(selected_tool, arguments)
         if result["is_error"]:
             raise RuntimeError(str(result["content"])[:1500])
