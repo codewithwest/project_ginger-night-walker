@@ -122,17 +122,9 @@ def _support_for_type(
             if ok:
                 matched.append(record)
     elif kind == "qa_page_issue":
-        matched = [r for r in records if (
-            r.get("dataset") == "qa_page_smoke" and (
-                ("title" in claim and not str(r.get("document_title") or "").strip())
-                or ("h1" in claim and int(r.get("h1_count") or 0) == 0)
-            )
-        ) or (
-            r.get("dataset") == "qa_page_signals" and (
-                ("title" in claim and not str(r.get("title") or "").strip())
-                or ("h1" in claim and int(r.get("h1_count") or 0) == 0)
-            )
-        )]
+        # Legacy title/H1 QA claims are SEO/content-structure checks. Keep them
+        # unconfirmed unless a future dedicated functional validator is added.
+        return False, "Document title and heading hierarchy belong to SEO validation, not functional QA.", []
     elif kind in {"qa_accessibility_issue", "qa_accessibility_warning"}:
         semantic_fields = {
             "form control": "visible_form_controls_without_label",
