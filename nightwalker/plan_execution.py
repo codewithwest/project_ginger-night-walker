@@ -204,6 +204,7 @@ def fail_step(plan: dict[str, Any], step_id: str, message: str, *, blocked: bool
     step = next((s for s in plan.get("steps", []) if s["step_id"] == step_id), None)
     if step is None:
         raise ValueError("Unknown planned step")
+    step["result"] = str(message)[:1000]
     _event(plan, step, "blocked" if blocked else "failed", message)
     return step
 
