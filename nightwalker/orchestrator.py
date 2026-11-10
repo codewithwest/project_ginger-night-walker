@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from uuid import uuid4
 
 from playwright.async_api import Error as PlaywrightError
@@ -75,6 +76,26 @@ class Orchestrator:
             or str(requested.get("objective") or "").strip() != step_objective
         ):
             raise PermissionError("Browser instructions do not match the active mission plan step")
+        use_steel_mcp = (
+            self.browser.steel_mcp.connected
+            and os.getenv("STEEL_MCP_MISSION_ENABLED", "true").strip().lower() == "true"
+        )
+        if use_steel_mcp:
+            try:
+                result = await self.browser.run_steel_mcp_step(
+                    task_id, str(plan.target_url), requested, objective, self.ollama,
+                )
+                result["authorised_plan_step"] = {
+                    "step_id": step_id, "capability": capability, "objective": step_objective,
+                }
+                return result
+            except PermissionError as exc:
+                return {"status": "blocked", "issues": [str(exc)[:500]], "browser_backend": "steel-mcp"}
+            except (RuntimeError, OSError, ValueError) as exc:
+                return {
+                    "status": "failed", "issues": [f"Steel MCP execution failed: {str(exc)[:500]}"],
+                    "browser_backend": "steel-mcp",
+                }
         try:
             before_cleanup = await self._cleanup_browser_tabs(task_id, objective)
             result = await self.browser.run_plan(
