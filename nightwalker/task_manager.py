@@ -638,7 +638,7 @@ class TaskManager:
                     task_id,
                     "Decider plan accepted with " + str(len(decision.steps)) +
                     " routing steps; goal analyst produced " + str(len(criteria)) +
-                    " acceptance criteria and " + str(len(blueprint.subtasks)) + " dependent execution steps",
+                    " acceptance criteria; no second execution plan was generated",
                 )
                 self._persist(task_id)
                 initial_plan = DecisionPlan.model_validate(initial_plan.__dict__)
@@ -647,7 +647,7 @@ class TaskManager:
                 record["goal_state"] = GoalStateManager.initialise(objective, criteria)
                 self._log(task_id, f"Goal State Manager established {len(criteria)} success criteria")
                 if initial_plan.status == DecisionStatus.READY and blueprint is not None:
-                    record["agent_assignments"] = self.agent_allocator.assign(task_id, blueprint)
+                    record["agent_assignments"] = self.agent_allocator.assign(task_id, decision.steps, blueprint.success_criteria)
                     record["a2a_messages"] = self.a2a_bus.history(task_id)
                     self._log(task_id, f"Allocated {len(record['agent_assignments'])} capability agents and dispatched A2A assignments")
                 record["site_name"] = initial_plan.site_name
