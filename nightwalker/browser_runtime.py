@@ -17,6 +17,7 @@ from playwright.async_api import Browser, BrowserContext, Page, Route, async_pla
 from nightwalker.evidence import EvidenceStore
 from nightwalker.execution_control import ElementResolver
 from nightwalker.policy import PolicyEngine
+from nightwalker.workflows import extract_product_search_query
 
 
 class BrowserRuntime:
@@ -25,6 +26,11 @@ class BrowserRuntime:
     The model never receives a Playwright object. It can only influence the bounded
     plan produced by the Decider; this runtime owns and validates every browser action.
     """
+
+    @staticmethod
+    def _extract_product_search_query(objective: str) -> str | None:
+        """Extract a product search query from a QA objective using broad patterns."""
+        return extract_product_search_query(objective)
 
     def __init__(self) -> None:
         self._playwright = None
@@ -439,10 +445,9 @@ class BrowserRuntime:
 
     async def _run_product_search_smoke(self, page: Page, objective: str) -> dict[str, Any] | None:
         """Find a usable product search from the supplied page or the site's real catalogue."""
-        match = re.search(r'(?i)search\s+for\s+[“"\']([^”"\']{1,100})[”"\']', objective)
-        if not match:
+        query = self._extract_product_search_query(objective)
+        if not query:
             return None
-        query = match.group(1).strip()
         route = [{"url": page.url, "action": "opened_requested_url"}]
         origin = urlparse(page.url)
 
@@ -1166,9 +1171,7 @@ class BrowserRuntime:
                 timeout=int(os.getenv("NAVIGATION_TIMEOUT_MS", "20000")),
             )
             http_status = response.status if response else None
-            product_search_requested = bool(re.search(
-                r'(?i)search\s+for\s+[“"\'][^”"\']{1,100}[”"\']', objective
-            ))
+            product_search_requested = self._extract_product_search_query(objective) is not None
             qa_product_search = (
                 await self._run_product_search_smoke(page, objective)
                 if workflow_type == "qa" and product_search_requested else None

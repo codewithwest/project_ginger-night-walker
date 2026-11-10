@@ -16,6 +16,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_PYTHON_DOWNLOADS=never \
     PATH="/app/.venv/bin:$PATH"
 WORKDIR /app
+COPY pyproject.toml uv.lock ./
+RUN uv sync --python "$(command -v python3)" --no-dev --no-editable --no-install-project
 COPY . .
 COPY --from=frontend-build /app/frontend/dist ./nightwalker/static/ui
 RUN uv sync --python "$(command -v python3)" --no-dev --no-editable && \

@@ -19,7 +19,8 @@ def test_task_timing_accumulates_stages_and_freezes_on_finish():
 
     snapshot = timing.snapshot(record)
     assert snapshot["finished_at"] is not None
-    assert "queue" in snapshot["phases_ms"]\n    assert snapshot["phases_ms"]["planning"] >= 5
+    assert "queue" in snapshot["phases_ms"]
+    assert snapshot["phases_ms"]["planning"] >= 5
     assert snapshot["phases_ms"]["browser"] >= 5
     assert snapshot["active_phase"] is None
     assert snapshot["elapsed_ms"] >= snapshot["active_elapsed_ms"]

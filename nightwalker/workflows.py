@@ -97,6 +97,54 @@ def qa_requires_site_crawl(objective: str) -> bool:
 def qa_scope_for_objective(objective: str) -> str:
     return "site_wide" if qa_requires_site_crawl(objective) else "single_page"
 
+def extract_product_search_query(objective: str) -> str | None:
+    """Extract a product search query from a QA objective using broad patterns."""
+    m = re.search(
+        r"(?i)search\s+for\s+[“”\"'\u2018\u2019]([^“”\"'\u2018\u2019]{1,100})[“”\"'\u2018\u2019]",
+        objective,
+    )
+    if m:
+        return m.group(1).strip()
+    m = re.search(
+        r"(?i)(?:verify|check|confirm|test)\s+(?:the\s+)?(?:presence|existence|display|appearance)\s+of\s+"
+        r"[“”\"'\u2018\u2019]([^“”\"'\u2018\u2019]{1,100})[“”\"'\u2018\u2019]",
+        objective,
+    )
+    if m:
+        return m.group(1).strip()
+    m = re.search(
+        r"(?i)(?:verify|check|confirm|test)\s+(?:that\s+)?[“”\"'\u2018\u2019]([^“”\"'\u2018\u2019]{1,100})[“”\"'\u2018\u2019]"
+        r"\s+(?:product\s+)?(?:appears|is\s+shown|is\s+displayed|is\s+listed|is\s+available)",
+        objective,
+    )
+    if m:
+        return m.group(1).strip()
+    for m in re.finditer(
+        r"[“”\"'\u2018\u2019]([^“”\"'\u2018\u2019]{2,80})[“”\"'\u2018\u2019]",
+        objective,
+    ):
+        candidate = m.group(1).strip()
+        if len(candidate.split()) <= 8 and "://" not in candidate:
+            return candidate
+    return None
+
+
+def _qa_content_objective(objective: str) -> str:
+    """Build the qa-content step objective, injecting the product name when present."""
+    product = extract_product_search_query(objective)
+    if product:
+        return (
+            f'Inspect the requested page for a search control. If absent, discover a same-origin '
+            f'product/shop page from rendered navigation, open it, and inspect again. '
+            f'Search for "{product}" when a usable control is found; capture matching product name, image and price.'
+        )
+    return (
+        "Inspect the requested page for a search control. If absent, discover a same-origin "
+        "product/shop page from rendered navigation, open it, and inspect again. "
+        "Search for the requested product only when a usable control is found; capture matching product name, image and price."
+    )
+
+
 def build_workflow_blueprint(objective: str, workflow: WorkflowType) -> ExecutionBlueprint:
     if workflow == WorkflowType.SEO:
         criteria = [
@@ -148,7 +196,7 @@ def build_workflow_blueprint(objective: str, workflow: WorkflowType) -> Executio
             tasks = [
                 ("qa-discover", "Open the supplied page and establish a single-page QA boundary.", Capability.NAVIGATE, ["qa-scope"]),
                 ("qa-availability", "Record the requested page's HTTP and navigation outcome.", Capability.EXTRACT, ["qa-availability"]),
-                ("qa-content", "Inspect the requested page for a search control. If absent, discover a same-origin product/shop page from rendered navigation, open it, and inspect again. Search for the requested product only when a usable control is found; capture matching product name, image and price.", Capability.EXTRACT, ["qa-page-smoke"]),
+                ("qa-content", _qa_content_objective(objective), Capability.EXTRACT, ["qa-page-smoke"]),
                 ("qa-validate", "Validate each candidate page defect against the captured page, image and runtime evidence.", Capability.EXTRACT, ["qa-validation"]),
                 ("qa-synthesise", "Report only confirmed defects and recommendations for the requested page.", Capability.EXTRACT, ["qa-report"]),
             ]
