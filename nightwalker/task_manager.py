@@ -212,6 +212,43 @@ class TaskManager:
             record.setdefault("execution_plan", None)
             record.setdefault("workflow_type", classify_workflow(str(record.get("objective") or "")).value)
             record.setdefault("qa_scope", qa_scope_for_objective(str(record.get("objective") or "")) if record.get("workflow_type") == "qa" else "site_wide")
+            # Older persisted cart tasks were planned by the generic LLM blueprint
+            # and can omit qa-discover or mislabel the add/remove steps. Migrate
+            # those plans to the deterministic cart sequence before resuming.
+            if is_ecommerce_cart_workflow(str(record.get("objective") or "")):
+                canonical_blueprint = build_cart_journey_blueprint(str(record.get("objective") or ""))
+                canonical_ids = [item.subtask_id for item in canonical_blueprint.subtasks]
+                saved_blueprint = record.get("execution_blueprint") or {}
+                saved_ids = [
+                    str(item.get("subtask_id") or "")
+                    for item in saved_blueprint.get("subtasks", [])
+                    if isinstance(item, dict)
+                ]
+                if saved_ids != canonical_ids:
+                    old_plan = record.get("execution_plan") or {}
+                    old_steps = old_plan.get("steps") or []
+                    old_navigation = next((
+                        item for item in old_steps
+                        if isinstance(item, dict)
+                        and item.get("step_id") == "qa-navigation"
+                        and item.get("status") == "completed"
+                    ), None)
+                    record["execution_blueprint"] = canonical_blueprint.model_dump(mode="json")
+                    record["execution_plan"] = initialise_plan(record["execution_blueprint"])
+                    if old_navigation:
+                        complete_step(
+                            record["execution_plan"], "qa-navigation",
+                            evidence_refs=list(old_navigation.get("evidence_refs") or []),
+                            result=str(old_navigation.get("result") or "Reused previously verified storefront navigation"),
+                        )
+                    record.setdefault("progress_events", []).append({
+                        "at": self._now(), "event_type": "plan_migrated",
+                        "status": record.get("status", "queued"),
+                        "message": "Migrated legacy cart plan to the deterministic discover, add, verify, remove and empty-cart sequence.",
+                    })
+                    record["active_plan_step_id"] = None
+                    record["current_step"] = None
+                    self._persist(task_id)
             if record.get("execution_plan") is None and isinstance(record.get("execution_blueprint"), dict):
                 record["execution_plan"] = initialise_plan(record["execution_blueprint"])
             record.setdefault("agent_assignments", [])
