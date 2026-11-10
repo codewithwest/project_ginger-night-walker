@@ -713,7 +713,20 @@ class TaskManager:
                 self._persist(task_id)
                 self._log(task_id, f"Round {round_count}/{record.get('max_rounds', self.max_rounds)}: {next_assignment}")
                 attempt = loop_guard.begin(next_url, next_assignment)
-                already_visited = loop_guard.is_visited(next_url, visited_urls) and not resume_plan_source
+                # A dependency-ready mission step is a new authorised action, even when it
+                # operates on a page captured by an earlier step. URL deduplication
+                # applies to exploratory crawl rounds, not sequential actions in a plan.
+                already_visited = (
+                    loop_guard.is_visited(next_url, visited_urls)
+                    and not resume_plan_source
+                    and active_plan_step is None
+                )
+                if active_plan_step is not None and loop_guard.is_visited(next_url, visited_urls):
+                    self._log(
+                        task_id,
+                        f"Reusing captured page for authorised plan step {active_plan_step['step_id']}; "
+                        "same-URL plan actions are not duplicate crawl attempts",
+                    )
                 self._save_checkpoint(
                     task_id, initial_plan, sources=sources, findings=findings,
                     evidence=evidence, visited_urls=visited_urls, candidates=candidates,
