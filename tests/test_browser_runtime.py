@@ -208,3 +208,19 @@ def test_steel_urls_use_configured_remote_host_and_api_port(monkeypatch):
     )
     assert debug == "http://192.168.100.18:3000/v1/sessions/session-1/debug"
     assert websocket == "ws://192.168.100.18:3000/v1/sessions/session-1/cdp"
+
+
+def test_steel_debug_url_repairs_unscoped_legacy_route(monkeypatch):
+    monkeypatch.setenv("STEEL_API_BASE_URL", "http://192.168.100.18:3000/v1")
+    debug = BrowserRuntime._normalise_steel_debug_url(
+        "http://localhost:3000/v1/sessions/debug", "session-abc"
+    )
+    assert debug == "http://192.168.100.18:3000/v1/sessions/session-abc/debug"
+
+
+def test_steel_debug_url_preserves_already_scoped_route(monkeypatch):
+    monkeypatch.setenv("STEEL_API_BASE_URL", "http://192.168.100.18:3000/v1")
+    debug = BrowserRuntime._normalise_steel_debug_url(
+        "http://localhost:3000/v1/sessions/session-abc/debug", "session-abc"
+    )
+    assert debug == "http://192.168.100.18:3000/v1/sessions/session-abc/debug"
