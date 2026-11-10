@@ -3,10 +3,8 @@ from __future__ import annotations
 import asyncio
 import base64
 import copy
-import ipaddress
 import os
 import re
-import socket
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlencode, urljoin, urlparse
