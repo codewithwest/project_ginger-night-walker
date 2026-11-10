@@ -306,3 +306,35 @@ def test_cart_plan_with_canonical_ids_but_stale_capabilities_is_migrated(tmp_pat
     assert steps[1]["step_id"] == "qa-discover"
     assert steps[1]["capability"] == "interact"
     assert steps[1]["status"] == "pending"
+
+
+def test_cart_task_migrates_stale_execution_ledger_even_when_blueprint_is_current(tmp_path):
+    from nightwalker.plan_execution import initialise_plan
+    from nightwalker.workflows import build_cart_journey_blueprint
+
+    manager = TaskManager(NoExecutionOrchestrator())
+    manager.state_store = TaskStateStore(str(tmp_path / "tasks"))
+    manager.scratchpad = TaskScratchpad(str(tmp_path / "evidence"))
+    objective = (
+        'Open https://www.weylandts.co.za/. Add "Dark Grey" to the cart, '
+        "verify price and quantity, remove it, and confirm the cart is empty. Do not checkout."
+    )
+    blueprint = build_cart_journey_blueprint(objective).model_dump(mode="json")
+    stale_plan = initialise_plan(blueprint)
+    stale_plan["steps"] = stale_plan["steps"][:-1]
+    manager.tasks["stale-ledger"] = {
+        "task_id": "stale-ledger",
+        "objective": objective,
+        "workflow_type": "qa",
+        "status": "failed",
+        "execution_blueprint": blueprint,
+        "execution_plan": stale_plan,
+        "progress_events": [],
+    }
+
+    assert manager._migrate_legacy_cart_plan(manager.tasks["stale-ledger"]) is True
+    steps = manager.tasks["stale-ledger"]["execution_plan"]["steps"]
+    assert len(steps) == 6
+    assert steps[1]["step_id"] == "qa-discover"
+    assert steps[1]["capability"] == "interact"
+    assert steps[1]["status"] == "pending"
