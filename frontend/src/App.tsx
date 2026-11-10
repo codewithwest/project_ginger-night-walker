@@ -755,6 +755,10 @@ export default function App() {
                   </div>
                 </div>
 
+                {selected.result && ["completed", "blocked", "stopped", "failed"].includes(selected.status) && (
+                  <ResearchReport result={selected.result} />
+                )}
+
                 {selected.inference_events?.length ? (
         <section className="inference-panel">
           <div className="section-kicker">MODEL INFERENCE</div>
@@ -809,10 +813,6 @@ export default function App() {
                       Send answer
                     </button>
                   </form>
-                )}
-
-                {selected.result && ["completed", "blocked", "stopped", "failed"].includes(selected.status) && (
-                  <ResearchReport result={selected.result} />
                 )}
 
                 {selected.goal_state && (selected.status === "running" || selected.status === "queued") && (
