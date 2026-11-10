@@ -104,6 +104,27 @@ def test_routes_product_search_result_verification_to_qa():
 def test_product_noun_without_testing_intent_is_not_qa():
     assert classify_workflow('Tell me about Blue Top on https://example.com/products') == WorkflowType.UNSUPPORTED
 
+def test_incidental_audit_keywords_do_not_route_general_questions_to_qa():
+    prompts = [
+        "What is causing bugs on this website?",
+        "Tell me about the product listings on https://example.com",
+        "What does the basket icon mean on this page?",
+        "How are search results ranked on https://example.com?",
+        "What is the quantity shown for this product?",
+        "Explain the defects mentioned in this article.",
+    ]
+    assert all(classify_workflow(prompt) == WorkflowType.UNSUPPORTED for prompt in prompts)
+
+
+def test_explicit_qa_intent_still_routes_to_qa():
+    prompts = [
+        "Run a QA audit on https://example.com",
+        "Test the website navigation and forms on https://example.com",
+        "Find bugs in the web application at https://example.com",
+        "Run smoke testing on https://example.com",
+    ]
+    assert all(classify_workflow(prompt) == WorkflowType.QA for prompt in prompts)
+
 
 def test_extract_product_search_query_matches_supported_patterns():
     assert extract_product_search_query('Search for "Blue Top"') == "Blue Top"
