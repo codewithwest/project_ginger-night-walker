@@ -82,8 +82,7 @@ class Orchestrator:
         # interaction, let Ollama select a registered browser tool from the live
         # observation; task categories must not impose their own action sequence.
         use_steel_mcp = (
-            capability == "interact"
-            and getattr(getattr(self.browser, "steel_mcp", None), "connected", False)
+            getattr(getattr(self.browser, "steel_mcp", None), "connected", False)
             and os.getenv("STEEL_MCP_MISSION_ENABLED", "true").strip().lower() == "true"
         )
         if use_steel_mcp:
