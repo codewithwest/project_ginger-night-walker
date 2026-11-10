@@ -1155,16 +1155,13 @@ class BrowserRuntime:
             )
             http_status = response.status if response else None
             product_search_requested = self._extract_product_search_query(objective) is not None
-            active_capability = str(steps[0].get("capability") or "") if steps else ""
-            # A product search is an interaction, not a side effect of opening
-            # the seed URL. Wait until the planner authorises the interaction step;
-            # the original task objective is retained here so the requested query
-            # is not lost when the step objective is merely "search the catalogue".
+            # An explicit product-presence request is itself authorisation for
+            # this bounded, read-only QA journey. Do not gate it on the planner's
+            # first capability: single-page plans commonly begin with navigate or
+            # extract, which previously caused the requested search to be skipped.
             qa_product_search = (
                 await self._run_product_search_smoke(page, objective)
-                if workflow_type == "qa"
-                and product_search_requested
-                and active_capability == "interact"
+                if workflow_type == "qa" and product_search_requested
                 else None
             )
             if qa_product_search:
