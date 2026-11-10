@@ -173,6 +173,22 @@ async def retry_task(task_id: str):
     return task
 
 
+@app.post("/tasks/{task_id}/restart", status_code=202)
+async def restart_task(task_id: str):
+    task = task_manager.snapshot(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task.get("status") not in {"failed", "blocked", "stopped", "completed"}:
+        raise HTTPException(status_code=409, detail="Only terminal tasks can be restarted")
+    new_task_id = "nw-" + str(uuid4())
+    try:
+        return task_manager.submit_natural_language(
+            new_task_id, str(task.get("objective") or "").strip()
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 @app.delete("/tasks/{task_id}")
 async def stop_task(task_id: str):
     task = await task_manager.stop(task_id)
