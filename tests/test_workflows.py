@@ -1,6 +1,7 @@
 from nightwalker.workflows import (
     WorkflowType, _qa_content_objective, build_workflow_blueprint, classify_workflow,
-    build_product_search_blueprint, extract_product_search_query,
+    build_cart_journey_blueprint, build_product_search_blueprint,
+    extract_product_search_query, is_ecommerce_cart_workflow,
     qa_requires_site_crawl, qa_scope_for_objective, target_url_from_objective,
 )
 
@@ -158,3 +159,24 @@ def test_routes_ecommerce_cart_journey_to_qa_without_product_search_override():
     objective = 'Open https://www.weylandts.co.za/products. Add “Dark Grey” to the cart. Verify its price and quantity, then remove it. Confirm the cart is empty and report any problems. Do not checkout.'
     assert classify_workflow(objective) == WorkflowType.QA
     assert extract_product_search_query(objective) is None
+
+
+
+def test_cart_journey_uses_deterministic_ordered_interaction_plan():
+    objective = 'Open https://www.weylandts.co.za/products. Add “Dark Grey” to the cart. Verify its price and quantity, then remove it. Confirm the cart is empty and report any problems. Do not checkout.'
+    assert is_ecommerce_cart_workflow(objective)
+    blueprint = build_cart_journey_blueprint(objective)
+    steps = {item.subtask_id: item for item in blueprint.subtasks}
+    assert list(steps) == [
+        "qa-navigation", "qa-discover", "qa-availability",
+        "qa-content", "qa-validate", "qa-synthesise",
+    ]
+    assert steps["qa-discover"].capability.value == "interact"
+    assert steps["qa-availability"].capability.value == "interact"
+    assert steps["qa-validate"].capability.value == "interact"
+    assert steps["qa-availability"].depends_on == ["qa-discover"]
+    assert steps["qa-content"].depends_on == ["qa-availability"]
+    assert steps["qa-validate"].depends_on == ["qa-content"]
+    assert steps["qa-synthesise"].depends_on == ["qa-validate"]
+    assert "checkout" in steps["qa-synthesise"].objective.lower()
+    assert len(blueprint.success_criteria) == 6
