@@ -1203,16 +1203,21 @@ class BrowserRuntime:
             )
             http_status = response.status if response else None
             product_search_requested = self._extract_product_search_query(objective) is not None
-            active_capability = str(steps[0].get("capability") or "") if steps else ""
-            # The task objective identifies intent, but the execution plan
-            # authorises actions. Product search must run only on an explicit
-            # interaction step, never as an implicit side effect of navigation
-            # or extraction.
+            has_authorized_search_interaction = any(
+                str(step.get("capability") or "").strip().lower() == "interact"
+                for step in steps
+            )
+            # Plans commonly begin with navigation and place interaction later.
+            # Inspect the whole plan rather than only steps[0], otherwise the
+            # dedicated search routine is silently skipped before the loop ever
+            # reaches its authorised interaction step.
+            # The objective identifies search intent; an explicit interaction
+            # step anywhere in the plan authorises the bounded mouse/keyboard flow.
             qa_product_search = (
                 await self._run_product_search_smoke(page, objective)
                 if workflow_type == "qa"
                 and product_search_requested
-                and active_capability == "interact"
+                and has_authorized_search_interaction
                 else None
             )
             if qa_product_search:
