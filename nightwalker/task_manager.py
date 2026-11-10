@@ -1449,7 +1449,24 @@ class TaskManager:
                             self._log(task_id, f"Goal progress: {len(record['goal_state']['completed'])}/{len(record['goal_state']['criteria'])} criteria have verified evidence.")
                         except (OllamaUnavailable, AttributeError) as exc:
                             self._log(task_id, f"Goal progress evaluation unavailable: {exc}", "warning")
-                    for item in result.get("findings", []):
+                    # A QA page capture may expose incidental runtime/accessibility
+                    # observations during navigation. Do not promote those to QA findings
+                    # until the plan reaches its dedicated page-inspection or validation
+                    # step; the navigation and availability steps establish scope/outcome
+                    # only. Their raw evidence remains available for later validation.
+                    active_step_id = str((active_plan_step or {}).get("step_id") or "")
+                    qa_findings_authorised = (
+                        str(record.get("workflow_type") or "") != "qa"
+                        or active_step_id.endswith(("qa-content", "qa-validate", "qa-synthesise"))
+                    )
+                    if not qa_findings_authorised and result.get("findings"):
+                        self._log(
+                            task_id,
+                            f"Deferred {len(result.get('findings', []))} incidental observation(s) from {active_step_id}; "
+                            "QA findings are admitted only during the planned page-inspection, validation or reporting steps.",
+                            "warning",
+                        )
+                    for item in (result.get("findings", []) if qa_findings_authorised else []):
                         finding = dict(item)
                         finding["finding_id"] = f"f-{len(findings) + 1:03d}"
                         finding["source_ids"] = [source_id]
