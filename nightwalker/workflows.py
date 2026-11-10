@@ -29,27 +29,33 @@ _SEO_TERMS = {
     "image alt text", "canonical url", "indexing",
 }
 _QA_TERMS = {
-    "qa", "quality assurance", "test website", "test web app", "test web application",
-    "website testing", "web app testing", "functional testing", "regression testing",
-    "broken links", "user journey", "usability testing", "accessibility testing",
-    "responsive testing", "smoke test", "smoke testing", "broken images",
-    "console error", "console errors", "browser errors",
-    "bug", "bugs", "defects",
-    "product listing", "product listings", "product search", "search results",
-    "verify the product appears", "verify that the product appears",
-    "add to cart", "add it to cart", "to the cart", "remove from cart", "remove it from the cart",
-    "shopping cart", "basket", "cart is empty", "cart is empty", "quantity",
-    "do not checkout", "without checking out", "cart journey", "cart flow",
-    "check the product appears", "check that the product appears",
-    "confirm the product appears", "confirm that the product appears",
+    # Explicit QA/audit language and concrete test activities only. Generic
+    # nouns such as "bugs", "products", "basket", "quantity" or "search results"
+    # must never turn an ordinary question into an audit.
+    "quality assurance", "website qa", "web app qa", "web application qa",
+    "qa audit", "qa testing", "qa test", "website testing", "web app testing",
+    "web application testing", "test website", "test the website",
+    "test web app", "test the web app", "test web application",
+    "functional testing", "regression testing", "broken links",
+    "user journey testing", "test the user journey", "usability testing",
+    "accessibility testing", "responsive testing", "smoke test", "smoke testing",
+    "broken images", "console error", "console errors", "browser errors",
+    "find bugs", "identify bugs", "test for bugs", "find defects",
+    "add to cart", "add it to cart", "to the cart", "remove from cart",
+    "remove it from the cart", "shopping cart", "cart is empty",
+    "cart journey", "cart flow", "do not checkout", "without checking out",
 }
 
 
 def classify_workflow(objective: str) -> WorkflowType:
-    """Classify the requested outcome, not the nouns/entities in the objective."""
+    """Classify explicit requested work; incidental nouns are not workflow intent."""
     value = " ".join(objective.casefold().split())
+    padded_value = f" {value} "
     seo = any(term in value for term in _SEO_TERMS)
-    qa = any(term in value for term in _QA_TERMS)
+    qa = any(
+        (term in padded_value if term in {"qa", "smoke test"} else term in value)
+        for term in _QA_TERMS
+    )
     # Product-page verification is QA when the requested outcome is to test
     # that a site search/listing renders expected UI content. The product noun
     # alone is deliberately not sufficient to classify a task as QA.
