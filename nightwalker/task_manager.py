@@ -388,6 +388,7 @@ class TaskManager:
             plan = record.get("execution_plan") or {}
             steps = plan.get("steps") or []
             summary["timing"] = self.timing.snapshot(record)
+            summary["browser"] = self.orchestrator.browser.task_session(record["task_id"])
             summary["inference_events"] = self.orchestrator.ollama.inference_events_for_task(record["task_id"], limit=20)
             summary["plan_progress"] = {
                 "status": plan.get("status", "pending"),
