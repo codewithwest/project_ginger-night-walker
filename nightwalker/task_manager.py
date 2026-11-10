@@ -44,9 +44,6 @@ from nightwalker.task_state_store import TaskStateStore
 from nightwalker.task_timing import TaskTiming
 from nightwalker.workflows import (
     WorkflowType,
-    build_cart_journey_blueprint,
-    build_product_search_blueprint,
-    build_workflow_blueprint,
     classify_workflow,
     is_ecommerce_cart_workflow,
     extract_product_search_query,
@@ -214,71 +211,12 @@ class TaskManager:
             record.setdefault("execution_plan", None)
             record.setdefault("workflow_type", classify_workflow(str(record.get("objective") or "")).value)
             record.setdefault("qa_scope", qa_scope_for_objective(str(record.get("objective") or "")) if record.get("workflow_type") == "qa" else "site_wide")
-            # Persisted LLM-generated plans can mix SEO and QA concerns or use
-            # stale step capabilities. Migrate every active SEO/QA workflow to
-            # its current deterministic blueprint before any resumed execution.
+            # Keep the planner's saved execution blueprint authoritative across restarts.
+            # Recovery may classify a cart task for runtime safety policy, but must not
+            # silently replace model-authored objectives, criteria or dependencies.
             objective_text = str(record.get("objective") or "")
-            workflow = WorkflowType(record.get("workflow_type") or classify_workflow(objective_text).value)
-            canonical_blueprint = None
             if is_ecommerce_cart_workflow(objective_text):
                 record["workflow_type"] = WorkflowType.QA.value
-                canonical_blueprint = build_cart_journey_blueprint(objective_text)
-            elif workflow == WorkflowType.QA and extract_product_search_query(objective_text):
-                canonical_blueprint = build_product_search_blueprint(objective_text)
-            elif workflow in {WorkflowType.SEO, WorkflowType.QA, WorkflowType.SEO_QA}:
-                canonical_blueprint = build_workflow_blueprint(objective_text, workflow)
-            if canonical_blueprint is not None:
-                saved_blueprint = record.get("execution_blueprint") or {}
-                if (
-                    not self._workflow_blueprint_matches(saved_blueprint, canonical_blueprint)
-                    or not self._execution_plan_matches_blueprint(record.get("execution_plan") or {}, canonical_blueprint)
-                ):
-                    old_steps = (record.get("execution_plan") or {}).get("steps") or []
-                    expected_steps = {
-                        str(item.get("subtask_id")): item
-                        for item in canonical_blueprint.model_dump(mode="json").get("subtasks", [])
-                        if isinstance(item, dict)
-                    }
-                    record["execution_blueprint"] = canonical_blueprint.model_dump(mode="json")
-                    record["execution_plan"] = initialise_plan(record["execution_blueprint"])
-                    # Reuse only completed steps whose objective, capability and
-                    # acceptance criteria are unchanged and whose evidence still exists.
-                    saved_result = record.get("result") if isinstance(record.get("result"), dict) else {}
-                    saved_checkpoint = record.get("checkpoint") if isinstance(record.get("checkpoint"), dict) else {}
-                    persisted_evidence = list(saved_result.get("evidence") or []) + list(saved_checkpoint.get("evidence") or [])
-                    evidence_ids = {
-                        str(item.get("evidence_id"))
-                        for item in persisted_evidence
-                        if isinstance(item, dict) and item.get("evidence_id")
-                    }
-                    for old_step in old_steps:
-                        if not isinstance(old_step, dict) or old_step.get("status") != "completed":
-                            continue
-                        step_id = str(old_step.get("step_id") or "")
-                        expected = expected_steps.get(step_id)
-                        refs = [str(ref) for ref in old_step.get("evidence_refs", []) if str(ref) in evidence_ids]
-                        if not expected or not refs:
-                            continue
-                        old_capability = str(getattr(old_step.get("capability"), "value", old_step.get("capability") or ""))
-                        expected_capability = str(expected.get("capability") or "")
-                        if (
-                            str(old_step.get("objective") or "") == str(expected.get("objective") or "")
-                            and old_capability == expected_capability
-                            and list(old_step.get("success_criteria") or []) == list(expected.get("success_criteria") or [])
-                        ):
-                            complete_step(
-                                record["execution_plan"], step_id,
-                                evidence_refs=refs,
-                                result=str(old_step.get("result") or "Reused unchanged, evidence-backed workflow step"),
-                            )
-                    record.setdefault("progress_events", []).append({
-                        "at": self._now(), "event_type": "plan_migrated",
-                        "status": record.get("status", "queued"),
-                        "message": f"Migrated legacy {workflow.value} plan to the current deterministic workflow; only semantically unchanged steps with existing evidence were retained.",
-                    })
-                    record["active_plan_step_id"] = None
-                    record["current_step"] = None
-                    self._persist(task_id)
             if record.get("execution_plan") is None and isinstance(record.get("execution_blueprint"), dict):
                 record["execution_plan"] = initialise_plan(record["execution_blueprint"])
             record.setdefault("agent_assignments", [])
@@ -409,101 +347,12 @@ class TaskManager:
         self._persist(task_id)
         return {"task_id": task_id, "messages": record["a2a_messages"]}
 
-    @staticmethod
-    def _workflow_blueprint_matches(saved: dict[str, Any], canonical) -> bool:
-        """Compare execution semantics, not just IDs: old plans reused IDs with unsafe capabilities."""
-        saved_steps = saved.get("subtasks") or []
-        expected_steps = canonical.model_dump(mode="json").get("subtasks") or []
-        fields = ("subtask_id", "objective", "capability", "depends_on", "success_criteria")
-        def signature(items):
-            return [
-                tuple(
-                    tuple(item.get(field) or []) if field in {"depends_on", "success_criteria"}
-                    else str(item.get(field) or "")
-                    for field in fields
-                )
-                for item in items if isinstance(item, dict)
-            ]
-        return signature(saved_steps) == signature(expected_steps)
-
-    @staticmethod
-    def _execution_plan_matches_blueprint(plan: dict[str, Any], blueprint) -> bool:
-        """Detect stale persisted execution ledgers even when their blueprint is current."""
-        actual = plan.get("steps") or []
-        expected = blueprint.model_dump(mode="json").get("subtasks") or []
-        fields = ("objective", "capability", "depends_on", "success_criteria")
-        if len(actual) != len(expected):
-            return False
-        for saved, canonical in zip(actual, expected):
-            if not isinstance(saved, dict):
-                return False
-            if str(saved.get("step_id") or "") != str(canonical.get("subtask_id") or ""):
-                return False
-            for field in fields:
-                left = saved.get(field) or []
-                right = canonical.get(field) or []
-                if field in {"depends_on", "success_criteria"}:
-                    if list(left) != list(right):
-                        return False
-                elif str(left) != str(right):
-                    return False
-        return True
-
-    def _migrate_legacy_cart_plan(self, record: dict[str, Any]) -> bool:
-        """Bring an already-loaded legacy cart task onto the canonical safe workflow."""
-        objective = str(record.get("objective") or "")
-        if not is_ecommerce_cart_workflow(objective):
-            return False
-        workflow_type_changed = record.get("workflow_type") != WorkflowType.QA.value
-        record["workflow_type"] = WorkflowType.QA.value
-        canonical = build_cart_journey_blueprint(objective)
-        saved = record.get("execution_blueprint") or {}
-        if (
-            self._workflow_blueprint_matches(saved, canonical)
-            and self._execution_plan_matches_blueprint(record.get("execution_plan") or {}, canonical)
-        ):
-            return workflow_type_changed
-
-        old_plan = record.get("execution_plan") or {}
-        old_steps = old_plan.get("steps") or []
-        saved_result = record.get("result") if isinstance(record.get("result"), dict) else {}
-        saved_checkpoint = record.get("checkpoint") if isinstance(record.get("checkpoint"), dict) else {}
-        persisted_evidence = list(saved_result.get("evidence") or []) + list(saved_checkpoint.get("evidence") or [])
-        evidence_ids = {
-            str(item.get("evidence_id"))
-            for item in persisted_evidence
-            if isinstance(item, dict) and item.get("evidence_id")
-        }
-        old_navigation = next((
-            item for item in old_steps
-            if isinstance(item, dict)
-            and item.get("step_id") == "qa-navigation"
-            and item.get("status") == "completed"
-            and any(str(ref) in evidence_ids for ref in item.get("evidence_refs") or [])
-        ), None)
-        record["execution_blueprint"] = canonical.model_dump(mode="json")
-        record["execution_plan"] = initialise_plan(record["execution_blueprint"])
-        if old_navigation:
-            complete_step(
-                record["execution_plan"], "qa-navigation",
-                evidence_refs=[str(ref) for ref in old_navigation.get("evidence_refs") or [] if str(ref) in evidence_ids],
-                result=str(old_navigation.get("result") or "Reused previously verified storefront navigation"),
-            )
-        record["active_plan_step_id"] = None
-        record["current_step"] = None
-        record.setdefault("progress_events", []).append({
-            "at": self._now(),
-            "event_type": "plan_migrated",
-            "status": record.get("status", "queued"),
-            "message": "Migrated legacy cart plan to the canonical discover, add, verify, remove and empty-cart sequence.",
-        })
-        return True
-
     def snapshot(self, task_id: str) -> dict[str, Any] | None:
         record = self.tasks.get(task_id)
         if record is None:
             return None
-        if self._migrate_legacy_cart_plan(record):
+        if is_ecommerce_cart_workflow(str(record.get("objective") or "")) and record.get("workflow_type") != WorkflowType.QA.value:
+            record["workflow_type"] = WorkflowType.QA.value
             self._persist(task_id)
         snapshot = {**record, "logs": list(record.get("logs", []))}
         snapshot["execution_trace"] = self.trace_store.read(task_id, limit=30)
@@ -766,33 +615,10 @@ class TaskManager:
                 )
                 if blueprint.original_objective.strip() != objective.strip():
                     raise ValueError("Execution planner changed the immutable task objective")
-                # Product-search QA has a strict browser-action contract: the
-                # query submission must be an authorised INTERACT step. The
-                # language model's generic blueprint has repeatedly mislabelled
-                # this step as NAVIGATE/EXTRACT, causing the evidence gate to
-                # block it before the browser could perform the search.
-                if is_ecommerce_cart_workflow(objective):
-                    blueprint = build_cart_journey_blueprint(objective)
-                    self._log(
-                        task_id,
-                        "Applied deterministic ecommerce-cart QA plan: discover, add, verify, remove and confirm empty; checkout is excluded",
-                    )
-                elif (
-                    classify_workflow(objective) == WorkflowType.QA
-                    and extract_product_search_query(objective)
-                ):
-                    blueprint = build_product_search_blueprint(objective)
-                    self._log(
-                        task_id,
-                        "Applied deterministic product-search QA plan: navigation, authorised query submission, product extraction and validation",
-                    )
-                elif classify_workflow(objective) in {WorkflowType.SEO, WorkflowType.QA, WorkflowType.SEO_QA}:
-                    workflow = classify_workflow(objective)
-                    blueprint = build_workflow_blueprint(objective, workflow)
-                    self._log(
-                        task_id,
-                        f"Applied deterministic {workflow.value} workflow plan with separate scope, evidence and validation criteria",
-                    )
+                self._log(
+                    task_id,
+                    "Accepted the model-generated execution blueprint; runtime policy checks remain independent of the plan.",
+                )
                 record["execution_blueprint"] = blueprint.model_dump(mode="json")
                 record["execution_plan"] = initialise_plan(record["execution_blueprint"])
                 record["workflow_summary"] = decision.summary or blueprint.interpretation
