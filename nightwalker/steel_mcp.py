@@ -46,7 +46,7 @@ class SteelMCPClient:
             message = {"jsonrpc": "2.0", "id": request_id, "method": method}
             if params is not None:
                 message["params"] = params
-            self._process.stdin.write((json.dumps(message) + "\\n").encode())
+            self._process.stdin.write((json.dumps(message) + "\n").encode())
             await self._process.stdin.drain()
             return await self._read_response(request_id)
 
@@ -56,7 +56,7 @@ class SteelMCPClient:
         message: dict[str, Any] = {"jsonrpc": "2.0", "method": method}
         if params is not None:
             message["params"] = params
-        self._process.stdin.write((json.dumps(message) + "\\n").encode())
+        self._process.stdin.write((json.dumps(message) + "\n").encode())
         await self._process.stdin.drain()
 
     async def _drain_stderr(self) -> None:
