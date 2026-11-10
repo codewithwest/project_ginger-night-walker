@@ -1304,13 +1304,11 @@ class BrowserRuntime:
             task_id, f"Steel MCP executing authorised {capability} step: {step_objective}",
             url=url, action="steel_mcp_" + capability, plan_step_id=step_id,
         )
-        result = await self.steel_mcp.execute_mission_step(
-            task_id, url, step_objective, capability,
-            ollama.propose_steel_mcp_tool_call,
-        )
-        session_id = str(result.get("session_id") or "")
         api_base = os.getenv("STEEL_API_BASE_URL", "http://steel-browser:3000/v1").rstrip("/")
-        if session_id:
+
+        def expose_live_session(session_id: str) -> None:
+            # Publish the viewer as soon as Steel allocates the session, before
+            # navigation or snapshot capture can take a long time.
             state["session_id"] = session_id
             state["debug_url"] = self._normalise_steel_debug_url(
                 f"{api_base}/sessions/{session_id}/debug", session_id,
@@ -1318,6 +1316,19 @@ class BrowserRuntime:
             state["steel_ui_url"] = self._steel_ui_url(api_base)
             state["status"] = "active"
             state["active"] = True
+            self._browser_event(
+                task_id, "Steel browser session created; live viewer is available",
+                url=url, action="steel_session_ready", plan_step_id=step_id,
+            )
+
+        result = await self.steel_mcp.execute_mission_step(
+            task_id, url, step_objective, capability,
+            ollama.propose_steel_mcp_tool_call,
+            session_callback=expose_live_session,
+        )
+        session_id = str(result.get("session_id") or "")
+        if session_id:
+            expose_live_session(session_id)
         snapshots = result.get("snapshot") or {}
         content = snapshots.get("content") or []
         captured_text = "\n".join(
