@@ -828,6 +828,34 @@ class BrowserRuntime:
         return None, await self._follow_relevant_link(page, objective)
 
     @staticmethod
+    def _qa_product_evidence(
+        search_result: dict[str, Any] | None, source_page_url: str,
+    ) -> list[dict[str, Any]]:
+        """Expose exact product-card values and their provenance for the final report."""
+        if not isinstance(search_result, dict):
+            return []
+        evidence = []
+        for match in search_result.get("matches", []):
+            if not isinstance(match, dict):
+                continue
+            image_present = bool(match.get("image_src"))
+            evidence.append({
+                "product_name": str(match.get("name_match") or match.get("product_title") or ""),
+                "query": str(search_result.get("query") or ""),
+                "price": match.get("price"),
+                "image_url": match.get("image_src") or None,
+                "image_status": (
+                    "loaded" if match.get("image_loaded")
+                    else "not_confirmed_loaded" if image_present else "not_present"
+                ),
+                "product_url": match.get("product_url") or None,
+                "source_page_url": search_result.get("searched_url") or source_page_url,
+                "price_source": "visible_product_card_text" if match.get("price") else None,
+                "image_source": "rendered_product_card_image" if image_present else None,
+            })
+        return evidence
+
+    @staticmethod
     def _extract_products_from_text(text: str, limit: int = 12) -> list[dict[str, str]]:
         """Extract ordered product names and prices from visible page text."""
         lines = [re.sub(r"\s+", " ", line).strip(" •|\t") for line in text.splitlines()]
@@ -1647,6 +1675,9 @@ class BrowserRuntime:
                     structured_data["qa_page_smoke"] = audit_signals["qa_page_smoke"]
                 if qa_product_search is not None:
                     structured_data["qa_product_search"] = qa_product_search
+                    structured_data["qa_product_evidence"] = self._qa_product_evidence(
+                        qa_product_search, page.url,
+                    )
                 structured_data["qa_extended"] = audit_signals.get("qa_extended", {})
                 structured_data["qa_navigation_journeys"] = audit_signals.get("qa_navigation_journeys", {})
                 structured_data["qa_interaction_journeys"] = audit_signals.get("qa_interaction_journeys", {})
@@ -1684,6 +1715,22 @@ class BrowserRuntime:
                 limitations.append("QA checks are read-only: forms are not submitted, state-changing controls are not activated, and keyboard focus is sampled rather than exhaustively tested. Automated WCAG conformance is not claimed.")
             if not body_text.strip():
                 limitations.append("No visible page text was available to analyse.")
+            if focused_product_search and qa_product_search:
+                product_evidence = self._qa_product_evidence(qa_product_search, page.url)
+                if product_evidence:
+                    first_product = product_evidence[0]
+                    answer = (
+                        f"Found {len(product_evidence)} matching product card(s). "
+                        f"{first_product['product_name'] or 'Product'}"
+                        + (f" — {first_product['price']}" if first_product.get("price") else " — price not captured")
+                        + (f". Image: {first_product['image_url']}" if first_product.get("image_url") else ". Image URL not captured")
+                        + (f". Product page: {first_product['product_url']}" if first_product.get("product_url") else "")
+                    )
+                else:
+                    answer = (
+                        f"Product search for {qa_product_search.get('query')!r} "
+                        f"was {qa_product_search.get('status')}; no matching product card was captured."
+                    )
             report = {
                 "schema_version": "1.0",
                 "workflow_type": workflow_type,
