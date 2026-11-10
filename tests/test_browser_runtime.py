@@ -224,3 +224,30 @@ def test_steel_debug_url_preserves_already_scoped_route(monkeypatch):
         "http://localhost:3000/v1/sessions/session-abc/debug", "session-abc"
     )
     assert debug == "http://192.168.100.18:3000/v1/sessions/session-abc/debug"
+
+
+
+def test_qa_product_evidence_preserves_exact_price_and_source_urls():
+    result = BrowserRuntime._qa_product_evidence({
+        "query": "Urban Dark Grey",
+        "searched_url": "https://example.com/search?q=Urban+Dark+Grey",
+        "matches": [{
+            "name_match": "Urban Dark Grey | Fabric Roll | 75m",
+            "price": "R 1,299.00",
+            "image_src": "https://cdn.example.com/urban-dark-grey.jpg",
+            "image_present": True,
+            "image_loaded": True,
+            "product_url": "https://example.com/products/urban-dark-grey",
+        }],
+    }, "https://example.com/products")
+    assert result == [{
+        "product_name": "Urban Dark Grey | Fabric Roll | 75m",
+        "query": "Urban Dark Grey",
+        "price": "R 1,299.00",
+        "image_url": "https://cdn.example.com/urban-dark-grey.jpg",
+        "image_status": "loaded",
+        "product_url": "https://example.com/products/urban-dark-grey",
+        "source_page_url": "https://example.com/search?q=Urban+Dark+Grey",
+        "price_source": "visible_product_card_text",
+        "image_source": "rendered_product_card_image",
+    }]
