@@ -107,7 +107,9 @@ Agents may help plan, inspect and interpret evidence, but they cannot grant them
 ### Shared report invariants
 
 - No unsupported pass, issue, score or completion claim.
-- Findings link to captured evidence and source URLs.
+- Findings link to captured evidence and source URLs; evidence IDs and raw captures are collapsed by default and opened only on demand.
+- The concise report leads with the answer and validated findings. Unverified observations, mission steps, full checklists, execution history and raw evidence remain available in collapsed detail sections.
+- Retry requeues a blocked/failed step only when all of its dependencies remain verified; it never bypasses a blocked prerequisite.
 - Partial execution is labelled partial.
 - Zero relevant evidence cannot produce a completed audit.
 - Scores, if introduced, must have a documented denominator and must not conceal missing coverage.
