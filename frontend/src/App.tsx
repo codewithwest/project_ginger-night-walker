@@ -192,6 +192,8 @@ function Status({ value }: { value: string }) {
 
 function ResearchReport({ result }: { result: BrowserResult }) {
   const findings = result.findings || [];
+  const confirmedFindings = findings.filter((finding) => finding.validation?.verdict === "confirmed");
+  const unverifiedFindings = findings.filter((finding) => finding.validation?.verdict !== "confirmed");
   const sources = result.sources || (result.final_url ? [{ url: result.final_url, title: result.title }] : []);
   const structuredData = result.structured_data || {};
   const rawProductSearch = structuredData.qa_product_search;
@@ -299,9 +301,9 @@ function ResearchReport({ result }: { result: BrowserResult }) {
           </div>
         ))}</div>
       </div>}
-      {findings.length > 0 && <div className="research-section">
-        <h3>Prioritised findings</h3>
-        <ul className="finding-list">{findings.map((finding, index) => <li key={finding.claim + "-" + index}>
+      {confirmedFindings.length > 0 && <div className="research-section">
+        <h3>Validated findings · {confirmedFindings.length}</h3>
+        <ul className="finding-list">{confirmedFindings.map((finding, index) => <li key={finding.claim + "-" + index}>
           <div className="finding-heading">
             <span>{finding.claim}</span>
             {finding.priority && <strong className={"finding-priority finding-priority--" + finding.priority.toLowerCase()}>{finding.priority}</strong>}
@@ -316,6 +318,21 @@ function ResearchReport({ result }: { result: BrowserResult }) {
           {finding.evidence_ids && finding.evidence_ids.length > 0 && <details className="raw-data"><summary>View supporting evidence</summary><small>{finding.evidence_ids.join(", ")}</small></details>}
         </li>)}</ul>
       </div>}
+      {unverifiedFindings.length > 0 && <details className="report-details research-section">
+        <summary><span>Unverified observations · {unverifiedFindings.length}</span><span>Review candidates that need more evidence</span></summary>
+        <div className="report-details__body">
+          <ul className="finding-list">{unverifiedFindings.map((finding, index) => <li key={finding.claim + "-unverified-" + index}>
+            <div className="finding-heading">
+              <span>{finding.claim}</span>
+              {finding.priority && <strong className={"finding-priority finding-priority--" + finding.priority.toLowerCase()}>{finding.priority}</strong>}
+            </div>
+            <small>{finding.type?.replaceAll("_", " ") || "observation"} · {finding.validation?.verdict?.replaceAll("_", " ") || "not validated"}</small>
+            {finding.validation?.reason && <p className="finding-impact">{finding.validation.reason}</p>}
+            {finding.affected_urls?.length > 0 && <div className="finding-urls">{finding.affected_urls.slice(0, 5).map((url) => <a href={url} target="_blank" rel="noreferrer" key={url}>{url}</a>)}</div>}
+            {finding.evidence_ids?.length > 0 && <details className="raw-data"><summary>View supporting evidence</summary><small>{finding.evidence_ids.join(", ")}</small></details>}
+          </li>)}</ul>
+        </div>
+      </details>}
       {Object.entries(structuredData).filter(([kind]) => kind !== "qa_product_search").map(([kind, value]) => (
         <div className="research-section" key={kind}>
           <h3>Structured data · {kind.replaceAll("_", " ")}</h3>
