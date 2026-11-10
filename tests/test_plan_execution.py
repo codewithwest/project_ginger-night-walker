@@ -1,6 +1,6 @@
 import pytest
 
-from nightwalker.plan_execution import complete_step, initialise_plan, ready_steps, start_step
+from nightwalker.plan_execution import complete_step, initialise_plan, ready_steps, ready_steps_for_capture, start_step
 
 
 def sample_plan():
@@ -30,3 +30,20 @@ def test_plan_cannot_complete_dependent_step_before_parent():
     plan = sample_plan()
     with pytest.raises(ValueError, match="dependencies"):
         complete_step(plan, "extract", evidence_refs=["ev-1"], result="Extracted")
+
+
+
+def test_product_search_capture_does_not_advance_dependent_step_from_stale_page():
+    plan = sample_plan()
+    start_step(plan, "open")
+    complete_step(plan, "open", evidence_refs=["ev-home"], result="Homepage captured")
+
+    # The current browser capture belongs to "open". Although "extract" is
+    # dependency-ready now, it must wait for its own browser execution/capture.
+    assert [step["step_id"] for step in ready_steps(plan)] == ["extract"]
+    assert ready_steps_for_capture(
+        plan, "open", one_step_per_capture=True,
+    ) == []
+    assert [step["step_id"] for step in ready_steps_for_capture(
+        plan, "extract", one_step_per_capture=True,
+    )] == ["extract"]
