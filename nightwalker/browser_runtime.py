@@ -893,8 +893,24 @@ class BrowserRuntime:
         if not name:
             return {"status": "blocked", "reason": "No exact quoted product name was found."}
         journey["product_name"] = name
+        # Keep the Decider's authored step IDs and order, but interpret cart
+        # actions from the step's meaning as well. Older/local models often use
+        # natural IDs such as "select-product" instead of the canonical suffixes.
+        phase_id = str(step_id or "").casefold()
+        step_meaning = " ".join((str(step_id or "") + " " + str(objective or "")).casefold().split())
+        if not phase_id.endswith(("qa-discover", "qa-availability", "qa-content", "qa-validate", "qa-synthesise")):
+            if re.search(r"\\b(remove|delete)\\b.{0,100}\\b(cart|basket)\\b", step_meaning):
+                phase_id = "qa-validate"
+            elif re.search(r"\\b(empty cart|cart is empty|confirm.*empty)\\b", step_meaning):
+                phase_id = "qa-synthesise"
+            elif re.search(r"\\b(cart|basket).{0,60}\\b(price|quantity|line item|contents)\\b|\\b(price|quantity).{0,40}\\bcart\\b", step_meaning):
+                phase_id = "qa-content"
+            elif re.search(r"\\b(add to cart|add.*\\b(cart|basket)\\b|select.*(store|variant|size|colour|color|finish)|choose.*(store|variant|size|colour|color|finish)|availability|fulfilment|fulfillment|collection location)\\b", step_meaning):
+                phase_id = "qa-availability"
+            elif re.search(r"\\b(find|discover|search|browse|identify|locate|open).{0,100}\\b(product|item|pdp|catalogue|catalog|listing)\\b", step_meaning):
+                phase_id = "qa-discover"
         normal = lambda value: re.sub(r"[^a-z0-9]+", " ", str(value or "").casefold()).strip()
-        if step_id.endswith("qa-discover"):
+        if phase_id.endswith("qa-discover"):
             selector = '[data-product-id], [data-product], .product-card, .product-item, .productinfo, .single-products, li.product'
             async def matching_product_cards():
                 return await page.locator(selector).evaluate_all(
@@ -1024,7 +1040,7 @@ class BrowserRuntime:
                           "scroll_steps": scroll_steps, "page_url": page.url}
             journey["steps"]["discovery"] = result
             return result
-        if step_id.endswith("qa-availability"):
+        if phase_id.endswith("qa-availability"):
             prior_add = journey.get("steps", {}).get("addition", {})
             if prior_add.get("click_performed"):
                 return {"status": "blocked", "reason": "Add to Cart was already clicked in this task; refusing to repeat an unconfirmed state-changing action."}
@@ -1055,7 +1071,7 @@ class BrowserRuntime:
                       "cart_change_observed": confirmed}
             journey["steps"]["addition"] = result
             return result
-        if step_id.endswith(("qa-content", "qa-validate", "qa-synthesise")):
+        if phase_id.endswith(("qa-content", "qa-validate", "qa-synthesise")):
             if not re.search(r"(?i)/cart(?:/|$)", urlparse(page.url).path):
                 links = page.locator('a[href*="cart" i]')
                 visible_links = []
@@ -1071,7 +1087,7 @@ class BrowserRuntime:
                     await page.wait_for_load_state("domcontentloaded", timeout=5000)
                 elif len(visible_links) > 1:
                     return {"status": "blocked", "reason": "Multiple visible cart links; cannot choose a cart destination safely."}
-        if step_id.endswith("qa-content"):
+        if phase_id.endswith("qa-content"):
             body = (await page.locator("body").inner_text())[:30000]
             lines = [re.sub(r"\s+", " ", line).strip() for line in body.splitlines() if line.strip()]
             matching_lines = [line for line in lines if normal(name) in normal(line)]
@@ -1098,7 +1114,7 @@ class BrowserRuntime:
                       "quantity": quantity, "matching_line_count": len(matching_rows)}
             journey["steps"]["cart_line_item"] = result
             return result
-        if step_id.endswith("qa-validate"):
+        if phase_id.endswith("qa-validate"):
             prior_remove = journey.get("steps", {}).get("removal", {})
             if prior_remove.get("remove_clicked"):
                 return {"status": "blocked", "reason": "Remove was already clicked in this task; refusing to repeat an unconfirmed state-changing action."}
@@ -1130,7 +1146,7 @@ class BrowserRuntime:
                               "product_name": name, "remove_clicked": True, "item_absent": absent}
             journey["steps"]["removal"] = result
             return result
-        if step_id.endswith("qa-synthesise"):
+        if phase_id.endswith("qa-synthesise"):
             body = (await page.locator("body").inner_text())[:20000]
             explicit_empty = bool(re.search(
                 r"(?i)your cart is (?:currently )?empty|shopping cart is empty|no items in (?:your )?cart|0 items",
@@ -1813,7 +1829,7 @@ class BrowserRuntime:
                         url=page.url, action="plan_step_start", plan_step_id=step_id or None,
                     )
                 if capability == "interact":
-                    if step_id.endswith(("qa-discover", "qa-availability", "qa-validate")):
+                    if cart_workflow or step_id.endswith(("qa-discover", "qa-availability", "qa-validate")):
                         self._browser_event(
                             task_id,
                             f"Next action (interact): {step_objective or 'Perform the planned cart interaction'}",
@@ -1874,7 +1890,7 @@ class BrowserRuntime:
                     self._browser_event(task_id, "Reloaded the current page for recovery", url=page.url, title=(await page.title())[:500])
                 elif capability == "extract":
                     step_id = str(step.get("step_id") or "")
-                    if step_id.endswith(("qa-content", "qa-synthesise")):
+                    if cart_workflow or step_id.endswith(("qa-content", "qa-synthesise")):
                         self._browser_event(
                             task_id,
                             f"Next action (extract): {step_objective or 'Verify the planned cart state'}",
