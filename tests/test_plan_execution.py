@@ -1,6 +1,6 @@
 import pytest
 
-from nightwalker.plan_execution import complete_step, fail_step, initialise_plan, ready_steps, ready_steps_for_capture, reset_retryable_steps, start_step, validate_plan_dependencies
+from nightwalker.plan_execution import complete_step, fail_step, initialise_decision_plan, initialise_plan, ready_steps, ready_steps_for_capture, reset_retryable_steps, start_step, validate_plan_dependencies
 
 
 def sample_plan():
@@ -83,3 +83,37 @@ def test_retry_does_not_requeue_step_with_unverified_dependency():
     assert plan["steps"][1]["status"] == "pending"
     # A later step can still execute; dependency integrity is reported afterwards.
     assert [step["step_id"] for step in ready_steps(plan)] == ["extract"]
+
+
+
+def test_execution_plan_preserves_decider_sequence_without_blueprint_reordering():
+    decider_steps = [
+        {"step_id": "inspect-home", "objective": "Inspect the homepage", "capability": "navigate"},
+        {"step_id": "find-category", "objective": "Find the furniture categories", "capability": "interact"},
+        {"step_id": "extract-categories", "objective": "Extract the category names", "capability": "extract"},
+    ]
+    # A separate goal analyst may produce a different task breakdown. It is
+    # intentionally not an input to this constructor.
+    plan = initialise_decision_plan(decider_steps)
+
+    assert [step["step_id"] for step in plan["steps"]] == [
+        "inspect-home", "find-category", "extract-categories",
+    ]
+    assert [step["objective"] for step in plan["steps"]] == [
+        "Inspect the homepage",
+        "Find the furniture categories",
+        "Extract the category names",
+    ]
+    assert [step["depends_on"] for step in plan["steps"]] == [
+        [], ["inspect-home"], ["find-category"],
+    ]
+    assert plan["source"] == "decider_plan"
+    assert plan["ordering"] == "decider_authored"
+
+
+def test_decider_execution_plan_rejects_duplicate_step_ids():
+    with pytest.raises(ValueError, match="duplicate step ID"):
+        initialise_decision_plan([
+            {"step_id": "same", "objective": "First", "capability": "navigate"},
+            {"step_id": "same", "objective": "Second", "capability": "extract"},
+        ])
