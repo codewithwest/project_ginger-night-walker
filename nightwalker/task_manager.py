@@ -1217,7 +1217,15 @@ class TaskManager:
                             ready = ready_steps_for_capture(
                                 execution_plan,
                                 str((active_plan_step or {}).get("step_id") or ""),
-                                one_step_per_capture=(focused_product_search or focused_cart_journey),
+                                # QA is an action-by-action workflow: a navigation capture
+                                # cannot also satisfy availability or page-inspection steps.
+                                # Keep the stricter existing rule for focused product/cart
+                                # journeys even if their workflow metadata is migrated.
+                                one_step_per_capture=(
+                                    str(record.get("workflow_type") or "") == "qa"
+                                    or focused_product_search
+                                    or focused_cart_journey
+                                ),
                             )
                             if not ready:
                                 break
