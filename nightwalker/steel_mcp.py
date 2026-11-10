@@ -1,38 +1,79 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import os
-from contextlib import AsyncExitStack
 from typing import Any
-
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
 
 
 class SteelMCPClient:
-    """Lifecycle-managed client for Steel's official self-hosted MCP server."""
+    """Lifecycle-managed stdio client for Steel's official self-hosted MCP server."""
 
     def __init__(self) -> None:
-        self._stack: AsyncExitStack | None = None
-        self._session: ClientSession | None = None
+        self._process: asyncio.subprocess.Process | None = None
+        self._request_id = 0
+        self._lock = asyncio.Lock()
         self._tools: list[dict[str, Any]] = []
+        self._stderr_task: asyncio.Task | None = None
 
     @property
     def connected(self) -> bool:
-        return self._session is not None
+        return self._process is not None and self._process.returncode is None
 
     @property
     def tools(self) -> list[dict[str, Any]]:
         return [dict(tool) for tool in self._tools]
 
+    async def _read_response(self, request_id: int) -> dict[str, Any]:
+        if self._process is None or self._process.stdout is None:
+            raise RuntimeError("Steel MCP process is not running")
+        while True:
+            line = await asyncio.wait_for(self._process.stdout.readline(), timeout=60)
+            if not line:
+                raise RuntimeError("Steel MCP server closed its output stream")
+            message = json.loads(line)
+            if message.get("id") == request_id:
+                if "error" in message:
+                    raise RuntimeError(f"Steel MCP protocol error: {message['error']}")
+                return message.get("result") or {}
+
+    async def _request(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        if self._process is None or self._process.stdin is None:
+            raise RuntimeError("Steel MCP is not connected")
+        async with self._lock:
+            self._request_id += 1
+            request_id = self._request_id
+            message = {"jsonrpc": "2.0", "id": request_id, "method": method}
+            if params is not None:
+                message["params"] = params
+            self._process.stdin.write((json.dumps(message) + "\\n").encode())
+            await self._process.stdin.drain()
+            return await self._read_response(request_id)
+
+    async def _notify(self, method: str, params: dict[str, Any] | None = None) -> None:
+        if self._process is None or self._process.stdin is None:
+            raise RuntimeError("Steel MCP is not connected")
+        message: dict[str, Any] = {"jsonrpc": "2.0", "method": method}
+        if params is not None:
+            message["params"] = params
+        self._process.stdin.write((json.dumps(message) + "\\n").encode())
+        await self._process.stdin.drain()
+
+    async def _drain_stderr(self) -> None:
+        if self._process is None or self._process.stderr is None:
+            return
+        while line := await self._process.stderr.readline():
+            # Keep server diagnostics out of the MCP protocol stream.
+            import logging
+            logging.getLogger(__name__).debug("steel_mcp: %s", line.decode(errors="replace").rstrip())
+
     async def start(self) -> None:
-        if self._session is not None:
+        if self.connected:
             return
         if os.getenv("STEEL_MCP_ENABLED", "false").strip().lower() != "true":
             return
         command = os.getenv("STEEL_MCP_COMMAND", "node").strip() or "node"
-        server_path = os.getenv(
-            "STEEL_MCP_SERVER_PATH", "/app/steel-mcp-server/dist/stdio.js"
-        )
+        server_path = os.getenv("STEEL_MCP_SERVER_PATH", "/app/steel-mcp-server/dist/stdio.js")
         env = os.environ.copy()
         env["STEEL_LOCAL"] = "true"
         env["STEEL_BASE_URL"] = os.getenv(
@@ -40,56 +81,62 @@ class SteelMCPClient:
             os.getenv("STEEL_API_BASE_URL", "http://steel-browser:3000/v1"),
         ).rstrip("/")
         env["STEEL_PROFILE"] = os.getenv("STEEL_MCP_PROFILE", "browse")
-        self._stack = AsyncExitStack()
+        self._process = await asyncio.create_subprocess_exec(
+            command, server_path,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env,
+        )
+        self._stderr_task = asyncio.create_task(self._drain_stderr())
         try:
-            read, write = await self._stack.enter_async_context(
-                stdio_client(
-                    StdioServerParameters(
-                        command=command,
-                        args=[server_path],
-                        env=env,
-                    )
-                )
-            )
-            self._session = await self._stack.enter_async_context(ClientSession(read, write))
-            await self._session.initialize()
-            response = await self._session.list_tools()
+            await self._request("initialize", {
+                "protocolVersion": "2025-11-25",
+                "capabilities": {},
+                "clientInfo": {"name": "ginger-night-walker", "version": "0.4.0"},
+            })
+            await self._notify("notifications/initialized")
+            response = await self._request("tools/list")
             self._tools = [
                 {
-                    "name": item.name,
-                    "description": item.description or "",
-                    "input_schema": item.inputSchema,
+                    "name": item["name"],
+                    "description": item.get("description", ""),
+                    "input_schema": item.get("inputSchema", {}),
                 }
-                for item in response.tools
+                for item in response.get("tools", [])
             ]
         except Exception:
-            await self._stack.aclose()
-            self._stack = None
-            self._session = None
-            self._tools = []
+            await self.close()
             raise
 
     async def call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        if self._session is None:
+        if not self.connected:
             raise RuntimeError("Steel MCP is not connected")
         if name not in {tool["name"] for tool in self._tools}:
             raise ValueError(f"Steel MCP tool is not registered: {name}")
-        result = await self._session.call_tool(name, arguments=arguments)
-        content: list[dict[str, Any]] = []
-        for item in result.content:
-            if getattr(item, "type", None) == "text":
-                content.append({"type": "text", "text": item.text})
-            elif getattr(item, "type", None) == "image":
-                content.append({"type": "image", "mimeType": item.mimeType})
+        result = await self._request("tools/call", {"name": name, "arguments": arguments})
+        content = [
+            {"type": item.get("type"), "text": item.get("text", "")[:30000]}
+            for item in result.get("content", [])
+            if item.get("type") == "text"
+        ]
         return {
-            "is_error": bool(result.isError),
+            "is_error": bool(result.get("isError")),
             "content": content,
-            "structured_content": getattr(result, "structuredContent", None),
+            "structured_content": result.get("structuredContent"),
         }
 
     async def close(self) -> None:
-        if self._stack is not None:
-            await self._stack.aclose()
-        self._stack = None
-        self._session = None
+        process, self._process = self._process, None
         self._tools = []
+        if process is not None:
+            if process.returncode is None:
+                process.terminate()
+                try:
+                    await asyncio.wait_for(process.wait(), timeout=5)
+                except TimeoutError:
+                    process.kill()
+                    await process.wait()
+        if self._stderr_task is not None:
+            self._stderr_task.cancel()
+            self._stderr_task = None
