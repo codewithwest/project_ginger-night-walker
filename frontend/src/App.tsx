@@ -334,25 +334,19 @@ function ResearchReport({ result }: { result: BrowserResult }) {
           </li>)}</ul>
         </div>
       </details>}
-      {Object.entries(structuredData).filter(([kind]) => kind !== "qa_product_search").map(([kind, value]) => (
-        <div className="research-section" key={kind}>
-          <h3>Structured data · {kind.replaceAll("_", " ")}</h3>
-          {kind === "products" && Array.isArray(value) ? (
-            <div className="product-list">{(value as Product[]).map((product, index) => (
-              <div className="product-row" key={product.name + "-" + index}>
-                <span className="product-row__number">{String(index + 1).padStart(2, "0")}</span>
-                <span className="product-row__name">{product.name}</span>
-                <strong className="product-row__price">{product.price}</strong>
-              </div>
-            ))}</div>
-          ) : (
-            <details className="raw-data">
-              <summary>View JSON · {kind.replaceAll("_", " ")}</summary>
-              <pre className="structured-data">{JSON.stringify(value, null, 2)}</pre>
-            </details>
-          )}
-        </div>
-      ))}
+      {Object.entries(structuredData).filter(([kind]) => kind !== "qa_product_search").length > 0 && (
+        <details className="report-details research-section">
+          <summary><span>Technical data</span><span>Optional structured browser and audit records</span></summary>
+          <div className="report-details__body">
+            {Object.entries(structuredData).filter(([kind]) => kind !== "qa_product_search").map(([kind, value]) => (
+              <details className="raw-data" key={kind}>
+                <summary>{kind.replaceAll("_", " ")}</summary>
+                <pre className="structured-data">{JSON.stringify(value, null, 2)}</pre>
+              </details>
+            ))}
+          </div>
+        </details>
+      )}
       {sources.length > 0 && <details className="report-details research-section">
         <summary><span>Sources · {sources.length}</span><span>View pages inspected</span></summary>
         <div className="report-details__body">
