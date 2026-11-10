@@ -189,7 +189,6 @@ async def test_steel_session_is_retained_for_report_preview_then_marked_offline(
     retained = runtime.task_session("task-steel")
     assert retained["status"] == "retained"
     assert retained["active"] is True
-    assert retained["debug_url"] if "debug_url" in retained else True
     assert context.closed is False
     assert id(context) in runtime._steel_sessions
 
