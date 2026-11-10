@@ -251,3 +251,12 @@ def test_qa_product_evidence_preserves_exact_price_and_source_urls():
         "price_source": "visible_product_card_text",
         "image_source": "rendered_product_card_image",
     }]
+
+
+def test_cart_product_name_uses_explicit_quoted_item_and_ignores_url():
+    objective = 'Open https://www.weylandts.co.za/products. Add “Dark Grey” to the cart. Verify price and quantity; do not checkout.'
+    assert BrowserRuntime._cart_product_name(objective) == "Dark Grey"
+
+
+def test_cart_product_name_returns_none_without_an_explicit_item():
+    assert BrowserRuntime._cart_product_name("Add the selected item to the cart") is None
