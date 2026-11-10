@@ -1558,6 +1558,45 @@ class TaskManager:
                     for step in plan_steps:
                         step_id = str(step.get("step_id", ""))
                         step_objective = str(step.get("objective") or "").casefold()
+                        search_records = structured_data.get("qa_product_search", [])
+                        if isinstance(search_records, dict):
+                            search_records = [search_records]
+                        search_record = next((
+                            item for item in reversed(search_records)
+                            if isinstance(item, dict) and item.get("performed") is True
+                        ), None)
+
+                        # Some goal-analyst outputs assign the canonical qa-crawl ID
+                        # to the requested search submission. Honour its actual objective.
+                        if (
+                            step_id.endswith("qa-crawl")
+                            and any(term in step_objective for term in ("submit", "search query", "perform the search"))
+                            and step.get("status") not in {"completed", "blocked", "failed", "skipped"}
+                            and search_record
+                        ):
+                            start_step(execution_plan, step_id)
+                            complete_step(
+                                execution_plan, step_id, evidence_refs=all_evidence_refs,
+                                result=(
+                                    f"Submitted search query {search_record.get('query')!r}; "
+                                    f"observed outcome: {search_record.get('status') or 'captured'}."
+                                ),
+                            )
+
+                        if (
+                            step_id.endswith("qa-navigation")
+                            and any(term in step_objective for term in ("results page", "search results", "result page"))
+                            and step.get("status") not in {"completed", "blocked", "failed", "skipped"}
+                            and search_record
+                        ):
+                            search_url = str(search_record.get("searched_url") or "")
+                            if search_url:
+                                start_step(execution_plan, step_id)
+                                complete_step(
+                                    execution_plan, step_id, evidence_refs=all_evidence_refs,
+                                    result=f"Captured search outcome at {search_url}; status={search_record.get('status')}.",
+                                )
+
                         is_crawl_step = (
                             step_id.endswith(("seo-crawl", "qa-crawl", "audit-crawl"))
                             and any(term in step_objective for term in ("crawl", "coverage", "discover pages", "visit discovered urls"))
@@ -1572,13 +1611,6 @@ class TaskManager:
                             step_id.endswith("qa-content")
                             and step.get("status") not in {"completed", "blocked", "failed", "skipped"}
                         ):
-                            search_records = structured_data.get("qa_product_search", [])
-                            if isinstance(search_records, dict):
-                                search_records = [search_records]
-                            search_record = next((
-                                item for item in reversed(search_records)
-                                if isinstance(item, dict) and item.get("performed") is True
-                            ), None)
                             if search_record:
                                 matches = search_record.get("matches") or []
                                 product_outcomes = []
