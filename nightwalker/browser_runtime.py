@@ -162,7 +162,7 @@ class BrowserRuntime:
                 self._qa_listener_pages.discard(id(page))
         state = self._task_sessions.get(task_id)
         steel_session = self._steel_sessions.get(id(context)) if context is not None else None
-        if steel_session:
+        if steel_session and task_id != "direct-browser-extract":
             retention_ms = max(60_000, int(os.getenv("STEEL_SESSION_RETENTION_MS", "600000")))
             retained_until = datetime.now(UTC).timestamp() + retention_ms / 1000
             if state is not None:
