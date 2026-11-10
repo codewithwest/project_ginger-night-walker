@@ -379,10 +379,55 @@ class TaskManager:
         self._persist(task_id)
         return {"task_id": task_id, "messages": record["a2a_messages"]}
 
+    def _migrate_legacy_cart_plan(self, record: dict[str, Any]) -> bool:
+        """Bring an already-loaded legacy cart task onto the canonical safe workflow."""
+        objective = str(record.get("objective") or "")
+        if not is_ecommerce_cart_workflow(objective):
+            return False
+        canonical = build_cart_journey_blueprint(objective)
+        canonical_ids = [item.subtask_id for item in canonical.subtasks]
+        saved = record.get("execution_blueprint") or {}
+        saved_ids = [
+            str(item.get("subtask_id") or "")
+            for item in saved.get("subtasks", [])
+            if isinstance(item, dict)
+        ]
+        if saved_ids == canonical_ids:
+            return False
+
+        old_plan = record.get("execution_plan") or {}
+        old_steps = old_plan.get("steps") or []
+        old_navigation = next((
+            item for item in old_steps
+            if isinstance(item, dict)
+            and item.get("step_id") == "qa-navigation"
+            and item.get("status") == "completed"
+            and item.get("evidence_refs")
+        ), None)
+        record["execution_blueprint"] = canonical.model_dump(mode="json")
+        record["execution_plan"] = initialise_plan(record["execution_blueprint"])
+        if old_navigation:
+            complete_step(
+                record["execution_plan"], "qa-navigation",
+                evidence_refs=list(old_navigation.get("evidence_refs") or []),
+                result=str(old_navigation.get("result") or "Reused previously verified storefront navigation"),
+            )
+        record["active_plan_step_id"] = None
+        record["current_step"] = None
+        record.setdefault("progress_events", []).append({
+            "at": self._now(),
+            "event_type": "plan_migrated",
+            "status": record.get("status", "queued"),
+            "message": "Migrated legacy cart plan to the canonical discover, add, verify, remove and empty-cart sequence.",
+        })
+        return True
+
     def snapshot(self, task_id: str) -> dict[str, Any] | None:
         record = self.tasks.get(task_id)
         if record is None:
             return None
+        if self._migrate_legacy_cart_plan(record):
+            self._persist(task_id)
         snapshot = {**record, "logs": list(record.get("logs", []))}
         snapshot["execution_trace"] = self.trace_store.read(task_id, limit=30)
         snapshot["timing"] = self.timing.snapshot(record)
@@ -2250,6 +2295,8 @@ class TaskManager:
             return None
         if record.get("status") not in {"failed", "blocked"}:
             raise ValueError("Only failed or blocked tasks can be resumed")
+        if self._migrate_legacy_cart_plan(record):
+            self._persist(task_id)
         active = self.running.get(task_id)
         if active and not active.done():
             raise ValueError("This task is already running")
