@@ -166,32 +166,56 @@ class SteelMCPClient:
             allowed = allowed_by_capability.get(capability)
             if not allowed:
                 raise PermissionError(f"Unsupported Steel MCP mission capability: {capability}")
-            proposal = await propose_tool_call(
-                task_id=task_id, objective=objective, capability=capability,
-                observation={"url": url, "snapshot": snapshot, "session_id": session_id},
-                tools=[tool for tool in self._tools if tool["name"] in allowed],
-                session_id=session_id,
-            )
-            selected_tool = str(proposal.get("tool_name") or "")
-            if selected_tool not in allowed:
-                raise PermissionError("Model selected a Steel tool outside the capability allowlist")
-            arguments = dict(proposal.get("arguments") or {})
-            selected_schema = next(
-                (tool.get("input_schema") or {} for tool in self._tools
-                 if tool.get("name") == selected_tool),
-                {},
-            )
-            schema_properties = selected_schema.get("properties") or {}
-            # Steel MCP tools do not all accept a session_id argument. Keep the
-            # session task-scoped here, and pass it only when the selected tool's
-            # published input schema explicitly declares it.
-            if "session_id" in schema_properties:
-                arguments["session_id"] = session_id
-            else:
-                arguments.pop("session_id", None)
-            result = await self.call_tool(selected_tool, arguments)
-        if result["is_error"]:
-            raise RuntimeError(str(result["content"])[:1500])
+            available_tools = [tool for tool in self._tools if tool["name"] in allowed]
+            previous_failure: dict[str, Any] | None = None
+            result = {"is_error": True, "content": [{"text": "No tool proposal was executed"}]}
+            selected_tool = ""
+            # A failed selector/DOM operation gets one fresh, model-directed
+            # recovery proposal against the latest page state. Never replay the
+            # same arguments blindly and never change the authorised objective.
+            for attempt in range(2):
+                proposal = await propose_tool_call(
+                    task_id=task_id, objective=objective, capability=capability,
+                    observation={
+                        "url": url, "snapshot": snapshot, "session_id": session_id,
+                        "previous_failure": previous_failure,
+                    },
+                    tools=available_tools, session_id=session_id,
+                )
+                selected_tool = str(proposal.get("tool_name") or "")
+                if selected_tool not in allowed:
+                    raise PermissionError("Model selected a Steel tool outside the capability allowlist")
+                arguments = dict(proposal.get("arguments") or {})
+                selected_schema = next(
+                    (tool.get("input_schema") or {} for tool in available_tools
+                     if tool.get("name") == selected_tool),
+                    {},
+                )
+                schema_properties = selected_schema.get("properties") or {}
+                # Session ownership remains here; pass the ID only if the
+                # selected tool's published schema explicitly declares it.
+                if "session_id" in schema_properties:
+                    arguments["session_id"] = session_id
+                else:
+                    arguments.pop("session_id", None)
+                result = await self.call_tool(selected_tool, arguments)
+                if not result["is_error"]:
+                    break
+                previous_failure = {
+                    "tool_name": selected_tool,
+                    "arguments": arguments,
+                    "error": result.get("content") or [],
+                    "recovery_attempt": attempt + 1,
+                }
+                if attempt == 0:
+                    refreshed = await self.call_tool("steel_snapshot", {
+                        "session_id": session_id, "interactive_only": False,
+                    })
+                    if refreshed["is_error"]:
+                        break
+                    snapshot = refreshed
+            if result["is_error"]:
+                raise RuntimeError(str(result["content"])[:1500])
         after = await self.call_tool("steel_snapshot", {
             "session_id": session_id, "interactive_only": False,
         })
