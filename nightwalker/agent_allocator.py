@@ -4,7 +4,8 @@ from __future__ import annotations
 from typing import Any
 
 from nightwalker.a2a import A2ABus, A2AMessage, A2AMessageType
-from nightwalker.planning_contracts import ExecutionBlueprint
+from nightwalker.decision_contracts import PlannedStep
+from nightwalker.planning_contracts import SuccessCriterion
 
 CAPABILITY_AGENTS = {
     "navigate": "night-walker-navigator",
@@ -18,30 +19,43 @@ class AgentAllocator:
     def __init__(self, bus: A2ABus | None = None) -> None:
         self.bus = bus or A2ABus()
 
-    def assign(self, task_id: str, blueprint: ExecutionBlueprint) -> list[dict[str, Any]]:
+    def assign(
+        self,
+        task_id: str,
+        steps: list[PlannedStep],
+        success_criteria: list[SuccessCriterion] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Assign agents to Decider-authored steps; never create a second plan."""
+        criteria_context = [
+            {
+                "criterion_id": item.criterion_id,
+                "description": item.description,
+                "acceptance_test": item.acceptance_test,
+                "evidence_required": item.evidence_required,
+            }
+            for item in (success_criteria or [])
+        ]
         assignments = []
-        for subtask in blueprint.subtasks:
-            agent_id = CAPABILITY_AGENTS[subtask.capability.value]
+        for step in steps:
+            capability = step.capability
+            agent_id = CAPABILITY_AGENTS[capability.value]
             message = self.bus.send(A2AMessage(
                 parent_task_id=task_id,
-                subtask_id=subtask.subtask_id,
+                subtask_id=step.step_id,
                 sender_agent_id="night-walker-orchestrator",
                 recipient_agent_id=agent_id,
                 message_type=A2AMessageType.ASSIGNMENT,
-                capability=subtask.capability,
-                objective=subtask.objective,
+                capability=capability,
+                objective=step.objective,
                 payload={
-                    "required_tools": subtask.required_tools,
-                    "success_criteria": subtask.success_criteria,
-                    "depends_on": subtask.depends_on,
-                    "parallelizable": subtask.parallelizable,
-                    "expected_output": subtask.expected_output,
+                    "success_criteria": criteria_context,
+                    "plan_source": "decider_plan",
                 },
             ))
             assignments.append({
-                "subtask_id": subtask.subtask_id,
+                "subtask_id": step.step_id,
                 "agent_id": agent_id,
-                "capability": subtask.capability.value,
+                "capability": capability.value,
                 "status": "assigned",
                 "message_id": message.message_id,
             })
