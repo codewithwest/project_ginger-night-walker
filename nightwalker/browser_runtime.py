@@ -877,6 +877,22 @@ class BrowserRuntime:
                       "cart_change_observed": confirmed}
             journey["steps"]["addition"] = result
             return result
+        if step_id.endswith(("qa-content", "qa-validate", "qa-synthesise")):
+            if not re.search(r"(?i)/cart(?:/|$)", urlparse(page.url).path):
+                links = page.locator('a[href*="cart" i]')
+                visible_links = []
+                for index in range(min(await links.count(), 10)):
+                    link = links.nth(index)
+                    try:
+                        if await link.is_visible() and await link.is_enabled():
+                            visible_links.append(link)
+                    except Exception:
+                        continue
+                if len(visible_links) == 1:
+                    await visible_links[0].click(timeout=5000)
+                    await page.wait_for_load_state("domcontentloaded", timeout=5000)
+                elif len(visible_links) > 1:
+                    return {"status": "blocked", "reason": "Multiple visible cart links; cannot choose a cart destination safely."}
         if step_id.endswith("qa-content"):
             body = (await page.locator("body").inner_text())[:30000]
             lines = [re.sub(r"\s+", " ", line).strip() for line in body.splitlines() if line.strip()]
