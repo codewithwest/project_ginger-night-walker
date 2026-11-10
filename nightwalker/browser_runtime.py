@@ -1444,9 +1444,17 @@ class BrowserRuntime:
                         lambda opened: asyncio.create_task(self._enforce_tab_limit(task_id, opened)),
                     )
                     self._tab_listener_contexts.add(id(context))
-            from nightwalker.workflows import classify_workflow, qa_requires_site_crawl
-            workflow_type = classify_workflow(objective).value
-            single_page_qa = workflow_type == "qa" and not qa_requires_site_crawl(objective)
+            from nightwalker.workflows import (
+                classify_workflow, is_ecommerce_cart_workflow, qa_requires_site_crawl,
+            )
+            cart_workflow = is_ecommerce_cart_workflow(objective)
+            # Cart journeys are functional QA even if the broad intent classifier
+            # does not recognise the phrasing. Keep them on the single-page,
+            # action-by-action browser path rather than the generic crawl path.
+            workflow_type = "qa" if cart_workflow else classify_workflow(objective).value
+            single_page_qa = cart_workflow or (
+                workflow_type == "qa" and not qa_requires_site_crawl(objective)
+            )
             if workflow_type in {"qa", "seo_qa"} and id(page) not in self._qa_listener_pages:
                 runtime_events = self._task_sessions[task_id].setdefault("qa_runtime_events", [])
 
@@ -1579,9 +1587,20 @@ class BrowserRuntime:
                 if capability == "interact":
                     step_id = str(step.get("step_id") or "")
                     if step_id.endswith(("qa-discover", "qa-availability", "qa-validate")):
+                        self._browser_event(
+                            task_id, "Starting cart journey step: " + step_id,
+                            url=page.url, action="cart_step_start", plan_step_id=step_id,
+                        )
                         cart_result = await self._run_cart_journey_step(page, step_id, objective, task_id)
                         self._task_sessions[task_id].setdefault("qa_cart_journey_results", []).append(
                             {"step_id": step_id, **cart_result}
+                        )
+                        self._browser_event(
+                            task_id,
+                            "Cart journey step " + step_id + ": " + str(cart_result.get("status") or "unknown")
+                            + (": " + str(cart_result.get("reason")) if cart_result.get("reason") else ""),
+                            url=page.url, status=("completed" if cart_result.get("status") == "verified" else "failed"),
+                            action="cart_step_result", plan_step_id=step_id,
                         )
                         if cart_result.get("status") != "verified":
                             issues.append("Cart step " + step_id + " was not verified: " + str(cart_result.get("reason") or cart_result.get("status")))
@@ -1628,9 +1647,20 @@ class BrowserRuntime:
                 elif capability == "extract":
                     step_id = str(step.get("step_id") or "")
                     if step_id.endswith(("qa-content", "qa-synthesise")):
+                        self._browser_event(
+                            task_id, "Starting cart journey step: " + step_id,
+                            url=page.url, action="cart_step_start", plan_step_id=step_id,
+                        )
                         cart_result = await self._run_cart_journey_step(page, step_id, objective, task_id)
                         self._task_sessions[task_id].setdefault("qa_cart_journey_results", []).append(
                             {"step_id": step_id, **cart_result}
+                        )
+                        self._browser_event(
+                            task_id,
+                            "Cart journey step " + step_id + ": " + str(cart_result.get("status") or "unknown")
+                            + (": " + str(cart_result.get("reason")) if cart_result.get("reason") else ""),
+                            url=page.url, status=("completed" if cart_result.get("status") == "verified" else "failed"),
+                            action="cart_step_result", plan_step_id=step_id,
                         )
                         if cart_result.get("status") != "verified":
                             issues.append("Cart step " + step_id + " was not verified: " + str(cart_result.get("reason") or cart_result.get("status")))
