@@ -466,19 +466,27 @@ class TaskManager:
 
         old_plan = record.get("execution_plan") or {}
         old_steps = old_plan.get("steps") or []
+        saved_result = record.get("result") if isinstance(record.get("result"), dict) else {}
+        saved_checkpoint = record.get("checkpoint") if isinstance(record.get("checkpoint"), dict) else {}
+        persisted_evidence = list(saved_result.get("evidence") or []) + list(saved_checkpoint.get("evidence") or [])
+        evidence_ids = {
+            str(item.get("evidence_id"))
+            for item in persisted_evidence
+            if isinstance(item, dict) and item.get("evidence_id")
+        }
         old_navigation = next((
             item for item in old_steps
             if isinstance(item, dict)
             and item.get("step_id") == "qa-navigation"
             and item.get("status") == "completed"
-            and item.get("evidence_refs")
+            and any(str(ref) in evidence_ids for ref in item.get("evidence_refs") or [])
         ), None)
         record["execution_blueprint"] = canonical.model_dump(mode="json")
         record["execution_plan"] = initialise_plan(record["execution_blueprint"])
         if old_navigation:
             complete_step(
                 record["execution_plan"], "qa-navigation",
-                evidence_refs=list(old_navigation.get("evidence_refs") or []),
+                evidence_refs=[str(ref) for ref in old_navigation.get("evidence_refs") or [] if str(ref) in evidence_ids],
                 result=str(old_navigation.get("result") or "Reused previously verified storefront navigation"),
             )
         record["active_plan_step_id"] = None
