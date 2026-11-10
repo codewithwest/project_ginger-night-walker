@@ -45,6 +45,7 @@ from nightwalker.workflows import (
     WorkflowType,
     build_cart_journey_blueprint,
     build_product_search_blueprint,
+    build_workflow_blueprint,
     classify_workflow,
     is_ecommerce_cart_workflow,
     extract_product_search_query,
@@ -710,6 +711,13 @@ class TaskManager:
                     self._log(
                         task_id,
                         "Applied deterministic product-search QA plan: navigation, authorised query submission, product extraction and validation",
+                    )
+                elif classify_workflow(objective) in {WorkflowType.SEO, WorkflowType.QA, WorkflowType.SEO_QA}:
+                    workflow = classify_workflow(objective)
+                    blueprint = build_workflow_blueprint(objective, workflow)
+                    self._log(
+                        task_id,
+                        f"Applied deterministic {workflow.value} workflow plan with separate scope, evidence and validation criteria",
                     )
                 record["execution_blueprint"] = blueprint.model_dump(mode="json")
                 record["execution_plan"] = initialise_plan(record["execution_blueprint"])
