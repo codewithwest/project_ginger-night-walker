@@ -25,6 +25,10 @@ UI_DIR = STATIC_DIR / "ui"
 UI_FILE = UI_DIR / "index.html" if (UI_DIR / "index.html").is_file() else STATIC_DIR / "index.html"
 
 
+class SteelMCPSmokeRequest(BaseModel):
+    url: str = Field(min_length=8, max_length=2000)
+
+
 class NaturalLanguageTaskRequest(BaseModel):
     objective: str = Field(min_length=1, max_length=2000)
     task_id: str = Field(default_factory=lambda: "nw-" + str(uuid4()))
@@ -81,6 +85,21 @@ async def health():
 @app.get("/health/steel-mcp")
 async def steel_mcp_health():
     return browser.steel_mcp_status()
+
+
+@app.post("/tools/steel-mcp/smoke-test")
+async def steel_mcp_smoke_test(request: SteelMCPSmokeRequest):
+    from urllib.parse import urlsplit
+
+    parsed = urlsplit(request.url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise HTTPException(status_code=422, detail="A public HTTP(S) URL is required")
+    if not browser.steel_mcp.connected:
+        raise HTTPException(status_code=503, detail="Steel MCP is not enabled or connected")
+    try:
+        return await browser.steel_mcp.smoke_test(request.url)
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)[:1000]) from exc
 
 
 @app.get("/health/ollama")
