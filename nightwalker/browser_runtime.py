@@ -189,7 +189,10 @@ class BrowserRuntime:
         websocket = urlparse(websocket_url)
         api = urlparse(api_base)
         host = (websocket.hostname or "").strip("[]").lower()
-        if host in {"0.0.0.0", "::", ""}:
+        # Loopback addresses in Steel's advertised URL refer to the Steel
+        # container itself, not the Night Walker client. Use the API host for
+        # wildcard and loopback advertisements alike.
+        if host in {"0.0.0.0", "::", "", "localhost", "127.0.0.1", "::1"}:
             host = (api.hostname or "").strip("[]").lower()
         if not host:
             raise RuntimeError("STEEL_API_BASE_URL must include a reachable hostname")
