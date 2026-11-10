@@ -126,6 +126,36 @@ class SteelMCPClient:
             "structured_content": result.get("structuredContent"),
         }
 
+    async def smoke_test(self, url: str) -> dict[str, Any]:
+        """Run a minimal create/navigate/snapshot/release flow through Steel MCP."""
+        created = await self.call_tool("steel_session_create", {})
+        if created["is_error"]:
+            raise RuntimeError(str(created["content"])[:1000])
+        structured = created.get("structured_content") or {}
+        session_id = structured.get("session_id")
+        if not session_id:
+            raise RuntimeError("Steel MCP session_create did not return a session_id")
+        try:
+            navigated = await self.call_tool(
+                "steel_navigate",
+                {"session_id": session_id, "url": url, "include_snapshot": True},
+            )
+            if navigated["is_error"]:
+                raise RuntimeError(str(navigated["content"])[:1000])
+            snapshot = await self.call_tool(
+                "steel_snapshot", {"session_id": session_id, "interactive_only": False}
+            )
+            if snapshot["is_error"]:
+                raise RuntimeError(str(snapshot["content"])[:1000])
+            return {
+                "status": "completed",
+                "session_id": session_id,
+                "navigate": navigated,
+                "snapshot": snapshot,
+            }
+        finally:
+            await self.call_tool("steel_session_release", {"session_id": session_id})
+
     async def close(self) -> None:
         process, self._process = self._process, None
         self._tools = []
