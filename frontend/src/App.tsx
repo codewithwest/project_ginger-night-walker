@@ -194,6 +194,12 @@ function ResearchReport({ result }: { result: BrowserResult }) {
   const findings = result.findings || [];
   const sources = result.sources || (result.final_url ? [{ url: result.final_url, title: result.title }] : []);
   const structuredData = result.structured_data || {};
+  const rawProductSearch = structuredData.qa_product_search;
+  const productSearchRecords = Array.isArray(rawProductSearch)
+    ? rawProductSearch.filter((item): item is Record<string, any> => Boolean(item && typeof item === "object"))
+    : rawProductSearch && typeof rawProductSearch === "object"
+      ? [rawProductSearch as Record<string, any>]
+      : [];
   const auditSummary = structuredData.audit_report_summary as Record<string, string | number | boolean | undefined> | undefined;
   const pageSmoke = structuredData.qa_page_smoke as Record<string, any> | undefined;
   const singlePageScope = auditSummary?.crawl_scope === "single_page";
@@ -243,6 +249,49 @@ function ResearchReport({ result }: { result: BrowserResult }) {
           </li>;
         })}</ul>
       </div>}
+      {productSearchRecords.length > 0 && <div className="research-section product-search-report">
+        <div className="product-search-report__heading">
+          <div><h3>Product search verification</h3><p>Search actions and product attributes captured by the browser</p></div>
+          <span className="product-search-report__count">{productSearchRecords.length} search capture{productSearchRecords.length === 1 ? "" : "s"}</span>
+        </div>
+        {productSearchRecords.map((search, searchIndex) => {
+          const matches = Array.isArray(search.matches) ? search.matches : [];
+          const route = Array.isArray(search.route) ? search.route : [];
+          const status = String(search.status || "outcome_not_recorded");
+          const didSearch = search.performed === true;
+          return <article className="product-search-capture" key={String(search.evidence_ids?.[0] || search.source_id || searchIndex)}>
+            <div className="product-search-capture__top">
+              <div><span className="product-search-capture__label">REQUESTED QUERY</span><strong>{String(search.query || "Query not captured")}</strong></div>
+              <span className={"product-search-status product-search-status--" + (status === "matched" ? "matched" : didSearch ? "observed" : "blocked")}>{status.replaceAll("_", " ")}</span>
+            </div>
+            <div className="product-search-metrics">
+              <div><strong>{didSearch ? "Yes" : "No"}</strong><span>Search performed</span></div>
+              <div><strong>{search.result_count ?? "—"}</strong><span>Result cards inspected</span></div>
+              <div><strong>{matches.length}</strong><span>Title matches</span></div>
+            </div>
+            {!didSearch && <p className="product-search-note">The requested search was not completed. Product presence, image and price cannot be confirmed.</p>}
+            {didSearch && matches.length === 0 && <p className="product-search-note">The search was submitted, but no product card with a matching title was verified. This does not prove the product is absent from the entire website.</p>}
+            {matches.map((product: Record<string, any>, productIndex: number) => (
+              <div className="product-result-card" key={String(product.product_url || product.name_match || productIndex)}>
+                <div className="product-result-card__image">{product.image_src ? <img src={String(product.image_src)} alt={String(product.image_alt || product.name_match || "Product image")} loading="lazy" /> : <span>Image not found</span>}</div>
+                <div className="product-result-card__body">
+                  <div className="product-result-card__title"><strong>{String(product.name_match || "Product title not captured")}</strong>{product.product_url && <a href={String(product.product_url)} target="_blank" rel="noreferrer">Open product <ExternalLink size={12} /></a>}</div>
+                  <div className="product-result-card__price">{product.price || "Price not captured"}</div>
+                  <div className="product-result-checks">
+                    <span className="is-confirmed">Title matched</span>
+                    <span className={product.image_present ? "is-confirmed" : "is-missing"}>{product.image_present ? "Image present" : "Image missing"}</span>
+                    <span className={product.image_loaded ? "is-confirmed" : "is-missing"}>{product.image_loaded ? "Image loaded" : "Image not confirmed loaded"}</span>
+                    <span className={product.price ? "is-confirmed" : "is-missing"}>{product.price ? "Price captured" : "Price missing"}</span>
+                  </div>
+                  {product.evidence_ids?.length > 0 && <small>Evidence: {product.evidence_ids.join(", ")}</small>}
+                </div>
+              </div>
+            ))}
+            {route.length > 0 && <details className="product-search-route"><summary>Search journey · {route.length} browser actions</summary><ol>{route.map((step: Record<string, any>, stepIndex: number) => <li key={stepIndex}><strong>{String(step.action || "browser action").replaceAll("_", " ")}</strong>{step.url && <a href={String(step.url)} target="_blank" rel="noreferrer">{String(step.url)}</a>}{step.http_status != null && <small>HTTP {step.http_status}</small>}</li>)}</ol></details>}
+            {search.evidence_ids?.length > 0 && <small className="product-search-evidence">Capture evidence: {search.evidence_ids.join(", ")}</small>}
+          </article>;
+        })}
+      </div>}
       {summaryMetrics.length > 0 && <div className="research-section">
         <h3>Audit overview <span className="audit-completion">{singlePageScope ? "Single-page scope · site-wide coverage not measured" : auditSummary?.crawl_complete ? "Known discovery queue exhausted" : "Coverage incomplete"}</span></h3>
         <div className="audit-summary-grid">{summaryMetrics.map((metric) => (
@@ -268,7 +317,7 @@ function ResearchReport({ result }: { result: BrowserResult }) {
           {finding.evidence_ids && finding.evidence_ids.length > 0 && <small>Evidence: {finding.evidence_ids.join(", ")}</small>}
         </li>)}</ul>
       </div>}
-      {Object.entries(structuredData).map(([kind, value]) => (
+      {Object.entries(structuredData).filter(([kind]) => kind !== "qa_product_search").map(([kind, value]) => (
         <div className="research-section" key={kind}>
           <h3>Structured data · {kind.replaceAll("_", " ")}</h3>
           {kind === "products" && Array.isArray(value) ? (
