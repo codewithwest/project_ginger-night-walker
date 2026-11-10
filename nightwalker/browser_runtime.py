@@ -897,13 +897,27 @@ class BrowserRuntime:
             body = (await page.locator("body").inner_text())[:30000]
             lines = [re.sub(r"\s+", " ", line).strip() for line in body.splitlines() if line.strip()]
             matching_lines = [line for line in lines if normal(name) in normal(line)]
+            row_selector = "tr, li, [class*='cart-item'], [class*='cart_product'], [data-cart-item]"
+            row_data = await page.locator(row_selector).evaluate_all(
+                """nodes => nodes.map(node => ({
+                    text: (node.innerText || '').trim(),
+                    quantities: Array.from(node.querySelectorAll('input, select')).map(el =>
+                        el.value || el.getAttribute('value') || '').filter(Boolean)
+                }))"""
+            )
+            matching_rows = [row for row in row_data if normal(name) in normal(row.get("text"))]
             price_pattern = re.compile(r"(?i)(?:R\s*)[0-9][0-9,]*(?:\.[0-9]{2})?")
-            prices = [price_pattern.search(line).group(0) for line in matching_lines if price_pattern.search(line)]
-            qty = re.search(r"(?i)(?:quantity|qty)\s*[:：]?\s*(\d+)", "\n".join(matching_lines))
-            result = {"status": "verified" if matching_lines and prices and qty else "unconfirmed",
+            price_text = matching_rows[0]["text"] if len(matching_rows) == 1 else "\n".join(matching_lines)
+            prices = [price_pattern.search(price_text).group(0) for _ in [0] if price_pattern.search(price_text)]
+            qty_match = re.search(r"(?i)(?:quantity|qty)\s*[:：]?\s*(\d+)", price_text)
+            quantity = int(qty_match.group(1)) if qty_match else None
+            if quantity is None and len(matching_rows) == 1 and len(matching_rows[0]["quantities"]) == 1:
+                quantity_match = re.fullmatch(r"\d+", matching_rows[0]["quantities"][0])
+                quantity = int(quantity_match.group(0)) if quantity_match else None
+            result = {"status": "verified" if len(matching_rows) == 1 and prices and quantity is not None else "unconfirmed",
                       "product_name": name, "matching_lines": matching_lines[:8],
-                      "price": prices[0] if len(set(prices)) == 1 else None,
-                      "quantity": int(qty.group(1)) if qty else None}
+                      "price": prices[0] if len(prices) == 1 else None,
+                      "quantity": quantity, "matching_line_count": len(matching_rows)}
             journey["steps"]["cart_line_item"] = result
             return result
         if step_id.endswith("qa-validate"):
