@@ -915,7 +915,7 @@ class BrowserRuntime:
             if not search_attempted:
                 self._browser_event(
                     task_id, f"Storefront search was not submitted ({search_status}); checking visible catalogue content without claiming a search",
-                    url=page.url, status="warning", action="cart_search_unavailable", plan_step_id=step_id,
+                    url=page.url, action="cart_search_unavailable", plan_step_id=step_id,
                 )
 
             # Search is not always available or reliable. If it did not produce
@@ -953,7 +953,7 @@ class BrowserRuntime:
             if len(matches) != 1:
                 result = {"status": "blocked", "reason": "Expected one exact product card; found "
                           + str(len(matches)), "candidate_count": len(matches), "search_attempted": search_attempted,
-                          "scroll_attempted": scroll_attempted, "scroll_steps": scroll_steps}
+                          "scroll_attempted": scroll_attempted, "scroll_steps": scroll_steps, "search_status": search_status}
             elif matches[0]["addCount"] != 1:
                 result = {"status": "blocked", "reason": "The matching card does not contain exactly one Add to Cart control.",
                           "product_name": matches[0]["title"], "add_control_count": matches[0]["addCount"]}
@@ -962,7 +962,7 @@ class BrowserRuntime:
                 journey["card_selector"] = selector
                 result = {"status": "verified", "product_name": matches[0]["title"],
                           "add_control": matches[0]["addText"][0], "card_index": matches[0]["index"],
-                          "search_attempted": search_attempted, "scroll_attempted": scroll_attempted,
+                          "search_attempted": search_attempted, "search_status": search_status, "scroll_attempted": scroll_attempted,
                           "scroll_steps": scroll_steps, "page_url": page.url}
             journey["steps"]["discovery"] = result
             return result
