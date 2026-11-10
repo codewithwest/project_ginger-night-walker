@@ -43,8 +43,10 @@ from nightwalker.task_state_store import TaskStateStore
 from nightwalker.task_timing import TaskTiming
 from nightwalker.workflows import (
     WorkflowType,
+    build_cart_journey_blueprint,
     build_product_search_blueprint,
     classify_workflow,
+    is_ecommerce_cart_workflow,
     extract_product_search_query,
     qa_scope_for_objective,
     target_url_from_objective,
@@ -605,6 +607,15 @@ class TaskManager:
                 # this step as NAVIGATE/EXTRACT, causing the evidence gate to
                 # block it before the browser could perform the search.
                 if (
+                    classify_workflow(objective) == WorkflowType.QA
+                    and is_ecommerce_cart_workflow(objective)
+                ):
+                    blueprint = build_cart_journey_blueprint(objective)
+                    self._log(
+                        task_id,
+                        "Applied deterministic ecommerce-cart QA plan: discover, add, verify, remove and confirm empty; checkout is excluded",
+                    )
+                elif (
                     classify_workflow(objective) == WorkflowType.QA
                     and extract_product_search_query(objective)
                 ):
