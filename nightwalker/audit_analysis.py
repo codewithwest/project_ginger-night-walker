@@ -122,8 +122,31 @@ _IMPACT = {
 
 def prioritise_findings(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Add deterministic impact/priority fields while preserving original evidence."""
-    output = []
+    # Collapse repeated copies of the same observation on the same page.
+    # Keep all evidence references so deduplication never discards provenance.
+    unique_findings: list[dict[str, Any]] = []
+    by_fingerprint: dict[tuple[str, str, tuple[str, ...]], dict[str, Any]] = {}
     for finding in findings:
+        item = dict(finding)
+        fingerprint = (
+            str(item.get("type") or ""),
+            " ".join(str(item.get("claim") or "").casefold().split()),
+            tuple(sorted(str(url) for url in (item.get("affected_urls") or []))),
+        )
+        existing = by_fingerprint.get(fingerprint)
+        if existing is None:
+            by_fingerprint[fingerprint] = item
+            unique_findings.append(item)
+            continue
+        for field in ("evidence_ids", "source_ids"):
+            merged = list(dict.fromkeys([
+                *(existing.get(field) or []), *(item.get(field) or []),
+            ]))
+            if merged:
+                existing[field] = merged
+        existing["occurrences"] = int(existing.get("occurrences") or 1) + int(item.get("occurrences") or 1)
+    output = []
+    for finding in unique_findings:
         item = dict(finding)
         severity = str(item.get("severity") or "info").casefold()
         score, priority = _PRIORITY.get(severity, _PRIORITY["info"])
