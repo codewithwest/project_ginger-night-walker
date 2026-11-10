@@ -205,7 +205,6 @@ function ResearchReport({ result }: { result: BrowserResult }) {
   const singlePageScope = auditSummary?.crawl_scope === "single_page";
   const summaryMetrics = auditSummary ? singlePageScope ? [
     { label: "Pages inspected", value: auditSummary.pages_inspected ?? 0 },
-    { label: "H1 headings", value: pageSmoke?.h1_count ?? "—" },
     { label: "Images checked", value: pageSmoke?.image_count ?? "—" },
     { label: "Broken images", value: pageSmoke?.broken_image_count ?? "—" },
     { label: "Images pending", value: pageSmoke?.pending_image_count ?? "—" },
@@ -220,8 +219,6 @@ function ResearchReport({ result }: { result: BrowserResult }) {
     { label: "URLs excluded", value: auditSummary.excluded_url_count ?? 0 },
     { label: "Pages still queued", value: auditSummary.queued_candidate_count ?? 0 },
     { label: "Broken internal links", value: auditSummary.broken_internal_links ?? 0 },
-    { label: "Duplicate title groups", value: auditSummary.duplicate_title_groups ?? 0 },
-    { label: "Duplicate content groups", value: auditSummary.duplicate_content_groups ?? 0 },
     { label: "Accessibility findings", value: auditSummary.accessibility_findings ?? 0 },
   ] : [];
   const limitations = result.limitations || result.issues || [];
