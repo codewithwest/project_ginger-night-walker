@@ -177,6 +177,24 @@ Common diagnoses:
 - The application is not authenticated or hardened for multi-user hostile workloads.
 
 
+## 7. Steel MCP experiment
+
+Night Walker can start the official Steel MCP server as a child process while retaining the existing Playwright/CDP runtime. This is deliberately opt-in so the current browser path remains available for comparison.
+
+Set:
+
+```dotenv
+STEEL_MCP_ENABLED=true
+STEEL_MCP_PROFILE=browse
+STEEL_MCP_BASE_URL=http://steel-browser:3000/v1
+```
+
+The image builds the official `steel-dev/steel-mcp-server` at a pinned source revision and runs its stdio transport with `STEEL_LOCAL=true`. No Steel Cloud account or API key is required for the self-hosted Steel service. The MCP adapter discovers the live tool catalog at startup. Check `GET /health/steel-mcp` for connection status and discovered tool names.
+
+A bounded connectivity/browser smoke test is available at `POST /tools/steel-mcp/smoke-test` with JSON `{"url":"https://example.com"}`. It creates a session, navigates, captures a snapshot, and releases the session. URL policy is applied before navigation. This endpoint is for validating MCP transport and Steel browser behaviour; the normal mission-plan executor continues to use the existing BrowserRuntime until the MCP execution adapter is separately enabled and compared.
+
+Keep `STEEL_MCP_ENABLED=false` to use only the existing Playwright/CDP path. Both implementations are retained during the experiment.
+
 ## 7. Self-hosted Steel browser backend
 
 The Compose stack runs the official single-image Steel Browser service. Night Walker creates a session through the self-hosted Sessions API at `http://steel-browser:3000/v1`, connects to the returned CDP WebSocket URL, and releases the session after the workflow. A Steel API key is not required for the default local service; set `STEEL_API_KEY` only if you deliberately add authentication or point at a protected endpoint. The API and CDP ports are bound to loopback on the host; do not expose CDP port 9223 publicly.
