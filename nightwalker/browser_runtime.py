@@ -1321,11 +1321,27 @@ class BrowserRuntime:
                 url=url, action="steel_session_ready", plan_step_id=step_id,
             )
 
-        result = await self.steel_mcp.execute_mission_step(
-            task_id, url, step_objective, capability,
-            ollama.propose_steel_mcp_tool_call,
-            session_callback=expose_live_session,
-        )
+        timeout_seconds = max(30, min(300, int(os.getenv("STEEL_MCP_STEP_TIMEOUT_SECONDS", "120"))))
+        try:
+            result = await asyncio.wait_for(
+                self.steel_mcp.execute_mission_step(
+                    task_id, url, step_objective, capability,
+                    ollama.propose_steel_mcp_tool_call,
+                    session_callback=expose_live_session,
+                ),
+                timeout=timeout_seconds,
+            )
+        except asyncio.TimeoutError:
+            await self.steel_mcp.release_task_session(task_id)
+            message = f"Steel MCP {capability} step timed out after {timeout_seconds} seconds"
+            self._browser_event(
+                task_id, message, url=url, status="failed",
+                action="steel_mcp_timeout", plan_step_id=step_id,
+            )
+            return {
+                "status": "failed", "issues": [message],
+                "browser_backend": "steel-mcp",
+            }
         session_id = str(result.get("session_id") or "")
         if session_id:
             expose_live_session(session_id)
