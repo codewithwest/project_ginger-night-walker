@@ -27,6 +27,7 @@ from nightwalker.plan_execution import (
     fail_step,
     initialise_plan,
     ready_steps,
+    ready_steps_for_capture,
     start_step,
 )
 from nightwalker.research_guard import ResearchLoopGuard, canonical_url_key
@@ -1027,8 +1028,16 @@ class TaskManager:
                             match = re.search(r"[\d,]+(?:\.\d{1,2})?", str(product.get("price") or ""))
                             return float(match.group(0).replace(",", "")) if match else None
 
+                        focused_product_search = (
+                            str(record.get("workflow_type") or "") == "qa"
+                            and extract_product_search_query(str(objective or "")) is not None
+                        )
                         while True:
-                            ready = ready_steps(execution_plan)
+                            ready = ready_steps_for_capture(
+                                execution_plan,
+                                str((active_plan_step or {}).get("step_id") or ""),
+                                one_step_per_capture=focused_product_search,
+                            )
                             if not ready:
                                 break
                             step = ready[0]
