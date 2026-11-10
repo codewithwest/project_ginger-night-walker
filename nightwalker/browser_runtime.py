@@ -269,10 +269,10 @@ class BrowserRuntime:
         state = self._task_sessions.get(task_id)
         if not state:
             return None
-        if state.get("status") == "retained":
+        if state.get("backend") == "steel" and state.get("status") in {"active", "retained"}:
             retained_until = state.get("retained_until")
             expired = False
-            if retained_until:
+            if state.get("status") == "retained" and retained_until:
                 try:
                     expired = datetime.now(UTC) >= datetime.fromisoformat(retained_until)
                 except ValueError:
@@ -285,7 +285,7 @@ class BrowserRuntime:
             if expired or browser is None or not browser.is_connected():
                 state["status"] = "offline"
                 state["active"] = False
-                state["last_error"] = "The retained Steel session has expired or disconnected."
+                state["last_error"] = "The Steel browser connection is no longer active."
         return {key: value for key, value in state.items() if key != "session_id"}
 
     async def _guarded_context(self, task_id: str | None = None) -> BrowserContext:
