@@ -133,6 +133,15 @@ def test_qa_content_objective_injects_extracted_product():
 
 
 
+def test_product_search_blueprint_requires_only_explicitly_requested_fields():
+    objective = 'Search for "Blue Top" and capture its price on https://example.com/products'
+    blueprint = build_product_search_blueprint(objective)
+    criteria = {item.criterion_id for item in blueprint.success_criteria}
+    assert "sc-product-name" in criteria
+    assert "sc-product-price" in criteria
+    assert "sc-product-image" not in criteria
+    assert "sc-product-url" not in criteria
+
 def test_product_search_blueprint_authorises_search_as_interaction():
     objective = 'Search for "Dark Grey" and verify its name, image and price on https://weylandts.co.za'
     blueprint = build_product_search_blueprint(objective)
