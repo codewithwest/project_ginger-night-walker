@@ -1365,6 +1365,17 @@ class BrowserRuntime:
             "scope": "Direct same-origin GET navigation only; no forms or state-changing controls activated.",
         }
 
+    @staticmethod
+    def _restore_qa_product_search(session: dict, query: str | None) -> dict[str, Any] | None:
+        """Restore only the matching query's captured cards from task-scoped state."""
+        stored = session.get("qa_product_search") if isinstance(session, dict) else None
+        if (
+            isinstance(stored, dict) and query
+            and str(stored.get("query") or "").casefold() == query.casefold()
+        ):
+            return copy.deepcopy(stored)
+        return None
+
     async def run_plan(self, task_id: str, url: str, steps: list[dict], objective: str) -> dict:
         """Execute only public-site navigation, same-origin link following and extraction."""
         self.policy.validate_url(url, allow_private_networks=False)
@@ -1450,14 +1461,9 @@ class BrowserRuntime:
             # Product-search QA spans multiple mission-plan rounds. Keep the
             # captured result in task-scoped state so extraction/validation rounds
             # do not lose the result when this local variable is re-created.
-            stored_product_search = self._task_sessions[task_id].get("qa_product_search")
             requested_query = self._extract_product_search_query(objective)
-            qa_product_search = (
-                copy.deepcopy(stored_product_search)
-                if isinstance(stored_product_search, dict)
-                and requested_query
-                and str(stored_product_search.get("query") or "").casefold() == requested_query.casefold()
-                else None
+            qa_product_search = self._restore_qa_product_search(
+                self._task_sessions[task_id], requested_query,
             )
             if workflow_type == "qa" and product_search_requested and not has_authorized_search_interaction and qa_product_search is None:
                 self._browser_event(
