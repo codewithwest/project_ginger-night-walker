@@ -877,7 +877,8 @@ class TaskManager:
                         marker in issue_text.casefold()
                         for marker in (
                             "econnrefused", "connect_over_cdp", "browser runtime is not started",
-                            "steel session", "websocket error",
+                            "steel session", "steel mcp", "websocket error",
+                            "timed out",
                         )
                     )
                     if infrastructure_error:
