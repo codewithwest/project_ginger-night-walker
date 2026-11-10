@@ -439,7 +439,7 @@ class BrowserRuntime:
         await page.goto(
             destination,
             wait_until="domcontentloaded",
-            timeout=int(os.getenv("NAVIGATION_TIMEOUT_MS", "20000")),
+            timeout=int(os.getenv("NAVIGATION_TIMEOUT_MS", "45000")),
         )
         return page.url
 
@@ -535,7 +535,7 @@ class BrowserRuntime:
                     try:
                         response = await page.goto(
                             homepage, wait_until="domcontentloaded",
-                            timeout=int(os.getenv("NAVIGATION_TIMEOUT_MS", "20000")),
+                            timeout=int(os.getenv("NAVIGATION_TIMEOUT_MS", "45000")),
                         )
                         route.append({
                             "url": page.url, "action": "opened_homepage_for_catalogue_discovery",
@@ -558,7 +558,7 @@ class BrowserRuntime:
             try:
                 response = await page.goto(
                     destination, wait_until="domcontentloaded",
-                    timeout=int(os.getenv("NAVIGATION_TIMEOUT_MS", "20000")),
+                    timeout=int(os.getenv("NAVIGATION_TIMEOUT_MS", "45000")),
                 )
             except Exception as exc:
                 return {
@@ -1037,7 +1037,7 @@ class BrowserRuntime:
                 self.policy.validate_url(candidate, allow_private_networks=False)
                 response = await page.goto(
                     candidate, wait_until="domcontentloaded",
-                    timeout=int(os.getenv("NAVIGATION_TIMEOUT_MS", "20000")),
+                    timeout=int(os.getenv("NAVIGATION_TIMEOUT_MS", "45000")),
                 )
                 item.update({
                     "status": response.status if response else None,
@@ -1058,7 +1058,7 @@ class BrowserRuntime:
             try:
                 await page.goto(
                     original_url, wait_until="domcontentloaded",
-                    timeout=int(os.getenv("NAVIGATION_TIMEOUT_MS", "20000")),
+                    timeout=int(os.getenv("NAVIGATION_TIMEOUT_MS", "45000")),
                 )
             except Exception as exc:  # noqa: BLE001
                 item["restore_error"] = str(exc)[:160]
@@ -1151,7 +1151,7 @@ class BrowserRuntime:
             response = await page.goto(
                 url,
                 wait_until="domcontentloaded",
-                timeout=int(os.getenv("NAVIGATION_TIMEOUT_MS", "20000")),
+                timeout=int(os.getenv("NAVIGATION_TIMEOUT_MS", "45000")),
             )
             http_status = response.status if response else None
             product_search_requested = self._extract_product_search_query(objective) is not None
@@ -1219,7 +1219,7 @@ class BrowserRuntime:
                 elif capability == "recover":
                     await page.reload(
                         wait_until="domcontentloaded",
-                        timeout=int(os.getenv("NAVIGATION_TIMEOUT_MS", "20000")),
+                        timeout=int(os.getenv("NAVIGATION_TIMEOUT_MS", "45000")),
                     )
                     visited.append(page.url)
                     self._browser_event(task_id, "Reloaded the current page for recovery", url=page.url, title=(await page.title())[:500])
