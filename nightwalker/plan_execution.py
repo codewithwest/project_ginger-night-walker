@@ -208,6 +208,31 @@ def fail_step(plan: dict[str, Any], step_id: str, message: str, *, blocked: bool
     return step
 
 
+def reset_retryable_steps(plan: dict[str, Any]) -> list[str]:
+    """Requeue blocked/failed steps only when every dependency is verified."""
+    by_id = {step["step_id"]: step for step in plan.get("steps", [])}
+    reset = []
+    for step in plan.get("steps", []):
+        if step.get("status") not in {"blocked", "failed"}:
+            continue
+        dependencies = step.get("depends_on") or []
+        if not all(by_id.get(dep, {}).get("status") == "completed" for dep in dependencies):
+            continue
+        step["status"] = "pending"
+        step["result"] = None
+        step["evidence_refs"] = []
+        step["updated_at"] = datetime.now(UTC).isoformat()
+        reset.append(step["step_id"])
+        plan.setdefault("history", []).append({
+            "at": step["updated_at"], "step_id": step["step_id"],
+            "status": "pending",
+            "message": "Retry requeued this step because all dependencies remain verified.",
+        })
+    if reset:
+        plan["status"] = "pending"
+    return reset
+
+
 def ready_steps(plan: dict[str, Any]) -> list[dict[str, Any]]:
     by_id = {s["step_id"]: s for s in plan.get("steps", [])}
     return [
