@@ -154,10 +154,22 @@ def extract_product_search_query(objective: str) -> str | None:
 def is_ecommerce_cart_workflow(objective: str) -> bool:
     """Identify an explicitly requested cart-state journey, not ordinary product research."""
     value = " ".join(objective.casefold().split())
-    has_cart_action = any(term in value for term in (
-        "add to cart", "add it to the cart", "add to the cart",
-        "remove from cart", "remove it from the cart", "remove from the cart",
+    # Allow the product name or a short description between the action and
+    # destination (for example, "add 'Dark Grey' to the cart"). Exact phrase
+    # matching missed these common natural-language cart requests.
+    has_add_action = bool(re.search(
+        r"\\badd\\b.{0,120}\\bto\\s+(?:the\\s+)?(?:shopping\\s+)?cart\\b",
+        value,
     ))
+    has_remove_action = bool(re.search(
+        r"\\bremove\\b.{0,100}\\b(?:from|out\\s+of)\\s+(?:the\\s+)?(?:shopping\\s+)?cart\\b",
+        value,
+    ))
+    has_remove_item_action = bool(re.search(
+        r"\\bremove\\s+(?:it|the\\s+(?:item|product))\\b",
+        value,
+    )) and bool(re.search(r"\\bcart\\b", value))
+    has_cart_action = has_add_action or has_remove_action or has_remove_item_action
     has_cart_verification = any(term in value for term in (
         "cart is empty", "empty cart", "verify its price", "verify the price",
         "quantity", "do not checkout", "without checking out",
