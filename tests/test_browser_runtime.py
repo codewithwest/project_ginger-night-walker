@@ -162,3 +162,38 @@ async def test_interact_step_executes_requested_qa_search(monkeypatch):
     assert destination is None
     assert calls == [(page, 'Submit search query "Dark Grey".', "task-qa-search")]
 
+class FakeSteelBrowser:
+    def __init__(self, connected=True):
+        self.connected = connected
+
+    def is_connected(self):
+        return self.connected
+
+
+@pytest.mark.asyncio
+async def test_steel_session_is_retained_for_report_preview_then_marked_offline(monkeypatch):
+    runtime = BrowserRuntime()
+    context = FakeContext()
+    steel = FakeSteelBrowser()
+    runtime._task_contexts["task-steel"] = context
+    runtime._task_pages["task-steel"] = context.page
+    runtime._steel_sessions[id(context)] = ("steel-session-1", steel)
+    runtime._task_sessions["task-steel"] = {
+        "backend": "steel", "status": "active", "active": True,
+        "session_id": "steel-session-1", "activity": [],
+    }
+    monkeypatch.setenv("STEEL_SESSION_RETENTION_MS", "600000")
+
+    await runtime.close_task_session("task-steel")
+
+    retained = runtime.task_session("task-steel")
+    assert retained["status"] == "retained"
+    assert retained["active"] is True
+    assert retained["debug_url"] if "debug_url" in retained else True
+    assert context.closed is False
+    assert id(context) in runtime._steel_sessions
+
+    steel.connected = False
+    offline = runtime.task_session("task-steel")
+    assert offline["status"] == "offline"
+    assert offline["active"] is False
