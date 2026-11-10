@@ -61,6 +61,7 @@ def test_retry_requeues_only_blocked_steps_with_verified_dependencies():
     assert reset == ["extract"]
     assert plan["steps"][0]["status"] == "completed"
     assert plan["steps"][1]["status"] == "pending"
+    assert plan["steps"][1]["result"] is None
     assert [step["step_id"] for step in ready_steps(plan)] == ["extract"]
 
 
@@ -71,5 +72,6 @@ def test_retry_does_not_requeue_step_with_unverified_dependency():
 
     assert reset_retryable_steps(plan) == []
     assert plan["steps"][0]["status"] == "blocked"
+    assert plan["steps"][0]["result"] == "Navigation failed"
     assert plan["steps"][1]["status"] == "pending"
     assert ready_steps(plan) == []
