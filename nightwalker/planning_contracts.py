@@ -3,6 +3,18 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
+class PlannedSubtask(BaseModel):
+    """Legacy workflow-plan shape retained for compatibility outside goal analysis."""
+    model_config = ConfigDict(extra="forbid")
+    subtask_id: str = Field(min_length=1, max_length=80)
+    objective: str = Field(min_length=1, max_length=1000)
+    capability: str = Field(min_length=1, max_length=40)
+    required_tools: list[str] = Field(default_factory=list, max_length=12)
+    success_criteria: list[str] = Field(default_factory=list, max_length=12)
+    depends_on: list[str] = Field(default_factory=list, max_length=12)
+    expected_output: str = Field(default="", max_length=1000)
+
+
 class SuccessCriterion(BaseModel):
     model_config = ConfigDict(extra="forbid")
     criterion_id: str = Field(min_length=1, max_length=40)
