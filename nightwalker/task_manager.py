@@ -357,6 +357,7 @@ class TaskManager:
             record["workflow_type"] = WorkflowType.QA.value
             self._persist(task_id)
         snapshot = {**record, "logs": list(record.get("logs", []))}
+        snapshot["browser_session"] = self.orchestrator.browser.task_session(task_id)
         snapshot["execution_trace"] = self.trace_store.read(task_id, limit=30)
         snapshot["timing"] = self.timing.snapshot(record)
         snapshot["inference_events"] = self.orchestrator.ollama.inference_events_for_task(task_id)
