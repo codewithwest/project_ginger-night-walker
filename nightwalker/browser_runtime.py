@@ -922,9 +922,14 @@ class BrowserRuntime:
                         (el.innerText || '') + ' ' + (el.getAttribute('aria-label') || '') + ' ' +
                         (el.getAttribute('value') || '') + ' ' + (el.getAttribute('title') || '')
                     ));
+                    const productLink = Array.from(node.querySelectorAll('a[href]')).find(a =>
+                        a.href && (a.querySelector('img') || /product|view|details/i.test(
+                            (a.innerText || '') + ' ' + (a.getAttribute('aria-label') || '') + ' ' + a.className
+                        )));
                     return {index, title: titleText.trim(), text: (node.innerText || node.textContent || '').trim().slice(0, 4000), addCount: add.length,
                         addText: add.map(el => (el.innerText || el.getAttribute('aria-label') ||
-                            el.getAttribute('value') || el.getAttribute('title') || '').trim())};
+                            el.getAttribute('value') || el.getAttribute('title') || '').trim()),
+                        productUrl: productLink ? productLink.href : ''};
                 })"""
                 )
             # Always submit the requested variant/product query through the visible
@@ -1028,8 +1033,69 @@ class BrowserRuntime:
                 result = {"status": "blocked", "reason": "Expected one exact product card; found "
                           + str(len(matches)), "candidate_count": len(matches), "search_attempted": search_attempted,
                           "scroll_attempted": scroll_attempted, "scroll_steps": scroll_steps, "search_status": search_status}
+            elif matches[0]["addCount"] == 0 and matches[0].get("productUrl"):
+                # Many storefronts intentionally expose no add control on listing
+                # cards. Follow the exact matching product's same-origin PDP and
+                # inspect its purchase controls there before declaring discovery failed.
+                product_url = str(matches[0]["productUrl"])
+                current_parts = urlparse(page.url)
+                product_parts = urlparse(product_url)
+                if (current_parts.scheme, current_parts.hostname) != (product_parts.scheme, product_parts.hostname):
+                    result = {"status": "blocked", "reason": "The matching product link is not same-origin; refusing cross-site navigation."}
+                else:
+                    await page.locator(selector).nth(int(matches[0]["index"])).locator("a[href]").filter(
+                        has=page.locator("img")
+                    ).first.click(timeout=7000)
+                    await page.wait_for_load_state("domcontentloaded", timeout=10000)
+                    await page.wait_for_timeout(700)
+                    pdp_identity = normal((await page.locator("body").inner_text())[:12000])
+                    if normal(name) not in pdp_identity:
+                        result = {"status": "blocked", "reason": "Opened the product detail page, but its visible content did not confirm the requested product name.",
+                                  "product_url": page.url}
+                    else:
+                        pdp_adds = page.locator('button, a, input[type="submit"], [role="button"]')
+                        pdp_add_indexes = await pdp_adds.evaluate_all(
+                            """nodes => nodes.map((el, index) => ({index,
+                                label: ((el.innerText || '') + ' ' + (el.getAttribute('aria-label') || '') + ' ' +
+                                (el.getAttribute('value') || '') + ' ' + (el.getAttribute('title') || '')).trim(),
+                                disabled: !!el.disabled || el.getAttribute('aria-disabled') === 'true'
+                            })).filter(x => /add to cart/i.test(x.label))"""
+                        )
+                        enabled_adds = [item for item in pdp_add_indexes if not item["disabled"]]
+                        if len(enabled_adds) == 1:
+                            journey["product_page"] = True
+                            journey["product_url"] = page.url
+                            journey["pdp_add_index"] = enabled_adds[0]["index"]
+                            result = {"status": "verified", "product_name": matches[0]["title"],
+                                      "product_url": page.url, "add_control": enabled_adds[0]["label"],
+                                      "add_control_count": 1, "discovered_on": "product_detail_page",
+                                      "search_attempted": search_attempted, "search_status": search_status}
+                        else:
+                            # Record purchase prerequisites so the next model step can
+                            # inspect required variant/store/fulfilment choices.
+                            prerequisites = await page.locator(
+                                'select, input[type="radio"], input[type="checkbox"], [role="radiogroup"], [role="listbox"]'
+                            ).evaluate_all(
+                                """nodes => nodes.slice(0, 30).map(el => ({
+                                    tag: el.tagName, type: el.type || null, name: el.name || el.id || '',
+                                    label: (el.labels && Array.from(el.labels).map(x => x.innerText).join(' ')) ||
+                                        el.getAttribute('aria-label') || el.getAttribute('placeholder') || '',
+                                    value: el.value || '', required: !!el.required,
+                                    options: el.tagName === 'SELECT' ? Array.from(el.options).map(o => ({
+                                        label: o.textContent.trim(), value: o.value, disabled: o.disabled,
+                                        selected: o.selected
+                                    })).slice(0, 20) : []
+                                }))"""
+                            )
+                            journey["product_page"] = True
+                            journey["product_url"] = page.url
+                            result = {"status": "blocked",
+                                      "reason": "The product detail page requires configuration or store/fulfilment selection before an enabled Add to Cart control is available.",
+                                      "product_name": matches[0]["title"], "product_url": page.url,
+                                      "add_control_count": len(enabled_adds),
+                                      "purchase_prerequisites": prerequisites}
             elif matches[0]["addCount"] != 1:
-                result = {"status": "blocked", "reason": "The matching card does not contain exactly one Add to Cart control.",
+                result = {"status": "blocked", "reason": "The matching product card exposes multiple Add to Cart controls.",
                           "product_name": matches[0]["title"], "add_control_count": matches[0]["addCount"]}
             else:
                 journey["card_index"] = matches[0]["index"]
@@ -1047,8 +1113,11 @@ class BrowserRuntime:
             discovery = journey.get("steps", {}).get("discovery", {})
             if discovery.get("status") != "verified":
                 return {"status": "blocked", "reason": "A unique product card was not verified."}
-            card = page.locator(journey["card_selector"]).nth(int(journey["card_index"]))
-            controls = card.locator('button, a, input[type="submit"], [role="button"]')
+            if journey.get("product_page"):
+                controls = page.locator('button, a, input[type="submit"], [role="button"]')
+            else:
+                card = page.locator(journey["card_selector"]).nth(int(journey["card_index"]))
+                controls = card.locator('button, a, input[type="submit"], [role="button"]')
             add_indexes = await controls.evaluate_all(
                 """nodes => nodes.map((el, index) => ({
                     index,
