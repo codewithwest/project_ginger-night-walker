@@ -1,7 +1,7 @@
 from nightwalker.workflows import (
     WorkflowType, _qa_content_objective, build_workflow_blueprint, classify_workflow,
-    extract_product_search_query, qa_requires_site_crawl, qa_scope_for_objective,
-    target_url_from_objective,
+    build_product_search_blueprint, extract_product_search_query,
+    qa_requires_site_crawl, qa_scope_for_objective, target_url_from_objective,
 )
 
 
@@ -125,3 +125,29 @@ def test_qa_content_objective_injects_extracted_product():
     assert 'Search for "https://example.com"' not in url_fallback_obj
     assert 'Search for the requested product only when a usable control is found' in url_fallback_obj
 
+
+
+
+def test_product_search_blueprint_authorises_search_as_interaction():
+    objective = 'Search for "Dark Grey" and verify its name, image and price on https://weylandts.co.za'
+    blueprint = build_product_search_blueprint(objective)
+    steps = {item.subtask_id: item for item in blueprint.subtasks}
+
+    assert list(steps) == [
+        "qa-navigation", "qa-availability", "qa-content",
+        "qa-validate", "qa-synthesise",
+    ]
+    assert steps["qa-navigation"].capability.value == "navigate"
+    assert steps["qa-availability"].capability.value == "interact"
+    assert 'Search for "Dark Grey"' in steps["qa-availability"].objective
+    assert steps["qa-availability"].depends_on == ["qa-navigation"]
+    assert steps["qa-content"].capability.value == "extract"
+    assert steps["qa-content"].depends_on == ["qa-availability"]
+    assert steps["qa-validate"].depends_on == ["qa-content"]
+    assert steps["qa-synthesise"].depends_on == ["qa-validate"]
+    assert {
+        item.criterion_id for item in blueprint.success_criteria
+    } == {
+        "sc-navigation", "sc-search-submission", "sc-product-name",
+        "sc-product-image", "sc-product-price",
+    }
