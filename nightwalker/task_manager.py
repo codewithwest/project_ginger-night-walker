@@ -30,6 +30,7 @@ from nightwalker.plan_execution import (
     ready_steps_for_capture,
     reset_retryable_steps,
     start_step,
+    validate_plan_dependencies,
 )
 from nightwalker.research_guard import ResearchLoopGuard, canonical_url_key
 from nightwalker.research_relevance import (
@@ -703,9 +704,13 @@ class TaskManager:
                 resume_plan_source = False
                 if isinstance(execution_plan, dict):
                     available_plan_steps = ready_steps(execution_plan)
-                    if str(record.get("workflow_type") or "") in {"seo", "qa", "seo_qa"}:
-                        # Final synthesis is a task-level acceptance step, not a page-level
-                        # action; leave it pending until the crawl is exhausted.
+                    if (
+                        str(record.get("workflow_type") or "") in {"seo", "qa", "seo_qa"}
+                        and not is_ecommerce_cart_workflow(str(record.get("objective") or ""))
+                    ):
+                        # Crawl-oriented audits defer task-level validation/synthesis
+                        # until coverage is exhausted. A cart journey is sequential
+                        # interaction work, so execute every authored step in order.
                         available_plan_steps = [
                             step for step in available_plan_steps
                             if not str(step.get("step_id", "")).endswith((
@@ -1437,10 +1442,10 @@ class TaskManager:
                 # Focused product-search QA is a sequential browser journey,
                 # not a crawl. The next authorised mission action must run on the
                 # already captured page even when it yielded no crawl candidates.
-                if focused_product_search:
+                if focused_product_search or focused_cart_journey:
                     pending_actions = [
                         step for step in ready_steps(record.get("execution_plan") or {})
-                        if not str(step.get("step_id", "")).endswith((
+                        if focused_cart_journey or not str(step.get("step_id", "")).endswith((
                             "qa-validate", "qa-synthesise",
                         ))
                     ]
@@ -1584,6 +1589,25 @@ class TaskManager:
                 self._log(task_id, f"Next source selected: {next_url}")
 
             record["round"] = round_count
+            execution_plan = record.get("execution_plan")
+            if isinstance(execution_plan, dict):
+                dependency_issues = validate_plan_dependencies(execution_plan)
+                if dependency_issues:
+                    summary = "; ".join(
+                        f"{item['step_id']} depends on unverified: {', '.join(item['unmet_dependencies'])}"
+                        for item in dependency_issues
+                    )
+                    limitations.append(
+                        "Post-execution dependency validation found unresolved plan dependencies: " + summary
+                    )
+                    self._log(
+                        task_id,
+                        "Plan executed without dependency gating; post-execution validation found: " + summary,
+                        "warning",
+                    )
+                else:
+                    self._log(task_id, "Post-execution plan dependency validation passed.")
+                self._persist(task_id)
             workflow_value = str(record.get("workflow_type") or "")
             if workflow_value in {"seo", "qa", "seo_qa"}:
                 from nightwalker.audit_analysis import (
