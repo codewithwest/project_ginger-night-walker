@@ -196,6 +196,23 @@ def test_routes_ecommerce_cart_journey_to_qa_without_product_search_override():
 
 
 
+def test_cart_detector_accepts_product_name_between_add_action_and_cart():
+    prompts = [
+        'Add “Dark Grey” to the cart, verify its price and quantity, then remove it.',
+        "Add the Dark Grey product to my shopping cart and check the quantity.",
+        "Put the 'Dark Grey' item into the cart, verify the price, then remove the item from the cart.",
+    ]
+    assert all(is_ecommerce_cart_workflow(prompt) for prompt in prompts)
+
+
+def test_cart_detector_does_not_classify_product_research_as_cart_workflow():
+    prompts = [
+        'Search for "Dark Grey" and report its price and quantity on https://example.com',
+        "Find Dark Grey products in the catalogue and compare prices.",
+    ]
+    assert not any(is_ecommerce_cart_workflow(prompt) for prompt in prompts)
+
+
 def test_cart_journey_uses_deterministic_ordered_interaction_plan():
     objective = 'Open https://www.weylandts.co.za/products. Add “Dark Grey” to the cart. Verify its price and quantity, then remove it. Confirm the cart is empty and report any problems. Do not checkout.'
     assert is_ecommerce_cart_workflow(objective)
