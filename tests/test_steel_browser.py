@@ -3,6 +3,12 @@ import asyncio
 import pytest
 
 from nightwalker.browser_runtime import BrowserRuntime
+from nightwalker.ollama_client import OllamaClient
+from nightwalker.steel_mcp import (
+    normalise_steel_target,
+    normalise_steel_tool_arguments,
+    search_follow_up_actions,
+)
 
 
 def test_browser_backend_defaults_to_local(monkeypatch):
@@ -157,11 +163,20 @@ def test_steel_debug_url_is_host_reachable_for_compose_ui(monkeypatch):
     assert runtime._normalise_steel_debug_url(
         "http://0.0.0.0:3000/session/abc"
     ) == "http://localhost:3000/session/abc"
+    assert runtime._normalise_steel_debug_url(
+        "http://steel-browser:3000/v1/sessions/abc/debug"
+    ) == "http://localhost:3000/v1/sessions/debug"
+
+
+class _ConnectedBrowser:
+    def is_connected(self) -> bool:
+        return True
 
 
 def test_task_session_exposes_browser_activity_without_session_id(monkeypatch):
     monkeypatch.setenv("BROWSER_BACKEND", "steel")
     runtime = BrowserRuntime()
+    runtime._steel_sessions["task-1"] = ("internal-session-id", _ConnectedBrowser())
     runtime._task_sessions["task-1"] = {
         "backend": "steel",
         "status": "active",
@@ -176,3 +191,65 @@ def test_task_session_exposes_browser_activity_without_session_id(monkeypatch):
     assert snapshot["status"] == "active"
     assert snapshot["debug_url"] == "http://localhost:3000/session/abc"
     assert "session_id" not in snapshot
+
+
+def test_bare_steel_refs_are_prefixed_with_at():
+    assert normalise_steel_target("e271") == "@e271"
+    assert normalise_steel_target("@e271") == "@e271"
+    assert normalise_steel_target("button.remove") == "button.remove"
+    assert normalise_steel_tool_arguments(
+        "steel_act",
+        {"action": "click", "target": "e271"},
+    ) == {"action": "click", "target": "@e271"}
+
+
+def test_steel_tool_proposal_recovers_trailing_garbage_json():
+    raw = '{"tool_name":"steel_act","arguments":{"action":"click","target":"@e12"},"reason":"open"}\ntrailing'
+    assert OllamaClient._loads_steel_tool_proposal(raw)["tool_name"] == "steel_act"
+    compact = OllamaClient._compact_steel_observation(
+        {
+            "url": "https://example.test",
+            "session_id": "abc",
+            "snapshot": {"content": [{"type": "text", "text": "x" * 5000}]},
+        },
+        limit=100,
+    )
+    assert compact["snapshot_text"].endswith("…[snapshot truncated]")
+    assert len(compact["snapshot_text"]) < 150
+
+
+def test_steel_tool_proposal_salvages_broken_delimiter_json():
+    # Small models often break mid-object (unescaped quotes / truncation).
+    raw = (
+        '{"tool_name":"steel_act","arguments":{"action":"click","target":"@e271",'
+        '"value":"oops},"reason":"click Remove'
+    )
+    salvaged = OllamaClient._loads_steel_tool_proposal(raw)
+    assert salvaged["tool_name"] == "steel_act"
+    assert salvaged["arguments"]["action"] == "click"
+    assert salvaged["arguments"]["target"] == "@e271"
+
+
+def test_open_search_box_is_typed_and_submitted():
+    snapshot = """
+    - button "Close search" @e74
+    - search "Store"
+    - textbox "Search" @e73 [value=""]
+    - textbox "Email Address" @e54 [value=""] [required=true] [off-screen]
+    """
+    assert search_follow_up_actions(snapshot, "Dark Grey") == [
+        {"action": "type", "target": "@e73", "value": "Dark Grey"},
+        {"action": "press", "target": "@e73", "value": "Enter"},
+    ]
+
+
+def test_search_follow_up_only_submits_when_the_query_is_already_typed():
+    snapshot = '- textbox "Search" @e73 [value="Dark Grey"]'
+    assert search_follow_up_actions(snapshot, "Dark Grey") == [
+        {"action": "press", "target": "@e73", "value": "Enter"},
+    ]
+
+
+def test_search_follow_up_does_nothing_when_no_search_box_is_open():
+    snapshot = '- button "Toggle search form" @e5\n- textbox "Email Address" @e54 [value=""] [off-screen]'
+    assert search_follow_up_actions(snapshot, "Dark Grey") == []

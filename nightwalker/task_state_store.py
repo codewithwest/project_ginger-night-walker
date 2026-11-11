@@ -24,6 +24,10 @@ class TaskStateStore:
         if not task_id:
             raise ValueError("Persisted task must have a task_id")
         self.directory.mkdir(parents=True, exist_ok=True)
+        try:
+            self.directory.chmod(0o777)
+        except OSError:
+            pass
         destination = self.directory / self._filename(task_id)
         temporary = destination.with_suffix(".tmp")
         # Flush the complete JSON document before the atomic rename. The rename

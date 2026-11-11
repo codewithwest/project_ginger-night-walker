@@ -19,6 +19,7 @@ import {
   Minimize2,
   Square,
   Terminal,
+  Trash2,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -202,7 +203,11 @@ function ResearchReport({ result }: { result: BrowserResult }) {
     : rawProductSearch && typeof rawProductSearch === "object"
       ? [rawProductSearch as Record<string, any>]
       : [];
-  const auditSummary = structuredData.audit_report_summary as Record<string, string | number | boolean | undefined> | undefined;
+  const reportKind = String(structuredData.report_kind || "");
+  const cartJourney = reportKind === "cart_journey";
+  const auditSummary = cartJourney
+    ? undefined
+    : structuredData.audit_report_summary as Record<string, string | number | boolean | undefined> | undefined;
   const pageSmoke = structuredData.qa_page_smoke as Record<string, any> | undefined;
   const singlePageScope = auditSummary?.crawl_scope === "single_page";
   const summaryMetrics = auditSummary ? singlePageScope ? [
@@ -224,17 +229,23 @@ function ResearchReport({ result }: { result: BrowserResult }) {
     { label: "Accessibility findings", value: auditSummary.accessibility_findings ?? 0 },
   ] : [];
   const limitations = result.limitations || result.issues || [];
-  const reportLabel = result.workflow_type
-    ? result.workflow_type.replaceAll("_", " ").toUpperCase() + " REPORT"
-    : "RESEARCH REPORT";
+  const reportLabel = cartJourney
+    ? "CART JOURNEY REPORT"
+    : result.workflow_type
+      ? result.workflow_type.replaceAll("_", " ").toUpperCase() + " REPORT"
+      : "RESEARCH REPORT";
   return (
-    <section className="answer-panel research-report">
+    <section className={"answer-panel research-report" + (cartJourney ? " research-report--cart" : "")}>
       <div className="answer-panel__topline">
         <span className="eyebrow"><Check size={13} /> {reportLabel}</span>
-        <span className="result-count">{findings.length} findings · {sources.length} sources{result.schema_version ? " · schema " + result.schema_version : ""}</span>
+        <span className="result-count">
+          {cartJourney
+            ? `${sources.length} source${sources.length === 1 ? "" : "s"} · step-by-step findings`
+            : `${findings.length} findings · ${sources.length} sources${result.schema_version ? " · schema " + result.schema_version : ""}`}
+        </span>
       </div>
       <div className="research-report__answer">
-        <span className="answer-highlight__label">ANSWER</span>
+        <span className="answer-highlight__label">{cartJourney ? "MISSION BREAKDOWN" : "ANSWER"}</span>
         <MarkdownContent className="markdown-content--answer">{result.answer || "The page was captured. Review the findings and source evidence below."}</MarkdownContent>
       </div>
       {result.goal_state && <details className="report-details research-section">
@@ -387,6 +398,14 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [toast, setToast] = useState<{ tone: "error" | "success" | "info"; title: string; message: string } | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    title: string;
+    message: string;
+    confirmLabel: string;
+    taskId: string;
+  } | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [online, setOnline] = useState(false);
   const [checklistPinned, setChecklistPinned] = useState(false);
   const [checklistDismissed, setChecklistDismissed] = useState(false);
@@ -407,6 +426,29 @@ export default function App() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [checklistFullscreen]);
+
+  useEffect(() => {
+    if (!confirmDialog) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !deleting) setConfirmDialog(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [confirmDialog, deleting]);
+
+  useEffect(() => {
+    if (!error) return;
+    setToast({ tone: "error", title: "Something went wrong", message: error });
+  }, [error]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => {
+      setToast(null);
+      setError("");
+    }, toast.tone === "error" ? 7000 : 4200);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -567,6 +609,42 @@ export default function App() {
     }
   }
 
+  function requestDeleteMission(taskId: string) {
+    const task = tasks.find((item) => item.task_id === taskId);
+    const preview = (task?.objective || taskId).trim();
+    setConfirmDialog({
+      title: "Delete this mission?",
+      message: preview.length > 140
+        ? `Remove “${preview.slice(0, 140)}…” and its workspace evidence from this machine.`
+        : `Remove “${preview}” and its workspace evidence from this machine.`,
+      confirmLabel: "Delete mission",
+      taskId,
+    });
+  }
+
+  async function confirmDeleteMission() {
+    if (!confirmDialog || deleting) return;
+    const taskId = confirmDialog.taskId;
+    setDeleting(true);
+    setError("");
+    try {
+      await api(`/tasks/${encodeURIComponent(taskId)}/workspace`, { method: "DELETE" });
+      setTasks((current) => current.filter((item) => item.task_id !== taskId));
+      if (selectedId === taskId) setSelectedId(null);
+      setConfirmDialog(null);
+      setToast({
+        tone: "success",
+        title: "Mission deleted",
+        message: "The mission and its local workspace files were removed.",
+      });
+    } catch (cause) {
+      setConfirmDialog(null);
+      setError(cause instanceof Error ? cause.message : "Delete failed");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   async function stop() {
     if (!selected) return;
 
@@ -593,11 +671,12 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <a className="wordmark" href="/" aria-label="Ginger Night Walker home">
-          <span className="wordmark__mark">g.</span>
+        <a className="wordmark" href="/" aria-label="Vaimo Night Walker home">
+          <img className="wordmark__logo wordmark__logo--dark" src="/vaimo-logo-white.svg" alt="" />
+          <img className="wordmark__logo wordmark__logo--light" src="/vaimo-logo-black.svg" alt="" />
           <span>
-            <strong>GINGER</strong>
-            <small>NIGHT WALKER</small>
+            <strong>Night Walker</strong>
+            <small>Vaimo</small>
           </span>
         </a>
 
@@ -708,17 +787,39 @@ export default function App() {
               ) : (
                 <div className="mission-items">
                   {tasks.map((task) => (
-                    <button
+                    <div
                       key={task.task_id}
+                      role="button"
+                      tabIndex={0}
                       className={
                         "mission-item " +
                         (selectedId === task.task_id ? "is-selected" : "")
                       }
                       onClick={() => setSelectedId(task.task_id)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          setSelectedId(task.task_id);
+                        }
+                      }}
                     >
                       <span className="mission-item__top">
                         <Status value={task.status} />
-                        <time>{formatTime(task.created_at)}</time>
+                        <span className="mission-item__actions">
+                          <time>{formatTime(task.created_at)}</time>
+                          <button
+                            type="button"
+                            className="mission-item__delete"
+                            aria-label="Delete mission"
+                            title="Delete mission"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              requestDeleteMission(task.task_id);
+                            }}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </span>
                       </span>
                       <strong>{task.objective}</strong>
                       {task.plan_progress && task.plan_progress.total > 0 && (
@@ -728,7 +829,7 @@ export default function App() {
                       <span className="mission-item__id">
                         {task.task_id.slice(0, 18)}
                       </span>
-                    </button>
+                    </div>
                   ))}
                 </div>
               )}
@@ -1022,7 +1123,6 @@ export default function App() {
               </div>
             )}
 
-            {error && <div className="error-banner"><CircleAlert size={15} />{error}</div>}
           </section>
         </div>
 
@@ -1083,11 +1183,13 @@ export default function App() {
                 <ExternalLink size={12} />
               </a>
             )}
-            {selected?.browser?.backend === "steel" && selected.browser.active && selected.browser.steel_ui_url ? (
+            {(selected?.browser?.backend === "steel" || selected?.browser?.backend === "steel-mcp")
+              && selected.browser.active
+              && (selected.browser.debug_url || selected.browser.steel_ui_url) ? (
               <div className="floating-browser__viewer">
                 <iframe
                   title="Steel browser interface"
-                  src={selected.browser.steel_ui_url}
+                  src={selected.browser.debug_url || selected.browser.steel_ui_url || ""}
                   allow="autoplay; fullscreen"
                   referrerPolicy="no-referrer"
                 />
@@ -1121,7 +1223,11 @@ export default function App() {
             <div className="floating-browser__resize-hint">Resize from the lower-right corner · width and height are adjustable</div>
             <div className="floating-browser__footer">
               <span>Live view is read-only</span>
-              {selected?.browser?.backend === "steel" && selected.browser.steel_ui_url && <a href={selected.browser.steel_ui_url} target="_blank" rel="noreferrer">Open Steel UI <ExternalLink size={11} /></a>}
+              {(selected?.browser?.debug_url || selected?.browser?.steel_ui_url) && (
+                <a href={selected.browser.debug_url || selected.browser.steel_ui_url || ""} target="_blank" rel="noreferrer">
+                  Open live view <ExternalLink size={11} />
+                </a>
+              )}
             </div>
           </section>
         </div>
@@ -1226,8 +1332,81 @@ export default function App() {
           </div>
         )}
 
+        {toast && (
+          <div
+            className={`app-toast app-toast--${toast.tone}`}
+            role="status"
+            aria-live="polite"
+          >
+            <span className="app-toast__icon" aria-hidden="true">
+              {toast.tone === "success" ? <Check size={16} /> : <CircleAlert size={16} />}
+            </span>
+            <div className="app-toast__body">
+              <strong>{toast.title}</strong>
+              <p>{toast.message}</p>
+            </div>
+            <button
+              type="button"
+              className="app-toast__close"
+              aria-label="Dismiss notification"
+              onClick={() => {
+                setToast(null);
+                setError("");
+              }}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
+        {confirmDialog && (
+          <div
+            className="confirm-overlay"
+            role="presentation"
+            onClick={() => {
+              if (!deleting) setConfirmDialog(null);
+            }}
+          >
+            <div
+              className="confirm-dialog"
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="confirm-dialog-title"
+              aria-describedby="confirm-dialog-message"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="confirm-dialog__icon" aria-hidden="true">
+                <Trash2 size={18} />
+              </div>
+              <div className="confirm-dialog__copy">
+                <h2 id="confirm-dialog-title">{confirmDialog.title}</h2>
+                <p id="confirm-dialog-message">{confirmDialog.message}</p>
+              </div>
+              <div className="confirm-dialog__actions">
+                <button
+                  type="button"
+                  className="confirm-dialog__cancel"
+                  disabled={deleting}
+                  onClick={() => setConfirmDialog(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="confirm-dialog__confirm"
+                  disabled={deleting}
+                  onClick={() => void confirmDeleteMission()}
+                >
+                  {deleting ? <LoaderCircle size={14} className="spin" /> : <Trash2 size={14} />}
+                  {deleting ? "Deleting…" : confirmDialog.confirmLabel}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <footer className="footer">
-          <span>GINGER NIGHT WALKER</span>
+          <span>Vaimo · Night Walker</span>
           <span><ShieldCheck size={13} /> READ-ONLY BROWSER · POLICY-GOVERNED · LOCAL-FIRST</span>
         </footer>
       </main>

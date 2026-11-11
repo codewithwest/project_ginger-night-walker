@@ -52,13 +52,61 @@ class BrowserRuntime:
         self.steel_mcp = SteelMCPClient()
         self._steel_mcp_start_error: str | None = None
 
+    async def release_untracked_steel_sessions(self) -> int:
+        """Delete Steel sessions this process does not own.
+
+        A crashed or retried mission can leave an idle session with no timeout.
+        Steel then refuses every new session, so the live viewer never appears.
+        Idle leftovers from a previous run are always eligible for reclaim so a
+        new mission never inherits another journey's browser.
+        """
+        api_base = os.getenv("STEEL_API_BASE_URL", "http://steel-browser:3000/v1").rstrip("/")
+        api_key = os.getenv("STEEL_API_KEY", "").strip()
+        tracked = set(getattr(self.steel_mcp, "_sessions", {}).values())
+        tracked.update(session_id for session_id, _browser in self._steel_sessions.values())
+        headers = {"steel-api-key": api_key} if api_key else {}
+        released = 0
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.get(f"{api_base}/sessions", headers=headers)
+                if response.status_code >= 400:
+                    return 0
+                payload = response.json()
+        except (httpx.HTTPError, ValueError, TypeError):
+            return 0
+        sessions = payload.get("sessions") if isinstance(payload, dict) else payload
+        if not isinstance(sessions, list):
+            return 0
+        for item in sessions:
+            if not isinstance(item, dict):
+                continue
+            session_id = str(item.get("id") or item.get("sessionId") or "")
+            status = str(item.get("status") or "").casefold()
+            if not session_id:
+                continue
+            # Already-released history can grow into hundreds of rows; never POST
+            # /release for those or startup hangs reclaiming dead sessions.
+            if status in {"released", "failed"}:
+                continue
+            if session_id in tracked and status not in {"idle"}:
+                continue
+            await self._release_steel_session(session_id)
+            for task_id, mapped in list(getattr(self.steel_mcp, "_sessions", {}).items()):
+                if mapped == session_id:
+                    self.steel_mcp._sessions.pop(task_id, None)
+            released += 1
+        return released
+
     async def start(self) -> None:
         self._playwright = await async_playwright().start()
         if self.backend == "local":
             self._browser = await self._playwright.chromium.launch(headless=True)
         try:
+            self.steel_mcp.reclaim_sessions = self.release_untracked_steel_sessions
+            self.steel_mcp.release_remote_session = self._release_steel_session
             await self.steel_mcp.start()
             self._steel_mcp_start_error = None
+            await self.release_untracked_steel_sessions()
         except Exception as exc:  # noqa: BLE001 - MCP is optional; preserve the Playwright runtime
             self._steel_mcp_start_error = f"{type(exc).__name__}: {str(exc)[:500]}"
             logging.getLogger(__name__).warning(
@@ -239,10 +287,16 @@ class BrowserRuntime:
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
                 headers = {"steel-api-key": api_key} if api_key else {}
-                response = await client.delete(
-                    f"{api_base}/sessions/{session_id}",
+                # Current Steel builds reject DELETE and only free the slot via POST /release.
+                response = await client.post(
+                    f"{api_base}/sessions/{session_id}/release",
                     headers=headers,
                 )
+                if response.status_code == 404:
+                    response = await client.delete(
+                        f"{api_base}/sessions/{session_id}",
+                        headers=headers,
+                    )
                 if response.status_code not in {200, 202, 204, 404}:
                     response.raise_for_status()
         except httpx.HTTPError:
@@ -250,18 +304,20 @@ class BrowserRuntime:
             pass
 
     @staticmethod
-    def _normalise_steel_debug_url(debug_url: str, session_id: str = "") -> str:
-        """Pin the viewer to Steel's host and repair legacy unscoped debug routes."""
+    def _normalise_steel_debug_url(debug_url: str) -> str:
+        """Pin the viewer to Steel's host and point it at the served live viewer route.
+
+        Steel builds in use serve the live viewer only at the shared
+        ``/v1/sessions/debug`` page (it streams the active cast). Per-session
+        ``/sessions/{id}/debug`` routes return 404, so they are rewritten here.
+        """
         parsed = urlparse(debug_url)
         api = urlparse(os.getenv("STEEL_API_BASE_URL", "http://steel-browser:3000/v1"))
         host = os.getenv("STEEL_VIEWER_HOST", "localhost").strip()
         path = parsed.path
-        # Steel's session-aware viewer routes require the session ID in the path.
-        # Some versions advertise the old shared /sessions/debug endpoint, which
-        # then causes the viewer to request /sessions/cast (no session ID).
-        if session_id and re.fullmatch(r"/(?:v1/)?sessions/debug/?", path):
+        if re.fullmatch(r"/(?:v1/)?sessions/(?:debug|[^/]+/debug)/?", path):
             prefix = "/v1" if path.startswith("/v1/") else ""
-            path = f"{prefix}/sessions/{session_id}/debug"
+            path = f"{prefix}/sessions/debug"
         if not host:
             return parsed._replace(path=path).geturl()
         netloc = f"[{host}]" if ":" in host else host
@@ -374,7 +430,7 @@ class BrowserRuntime:
                 self._task_sessions[task_id] = {
                     "backend": "steel", "status": "connecting", "active": True,
                     "session_id": session_id,
-                    "debug_url": self._normalise_steel_debug_url(debug_url, session_id) if debug_url else None,
+                    "debug_url": self._normalise_steel_debug_url(debug_url) if debug_url else None,
                     "steel_ui_url": self._steel_ui_url(api_base),
                     "activity": [],
                     "started_at": datetime.now(UTC).isoformat(),
@@ -1310,9 +1366,7 @@ class BrowserRuntime:
             # Publish the viewer as soon as Steel allocates the session, before
             # navigation or snapshot capture can take a long time.
             state["session_id"] = session_id
-            state["debug_url"] = self._normalise_steel_debug_url(
-                f"{api_base}/sessions/{session_id}/debug", session_id,
-            )
+            state["debug_url"] = self._normalise_steel_debug_url(f"{api_base}/sessions/debug")
             state["steel_ui_url"] = self._steel_ui_url(api_base)
             state["status"] = "active"
             state["active"] = True
@@ -1328,6 +1382,7 @@ class BrowserRuntime:
                     task_id, url, step_objective, capability,
                     ollama.propose_steel_mcp_tool_call,
                     session_callback=expose_live_session,
+                    mission_objective=objective,
                 ),
                 timeout=timeout_seconds,
             )
@@ -1338,10 +1393,21 @@ class BrowserRuntime:
                 task_id, message, url=url, status="failed",
                 action="steel_mcp_timeout", plan_step_id=step_id,
             )
+            state["last_error"] = message
+            state["active"] = False
             return {
                 "status": "failed", "issues": [message],
                 "browser_backend": "steel-mcp",
             }
+        except (RuntimeError, OSError, ValueError) as exc:
+            message = str(exc)[:500]
+            self._browser_event(
+                task_id, f"Steel MCP session failed: {message[:350]}",
+                url=url, status="failed", action="steel_mcp_failed", plan_step_id=step_id,
+            )
+            state["last_error"] = message
+            state["active"] = False
+            raise
         session_id = str(result.get("session_id") or "")
         if session_id:
             expose_live_session(session_id)
@@ -1358,7 +1424,7 @@ class BrowserRuntime:
         # Steel's snapshot identifies the actual live URL and document title.
         # Prefer that observed state over the task's original/previous URL.
         page_match = re.search(
-            r"(https?://[^\\s<>]+?)\\s+—\\s+(.+?)\\s+\\(snapshot",
+            r"(https?://[^\s<>]+?)\s+—\s+(.+?)\s+\(snapshot",
             captured_text,
         )
         final_url = page_match.group(1).rstrip(".,)") if page_match else url
@@ -1376,6 +1442,14 @@ class BrowserRuntime:
                 "steel_tool": result.get("tool_name"),
                 "steel_session_id": result.get("session_id"),
                 "mission_step": {"step_id": step_id, "capability": capability},
+                **(
+                    {"qa_product_search": result.get("search_submission")}
+                    if isinstance(result.get("search_submission"), dict) else {}
+                ),
+                **(
+                    {"qa_cart_progress": result.get("cart_progress")}
+                    if isinstance(result.get("cart_progress"), dict) else {}
+                ),
             },
         }
         evidence_id = self.evidence.save(task_id, evidence_payload)

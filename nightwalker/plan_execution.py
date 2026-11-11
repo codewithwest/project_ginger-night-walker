@@ -14,7 +14,7 @@ TERMINAL = {"completed", "blocked", "failed", "skipped"}
 # Canonical step IDs the runtime knows how to execute and verify.
 # The model-generated blueprint must only use IDs from this set.
 _QA_CANONICAL_STEP_IDS = {
-    "qa-discover", "qa-availability", "qa-content",
+    "qa-discover", "qa-availability", "qa-action", "qa-content",
     "qa-navigation", "qa-crawl", "qa-validate", "qa-synthesise",
 }
 _SEO_CANONICAL_STEP_IDS = {

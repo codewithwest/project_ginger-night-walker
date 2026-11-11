@@ -73,16 +73,28 @@ def test_retry_requeues_only_blocked_steps_with_verified_dependencies():
 
 
 def test_retry_does_not_requeue_step_with_unverified_dependency():
-    plan = sample_plan()
+    plan = initialise_plan({
+        "version": 1,
+        "subtasks": [
+            {"subtask_id": "open", "objective": "Open homepage", "capability": "navigate",
+             "depends_on": [], "success_criteria": [], "expected_output": "Page evidence"},
+            {"subtask_id": "extract", "objective": "Extract products", "capability": "extract",
+             "depends_on": ["open"], "success_criteria": [], "expected_output": "Product records"},
+            {"subtask_id": "confirm", "objective": "Confirm extraction", "capability": "extract",
+             "depends_on": ["extract"], "success_criteria": [], "expected_output": "Confirmation"},
+        ],
+    })
     start_step(plan, "open")
     fail_step(plan, "open", "Navigation failed", blocked=True)
+    start_step(plan, "confirm")
+    fail_step(plan, "confirm", "Cannot confirm without extraction", blocked=True)
 
-    assert reset_retryable_steps(plan) == []
-    assert plan["steps"][0]["status"] == "blocked"
-    assert plan["steps"][0]["result"] == "Navigation failed"
-    assert plan["steps"][1]["status"] == "pending"
-    # A later step can still execute; dependency integrity is reported afterwards.
-    assert [step["step_id"] for step in ready_steps(plan)] == ["extract"]
+    # Root navigation can be retried (no unmet deps). Dependent blocked work
+    # stays blocked until its upstream step is verified again.
+    assert reset_retryable_steps(plan) == ["open"]
+    assert plan["steps"][0]["status"] == "pending"
+    assert plan["steps"][2]["status"] == "blocked"
+    assert plan["steps"][2]["result"] == "Cannot confirm without extraction"
 
 
 

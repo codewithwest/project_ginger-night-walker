@@ -5,20 +5,32 @@ from nightwalker.task_manager import TaskManager
 from nightwalker.task_state_store import TaskStateStore
 
 
+class _StubBrowser:
+    def task_session(self, task_id):
+        return None
+
+
+class _StubOllama:
+    def inference_events_for_task(self, task_id):
+        return []
+
+
 class NoExecutionOrchestrator:
-    ollama = object()
+    ollama = _StubOllama()
+    browser = _StubBrowser()
 
     async def run_browser_workflow(self, *args, **kwargs):
         raise AssertionError("A completed checkpoint must not restart browser work")
 
 
 class InFlightOrchestrator:
-    ollama = object()
+    ollama = _StubOllama()
+    browser = _StubBrowser()
 
     def __init__(self):
         self.calls = []
 
-    async def run_browser_workflow(self, task_id, objective, plan):
+    async def run_browser_workflow(self, task_id, objective, plan, **kwargs):
         self.calls.append(str(plan.target_url))
         return {"status": "failed", "issues": ["simulated interrupted-source retry"], "candidate_urls": []}
 
@@ -126,6 +138,27 @@ async def test_restart_retries_in_flight_source_without_incrementing_round(tmp_p
         "scratchpad": [],
         "follow_up_instructions": [],
         "goal_state": None,
+        "execution_plan": {
+            "version": 1,
+            "status": "pending",
+            "steps": [
+                {
+                    "step_id": "open", "index": 1, "objective": "Open source",
+                    "capability": "navigate", "depends_on": [], "success_criteria": [],
+                    "expected_output": "Page evidence", "status": "pending",
+                    "attempts": 0, "evidence_refs": [], "result": None,
+                },
+                {
+                    "step_id": "extract", "index": 2, "objective": "Capture evidence",
+                    "capability": "extract", "depends_on": ["open"], "success_criteria": [],
+                    "expected_output": "Evidence", "status": "pending",
+                    "attempts": 0, "evidence_refs": [], "result": None,
+                },
+            ],
+            "history": [],
+            "source": "decider_plan",
+            "ordering": "decider_authored",
+        },
         "checkpoint": {
             "version": 1,
             "initial_plan": {
@@ -164,9 +197,13 @@ async def test_restart_retries_in_flight_source_without_incrementing_round(tmp_p
     await manager.running["in-flight"]
 
     task = manager.snapshot("in-flight")
-    assert orchestrator.calls == ["https://example.com/next"]
-    assert task["round"] == 3
+    # The failed source stays the live page; the next authored step continues on it
+    # and the failed step is recorded as failed instead of being re-selected forever.
+    assert orchestrator.calls == ["https://example.com/next", "https://example.com/next"]
+    assert task["round"] == 4
     assert task["status"] == "blocked"
+    steps = {step["step_id"]: step["status"] for step in task["execution_plan"]["steps"]}
+    assert steps == {"open": "failed", "extract": "failed"}
 
 
 @pytest.mark.asyncio
@@ -340,3 +377,21 @@ def test_cart_task_migrates_stale_execution_ledger_even_when_blueprint_is_curren
     assert steps[1]["step_id"] == "qa-discover"
     assert steps[1]["capability"] == "interact"
     assert steps[1]["status"] == "pending"
+
+
+@pytest.mark.asyncio
+async def test_delete_mission_removes_it_from_the_workspace(tmp_path):
+    manager = TaskManager(NoExecutionOrchestrator())
+    manager.state_store = TaskStateStore(str(tmp_path))
+    manager.tasks["nw-delete"] = {
+        "task_id": "nw-delete",
+        "status": "blocked",
+        "logs": [],
+        "progress_events": [],
+    }
+    manager.state_store.save(manager.tasks["nw-delete"])
+
+    assert await manager.delete_mission("nw-delete") is True
+    assert "nw-delete" not in manager.tasks
+    assert manager.state_store.load_all() == []
+    assert await manager.delete_mission("nw-delete") is False

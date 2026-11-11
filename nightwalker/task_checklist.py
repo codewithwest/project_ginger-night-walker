@@ -226,6 +226,10 @@ class TaskChecklist:
             raise ValueError("Checklist requires a task_id")
         markdown = self.render(task)
         self.directory.mkdir(parents=True, exist_ok=True)
+        try:
+            self.directory.chmod(0o777)
+        except OSError:
+            pass
         filename = hashlib.sha256(task_id.encode("utf-8")).hexdigest() + ".md"
         destination = self.directory / filename
         temporary = destination.with_suffix(".tmp")

@@ -2,14 +2,24 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 import os
 import re
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlsplit
 
+logger = logging.getLogger(__name__)
+
 from nightwalker.a2a import A2ABus
 from nightwalker.agent_allocator import AgentAllocator
+from nightwalker.cart_progress import (
+    cart_intent,
+    cart_step_verification,
+    on_product_detail_page,
+    product_out_of_stock,
+)
+from nightwalker.nimble_classifier import cart_mission_allows_alternate
 from nightwalker.contracts import AgentTask
 from nightwalker.crawl_intelligence import (
     candidate_exclusion_reason,
@@ -44,12 +54,21 @@ from nightwalker.scratchpad import TaskScratchpad
 from nightwalker.task_checklist import TaskChecklist
 from nightwalker.task_state_store import TaskStateStore
 from nightwalker.task_timing import TaskTiming
+from nightwalker.cart_report import (
+    apply_cart_goal_from_plan,
+    build_cart_journey_report,
+    cart_limitations_from_plan,
+)
 from nightwalker.workflows import (
     WorkflowType,
+    build_cart_journey_blueprint,
     classify_workflow,
+    coerce_decision_step_capabilities,
     is_ecommerce_cart_workflow,
     extract_product_search_query,
+    objective_requests_search,
     qa_scope_for_objective,
+    step_objective_requires_interaction,
     target_url_from_objective,
 )
 
@@ -59,6 +78,7 @@ class TaskManager:
         self.orchestrator = orchestrator
         self.tasks: dict[str, dict[str, Any]] = {}
         self.running: dict[str, asyncio.Task[None]] = {}
+        self._deleted_task_ids: set[str] = set()
         self.scratchpad = TaskScratchpad()
         self.checklist = TaskChecklist()
         self.state_store = TaskStateStore()
@@ -122,6 +142,151 @@ class TaskManager:
                     "at": self._now(), "event_type": "persistence_warning",
                     "status": record.get("status", "unknown"), "message": message[:500],
                 })
+
+    def _migrate_legacy_cart_plan(self, record: dict[str, Any]) -> bool:
+        """Rebuild stale cart blueprints/ledgers onto the canonical interact journey.
+
+        Preserves verified storefront navigation evidence, resets interaction
+        steps that completed under navigate-only semantics, and coerces
+        capabilities so search/discover/add/remove remain authorised as interact.
+        """
+        objective = str(record.get("objective") or "")
+        if not is_ecommerce_cart_workflow(objective):
+            return False
+
+        canonical = build_cart_journey_blueprint(objective).model_dump(mode="json")
+        canonical_ids = [str(item["subtask_id"]) for item in canonical.get("subtasks") or []]
+        capability_by_id = {
+            str(item["subtask_id"]): str(item.get("capability") or "")
+            for item in canonical.get("subtasks") or []
+        }
+        old_blueprint = record.get("execution_blueprint") if isinstance(record.get("execution_blueprint"), dict) else {}
+        old_plan = record.get("execution_plan") if isinstance(record.get("execution_plan"), dict) else {}
+        old_subtasks = list(old_blueprint.get("subtasks") or [])
+        old_steps = [step for step in (old_plan.get("steps") or []) if isinstance(step, dict)]
+        old_ids = [str(item.get("subtask_id") or "") for item in old_subtasks]
+        plan_ids = [str(step.get("step_id") or "") for step in old_steps]
+
+        capability_stale = False
+        for item in old_subtasks:
+            step_id = str(item.get("subtask_id") or "")
+            expected = capability_by_id.get(step_id)
+            if expected and str(item.get("capability") or "") != expected:
+                capability_stale = True
+                break
+        if not capability_stale:
+            for step in old_steps:
+                step_id = str(step.get("step_id") or "")
+                expected = capability_by_id.get(step_id)
+                if expected and str(step.get("capability") or "") != expected:
+                    capability_stale = True
+                    break
+
+        # Only rewrite ledgers that already use the cart QA step vocabulary.
+        # Never replace a live Decider sequence (for example open-site/inspect-site
+        # or a valid Decider cart plan that includes qa-action) while the operator
+        # UI is polling snapshots. Extra Decider steps are not legacy.
+        uses_cart_vocabulary = any(
+            str(step_id).startswith("qa-") for step_id in [*old_ids, *plan_ids]
+        )
+        decider_cart_extension = any(
+            str(step_id).endswith("qa-action") for step_id in [*old_ids, *plan_ids]
+        )
+        needs_migration = uses_cart_vocabulary and capability_stale and not decider_cart_extension
+        if uses_cart_vocabulary and not capability_stale and not decider_cart_extension:
+            # IDs may differ slightly from the template; keep Decider order when
+            # capabilities are already interact-correct.
+            needs_migration = False
+        elif uses_cart_vocabulary and capability_stale and decider_cart_extension:
+            # Coerce capabilities only; do not destroy qa-action or completions.
+            needs_migration = False
+            changed = False
+            for step in old_steps:
+                step_id = str(step.get("step_id") or "")
+                expected = capability_by_id.get(step_id)
+                if step_id.endswith("qa-action") and str(step.get("capability") or "") != "interact":
+                    step["capability"] = "interact"
+                    changed = True
+                elif expected and str(step.get("capability") or "") != expected:
+                    step["capability"] = expected
+                    changed = True
+            if isinstance(old_blueprint, dict):
+                for item in old_subtasks:
+                    step_id = str(item.get("subtask_id") or "")
+                    expected = capability_by_id.get(step_id)
+                    if step_id.endswith("qa-action") and str(item.get("capability") or "") != "interact":
+                        item["capability"] = "interact"
+                        changed = True
+                    elif expected and str(item.get("capability") or "") != expected:
+                        item["capability"] = expected
+                        changed = True
+            return changed
+        if record.get("workflow_type") != WorkflowType.QA.value:
+            record["workflow_type"] = WorkflowType.QA.value
+            if not needs_migration:
+                return True
+        if not needs_migration:
+            return False
+        if str(record.get("status") or "") == "running":
+            # Capability coercion for in-flight qa-* steps is enough; full ledger
+            # replacement mid-round races the executor.
+            changed = False
+            for step in old_steps:
+                step_id = str(step.get("step_id") or "")
+                expected = capability_by_id.get(step_id)
+                if expected and str(step.get("capability") or "") != expected:
+                    step["capability"] = expected
+                    if step.get("status") == "completed" and expected == "interact":
+                        step["status"] = "pending"
+                        step["evidence_refs"] = []
+                        step["result"] = None
+                    changed = True
+            if isinstance(old_blueprint, dict):
+                for item in old_subtasks:
+                    step_id = str(item.get("subtask_id") or "")
+                    expected = capability_by_id.get(step_id)
+                    if expected and str(item.get("capability") or "") != expected:
+                        item["capability"] = expected
+                        changed = True
+            return changed
+
+        previous_by_id = {str(step.get("step_id") or ""): step for step in old_steps}
+        rebuilt = initialise_plan(canonical)
+        for step in rebuilt.get("steps") or []:
+            step_id = str(step.get("step_id") or "")
+            previous = previous_by_id.get(step_id)
+            if previous is None:
+                continue
+            previous_capability = str(previous.get("capability") or "")
+            expected_capability = str(step.get("capability") or "")
+            preserve_completed = (
+                previous.get("status") == "completed"
+                and (
+                    step_id.endswith("qa-navigation")
+                    or previous_capability == expected_capability
+                )
+            )
+            if preserve_completed:
+                step["status"] = "completed"
+                step["evidence_refs"] = list(previous.get("evidence_refs") or [])
+                step["result"] = previous.get("result")
+                step["attempts"] = int(previous.get("attempts") or 0)
+            elif previous_capability and previous_capability != expected_capability:
+                step["status"] = "pending"
+                step["evidence_refs"] = []
+                step["result"] = None
+
+        record["workflow_type"] = WorkflowType.QA.value
+        record["execution_blueprint"] = canonical
+        record["execution_plan"] = rebuilt
+        record["active_plan_step_id"] = None
+        record.setdefault("progress_events", []).append({
+            "at": self._now(),
+            "event_type": "cart_plan_migrated",
+            "status": record.get("status", "unknown"),
+            "message": "Migrated cart plan onto the canonical interact-authorised journey.",
+        })
+        return True
 
     def _save_checkpoint(
         self, task_id: str, initial_plan: DecisionPlan, *, sources: list[dict[str, Any]],
@@ -219,6 +384,7 @@ class TaskManager:
             objective_text = str(record.get("objective") or "")
             if is_ecommerce_cart_workflow(objective_text):
                 record["workflow_type"] = WorkflowType.QA.value
+                self._migrate_legacy_cart_plan(record)
             if record.get("execution_plan") is None and isinstance(record.get("execution_blueprint"), dict):
                 record["execution_plan"] = initialise_plan(record["execution_blueprint"])
             record.setdefault("agent_assignments", [])
@@ -353,7 +519,12 @@ class TaskManager:
         record = self.tasks.get(task_id)
         if record is None:
             return None
-        if is_ecommerce_cart_workflow(str(record.get("objective") or "")) and record.get("workflow_type") != WorkflowType.QA.value:
+        # Do not migrate cart ledgers on every UI poll. Migration is reserved for
+        # restore/retry of navigate-stale plans; polling must not wipe Decider steps.
+        if (
+            is_ecommerce_cart_workflow(str(record.get("objective") or ""))
+            and record.get("workflow_type") != WorkflowType.QA.value
+        ):
             record["workflow_type"] = WorkflowType.QA.value
             self._persist(task_id)
         snapshot = {**record, "logs": list(record.get("logs", []))}
@@ -450,6 +621,21 @@ class TaskManager:
         record["status"] = "running"
         self.timing.start(record, "planning")
         self._persist(task_id)
+        # A brand-new run must not inherit another mission's idle Steel browser.
+        if not resume:
+            browser = getattr(self.orchestrator, "browser", None)
+            reclaim = getattr(browser, "release_untracked_steel_sessions", None)
+            close_session = getattr(browser, "close_task_session", None)
+            if close_session is not None:
+                try:
+                    await close_session(task_id)
+                except (AttributeError, RuntimeError, OSError):
+                    pass
+            if reclaim is not None:
+                try:
+                    await reclaim()
+                except (AttributeError, RuntimeError, OSError):
+                    pass
         if not resume or not record.get("execution_objective"):
             record["execution_objective"] = objective
         checkpoint = record.get("checkpoint") if resume else None
@@ -596,13 +782,18 @@ class TaskManager:
                 decided_site_name = urlsplit(explicit_target).hostname
                 if decision.site_name:
                     decided_site_name = decision.site_name
+                # Preserve Decider order/objectives, but coerce search/cart discovery
+                # capabilities to interact so the browser is authorised to act.
+                executable_steps = coerce_decision_step_capabilities(
+                    objective, [step.model_dump(mode="python") for step in decision.steps],
+                )
                 decision_payload = normalise_decision_plan({
                     "status": decision.status,
                     "summary": decision.summary,
                     "site_name": decided_site_name,
                     "target_url": decided_target,
                     "clarification_question": None,
-                    "steps": [step.model_dump(mode="python") for step in decision.steps],
+                    "steps": executable_steps,
                 })
                 record["decider_plan"] = decision_payload.model_dump(mode="json")
                 record["planner_provenance"] = {
@@ -610,6 +801,7 @@ class TaskManager:
                     "goal_analysis": "ollama.create_execution_blueprint",
                     "execution_order_source": "decider_plan",
                     "objective_sha256": hashlib.sha256(objective.encode("utf-8")).hexdigest(),
+                    "capability_coercion": "workflows.coerce_decision_step_capabilities",
                 }
                 # The Decider's ordered steps are the sole executable sequence.
                 # Goal analysis may contribute acceptance criteria and interpretation,
@@ -625,12 +817,24 @@ class TaskManager:
                     "success_criteria": [item.model_dump(mode="json") for item in blueprint.success_criteria],
                     "completion_policy": blueprint.completion_policy,
                 }
-                record["execution_plan"] = initialise_decision_plan(decision.steps)
+                record["execution_plan"] = initialise_decision_plan(executable_steps)
                 record["workflow_summary"] = decision.summary
                 record["research_queries"] = list(blueprint.research_queries)
+                coerced_ids = [
+                    step["step_id"]
+                    for step, original in zip(executable_steps, decision.steps)
+                    if str(step.get("capability") or "") != str(getattr(original.capability, "value", original.capability))
+                ]
+                if coerced_ids:
+                    self._log(
+                        task_id,
+                        "Coerced Decider capabilities to interact for authorised search/cart steps: "
+                        + ", ".join(coerced_ids),
+                        "warning",
+                    )
                 self._log(
                     task_id,
-                    "Execution sequence locked to the Decider's " + str(len(decision.steps)) +
+                    "Execution sequence locked to the Decider's " + str(len(executable_steps)) +
                     " ordered steps; goal analysis supplies acceptance criteria only.",
                 )
                 initial_plan = decision_payload
@@ -647,7 +851,9 @@ class TaskManager:
                 record["goal_state"] = GoalStateManager.initialise(objective, criteria)
                 self._log(task_id, f"Goal State Manager established {len(criteria)} success criteria")
                 if initial_plan.status == DecisionStatus.READY and blueprint is not None:
-                    record["agent_assignments"] = self.agent_allocator.assign(task_id, decision.steps, blueprint.success_criteria)
+                    record["agent_assignments"] = self.agent_allocator.assign(
+                        task_id, decision_payload.steps, blueprint.success_criteria,
+                    )
                     record["a2a_messages"] = self.a2a_bus.history(task_id)
                     self._log(task_id, f"Allocated {len(record['agent_assignments'])} capability agents and dispatched A2A assignments")
                 record["site_name"] = initial_plan.site_name
@@ -821,6 +1027,7 @@ class TaskManager:
                     }],
                 })
                 effective_objective = self._effective_objective(task_id, objective)
+                workflow_value = str(record.get("workflow_type") or "")
                 self.timing.end(record)
                 self.timing.start(record, "browser")
                 self._trace(task_id, "observe", {
@@ -873,11 +1080,24 @@ class TaskManager:
                         "loop_guard": loop_guard.snapshot(),
                         "seed_for_next_round": ["Restore browser connectivity before resuming research"],
                     })
-                    infrastructure_error = any(
+                    # Selector / JSON proposal mistakes are step failures, not a
+                    # downed browser. "steel mcp" alone matches every tool error.
+                    selector_or_proposal_error = any(
+                        marker in issue_text.casefold()
+                        for marker in (
+                            "no element matches the selector",
+                            "ref_not_found",
+                            "failed validation",
+                            "tool proposal failed",
+                            "unterminated string",
+                            "expecting ",
+                        )
+                    )
+                    infrastructure_error = (not selector_or_proposal_error) and any(
                         marker in issue_text.casefold()
                         for marker in (
                             "econnrefused", "connect_over_cdp", "browser runtime is not started",
-                            "steel session", "steel mcp", "websocket error",
+                            "steel session", "session slots", "websocket error",
                             "timed out",
                         )
                     )
@@ -888,6 +1108,22 @@ class TaskManager:
                         )
                         limitations.append(blocker)
                         self._log(task_id, blocker, "error")
+                        # Leave the active step blocked (not in_progress) so resume/retry
+                        # can requeue it instead of forever selecting the same stuck step.
+                        if isinstance(execution_plan, dict) and active_plan_step is not None:
+                            fail_step(
+                                execution_plan,
+                                active_plan_step["step_id"],
+                                blocker,
+                                blocked=True,
+                            )
+                            record["execution_plan"] = execution_plan
+                            record["active_plan_step_id"] = None
+                            self._log(
+                                task_id,
+                                f"Plan step blocked by infrastructure failure: {active_plan_step['step_id']}",
+                                "warning",
+                            )
                         record["progress_events"].append({
                             "at": self._now(), "event_type": "infrastructure_blocked",
                             "status": "blocked", "round": round_count, "message": blocker,
@@ -904,6 +1140,14 @@ class TaskManager:
                         break
                     candidates.extend(result.get("candidate_urls", []))
                     candidates = loop_guard.filter_candidates(rank_research_candidates(effective_objective, candidates), visited_urls)
+                    # The failed source's page is still the live browser page; keep it for
+                    # the continuation below. Mark the authorised step failed so it is not
+                    # re-selected forever (ready_steps returns every non-terminal step).
+                    final_url = str(result.get("final_url") or next_url)
+                    if isinstance(execution_plan, dict) and active_plan_step is not None:
+                        fail_step(execution_plan, active_plan_step["step_id"], issue_text[:500])
+                        record["execution_plan"] = execution_plan
+                        record["active_plan_step_id"] = None
                     next_url = ""
                 else:
                     final_url = result.get("final_url") or next_url
@@ -1099,12 +1343,19 @@ class TaskManager:
                                 verified_result = None
                             if verified_result:
                                 pass
-                            elif capability == "navigate" and (
-                                int(step.get("index") or 0) == 1
-                                or str(step.get("step_id", "")).endswith(("seo-discover", "qa-discover"))
-                                or any(term in objective_text for term in ("homepage", "home page", "starting page"))
-                            ):
-                                verified_result = f"Captured {source.get('title') or final_url}"
+                            elif capability == "navigate":
+                                # Search/select/add discover objectives must not complete
+                                # from a navigate-only page capture; they need interact evidence.
+                                discover_requires_interaction = (
+                                    str(step.get("step_id", "")).endswith("qa-discover")
+                                    and step_objective_requires_interaction(objective_text)
+                                )
+                                if not discover_requires_interaction and (
+                                    int(step.get("index") or 0) == 1
+                                    or str(step.get("step_id", "")).endswith(("seo-discover", "qa-discover"))
+                                    or any(term in objective_text for term in ("homepage", "home page", "starting page"))
+                                ):
+                                    verified_result = f"Captured {source.get('title') or final_url}"
                             elif capability == "extract" and detail_lookup:
                                 selected_product = (record.get("plan_outputs") or {}).get("cheapest_product") or {}
                                 expected_name = str(selected_product.get("name") or "").strip().casefold()
@@ -1144,9 +1395,10 @@ class TaskManager:
                             elif capability == "extract" and str(step.get("step_id", "")).endswith("qa-availability"):
                                 if result.get("http_status") is not None and result.get("http_status", 0) < 400 and result.get("evidence_id"):
                                     verified_result = f"Target page returned HTTP {result.get('http_status')}; visible-content issues are tracked separately"
-                            elif capability == "interact" and str(step.get("step_id", "")).endswith("qa-availability"):
+                            elif capability == "interact" and (
+                                requested_query := objective_requests_search(str(step.get("objective") or ""))
+                            ):
                                 product_search = (result.get("structured_data") or {}).get("qa_product_search") or {}
-                                requested_query = extract_product_search_query(str(step.get("objective") or ""))
                                 if (
                                     requested_query
                                     and product_search.get("performed") is True
@@ -1237,10 +1489,89 @@ class TaskManager:
                                         f"Captured {link_checks.get('checked_count', 0)} same-origin link destination check(s) "
                                         f"and {navigation.get('checked_count', 0)} browser navigation journey(s)"
                                     )
+                            mission_objective = str(record.get("objective") or "")
+                            if (
+                                verified_result is None
+                                and is_ecommerce_cart_workflow(mission_objective)
+                            ):
+                                step_objective = str(step.get("objective") or "")
+                                step_id_value = str(step.get("step_id") or "")
+                                # Decider may split add into qa-action; treat that as add.
+                                if step_id_value.endswith("qa-action") and "cart" not in step_objective.casefold():
+                                    step_objective = step_objective + " add to cart"
+                                snapshot_blob = "\n".join(
+                                    part for part in (
+                                        str(result.get("text") or ""),
+                                        str(result.get("title") or ""),
+                                        str(result.get("final_url") or ""),
+                                    ) if part
+                                )
+                                allow_alternate = cart_mission_allows_alternate(mission_objective)
+                                record["cart_product_mode"] = (
+                                    "flexible" if allow_alternate else "exact"
+                                )
+                                verified_result = cart_step_verification(
+                                    step_objective,
+                                    snapshot_blob,
+                                    mission_objective=mission_objective,
+                                    allow_alternate=allow_alternate,
+                                )
+                                attempts = int(step.get("attempts") or 0)
+                                on_pdp = on_product_detail_page(snapshot_blob)
+                                if (
+                                    verified_result is None
+                                    and on_pdp
+                                    and product_out_of_stock(snapshot_blob)
+                                    and allow_alternate
+                                    and attempts < 6
+                                ):
+                                    # Flexible product request on a real PDP: try another listing.
+                                    step["status"] = "pending"
+                                    step["result"] = (
+                                        "Opened product was out of stock; objective did not "
+                                        "name an exact product — try a different in-stock listing."
+                                    )
+                                    record["cart_alternate_product"] = True
+                                    # Allow the next attempt to land on a new URL/product.
+                                    record.setdefault("plan_step_urls", {}).pop(step["step_id"], None)
+                                    self._log(
+                                        task_id,
+                                        f"Plan step {step['step_id']}: out of stock on a flexible "
+                                        "product request — will try another product",
+                                        "warning",
+                                    )
+                                    break
+                                if (
+                                    verified_result is None
+                                    and cart_intent(step_objective) in {"select", "add"}
+                                    and attempts < 6
+                                ):
+                                    # Discover/add not evidenced yet (e.g. still on listing/home).
+                                    # Keep retrying the authored interact step instead of blocking.
+                                    step["status"] = "pending"
+                                    step["result"] = (
+                                        "Product page or cart add not yet evidenced; retrying interaction."
+                                    )
+                                    record.setdefault("plan_step_urls", {}).pop(step["step_id"], None)
+                                    self._log(
+                                        task_id,
+                                        f"Plan step {step['step_id']}: cart interaction incomplete — "
+                                        "retrying before blocking",
+                                        "warning",
+                                    )
+                                    break
                             if verified_result is None:
                                 workflow_value = str(record.get("workflow_type") or "")
-                                if workflow_value in {"seo", "qa", "seo_qa"} and str(step.get("step_id", "")).endswith(
-                                    ("seo-crawl", "qa-crawl", "audit-crawl", "seo-validate", "qa-validate", "seo-synthesise", "qa-synthesise")
+                                cart_journey = is_ecommerce_cart_workflow(mission_objective or str(record.get("objective") or ""))
+                                deferred_steps = ["seo-crawl", "qa-crawl", "audit-crawl"]
+                                if not cart_journey:
+                                    deferred_steps.extend([
+                                        "seo-validate", "qa-validate", "seo-synthesise", "qa-synthesise",
+                                    ])
+                                if (
+                                    workflow_value in {"seo", "qa", "seo_qa"}
+                                    and capability != "interact"
+                                    and str(step.get("step_id", "")).endswith(tuple(deferred_steps))
                                 ):
                                     # Long-running crawl and final synthesis are completed only after
                                     # the deterministic page queue has been exhausted.
@@ -1784,12 +2115,21 @@ class TaskManager:
                                     result=f"Captured search outcome at {search_url}; status={search_record.get('status')}.",
                                 )
 
+                        cart_workflow = is_ecommerce_cart_workflow(str(record.get("objective") or ""))
                         is_crawl_step = (
                             step_id.endswith(("seo-crawl", "qa-crawl", "audit-crawl"))
                             and any(term in step_objective for term in ("crawl", "coverage", "discover pages", "visit discovered urls"))
                         )
-                        is_validation_step = step_id.endswith(("seo-validate", "qa-validate"))
-                        is_synthesis_step = step_id.endswith(("seo-synthesise", "qa-synthesise"))
+                        # Cart validate/synthesise are interact/extract journey steps, not
+                        # crawl-audit finalisers. Never auto-complete them with crawl copy.
+                        is_validation_step = (
+                            step_id.endswith(("seo-validate", "qa-validate"))
+                            and not cart_workflow
+                        )
+                        is_synthesis_step = (
+                            step_id.endswith(("seo-synthesise", "qa-synthesise"))
+                            and not cart_workflow
+                        )
 
                         # A product-search content step can be satisfied by the already
                         # captured search-result observation. Absence of a matching product
@@ -1995,25 +2335,32 @@ class TaskManager:
                     "failed_network_requests": sum(item.get("kind") == "request_failed" for item in runtime_events if isinstance(item, dict)),
                     "finding_priority_counts": priority_counts,
                 }
-                limitations.append(
-                    f"Crawl inspected {len(crawl_pages)} pages and visited {coverage['visited_url_count']} distinct URLs "
-                    f"from {coverage['discovered_url_count']} known discovered URLs "
-                    f"({coverage['coverage_percent'] if coverage['coverage_percent'] is not None else 'not measurable'}% coverage). "
-                    "This is bounded discovery coverage, not proof that every URL on the website was found."
-                )
-                if coverage["known_discovered_urls_remaining"]:
+                cart_journey = is_ecommerce_cart_workflow(str(record.get("objective") or ""))
+                if not cart_journey:
                     limitations.append(
-                        f"{coverage['known_discovered_urls_remaining']} discovered same-origin URL(s) remained unvisited when the crawl ended."
+                        f"Crawl inspected {len(crawl_pages)} pages and visited {coverage['visited_url_count']} distinct URLs "
+                        f"from {coverage['discovered_url_count']} known discovered URLs "
+                        f"({coverage['coverage_percent'] if coverage['coverage_percent'] is not None else 'not measurable'}% coverage). "
+                        "This is bounded discovery coverage, not proof that every URL on the website was found."
                     )
-                if sitemap_urls_beyond_sample_cap:
-                    limitations.append(
-                        f"{sitemap_urls_beyond_sample_cap} allowed sitemap URL(s) were beyond the configured 1,000-URL sitemap sample cap."
-                    )
-                if robots_policy_blocked:
-                    limitations.append(
-                        "robots.txt could not be read reliably; further crawling was conservatively paused and crawl coverage remains unverified."
-                    )
-            if round_count >= int(record.get("max_rounds", self.max_rounds)) and candidates:
+                    if coverage["known_discovered_urls_remaining"]:
+                        limitations.append(
+                            f"{coverage['known_discovered_urls_remaining']} discovered same-origin URL(s) remained unvisited when the crawl ended."
+                        )
+                    if sitemap_urls_beyond_sample_cap:
+                        limitations.append(
+                            f"{sitemap_urls_beyond_sample_cap} allowed sitemap URL(s) were beyond the configured 1,000-URL sitemap sample cap."
+                        )
+                    if robots_policy_blocked:
+                        limitations.append(
+                            "robots.txt could not be read reliably; further crawling was conservatively paused and crawl coverage remains unverified."
+                        )
+            cart_journey = is_ecommerce_cart_workflow(str(record.get("objective") or ""))
+            if (
+                not cart_journey
+                and round_count >= int(record.get("max_rounds", self.max_rounds))
+                and candidates
+            ):
                 limitations.append(f"Maximum page/crawl budget of {record.get('max_rounds', self.max_rounds)} reached.")
             self.timing.end(record)
             self.timing.start(record, "reporting")
@@ -2024,67 +2371,101 @@ class TaskManager:
                     "at": self._now(), "event_type": "synthesis_started",
                     "status": "running", "message": "Research collection is complete; preparing the final synthesis.",
                 })
-                try:
-                    recommendation_ready = [
-                        item for item in findings
-                        if (item.get("validation") or {}).get("verdict") == "confirmed"
+                if cart_journey:
+                    apply_cart_goal_from_plan(record.get("goal_state"), record.get("execution_plan"))
+                    self.checklist.write(record)
+                    out_of_stock = any(
+                        "out of stock" in str(step.get("result") or "").casefold()
+                        for step in ((record.get("execution_plan") or {}).get("steps") or [])
+                        if isinstance(step, dict)
+                    )
+                    answer = build_cart_journey_report(
+                        str(record.get("objective") or objective),
+                        record.get("execution_plan"),
+                        out_of_stock=out_of_stock,
+                    )
+                    structured_data["report_kind"] = "cart_journey"
+                    structured_data["cart_journey_report"] = answer
+                    structured_data.pop("audit_report_summary", None)
+                    limitations = [
+                        item for item in limitations
+                        if "crawl inspected" not in item.casefold()
+                        and "bounded discovery" not in item.casefold()
+                        and "success criteria still lacking" not in item.casefold()
+                        and "deterministic audit summary" not in item.casefold()
                     ]
-                    synthesis_objective = self._effective_objective(task_id, objective)
-                    if recommendations_skipped():
-                        synthesis_objective += (
-                            "\n\nREPORTING POLICY: Do not make recommendations, prescribe fixes, "
-                            "or infer root causes. Summarise observations and validation outcomes only."
+                    limitations.extend(
+                        cart_limitations_from_plan(
+                            record.get("execution_plan"), record.get("goal_state"),
                         )
-                    synthesis = await self.orchestrator.ollama.synthesise_research(
-                        synthesis_objective, recommendation_ready, sources, round_count,
-                        int(record.get("max_rounds", self.max_rounds)), task_id=task_id,
-                        checklist_markdown=self.checklist.write(record),
                     )
-                    answer = synthesis.answer
-                    if synthesis.coverage_summary:
-                        answer += "\n\n" + synthesis.coverage_summary
-                    limitations.extend(synthesis.gaps)
-                    if workflow_value in {"seo", "qa", "seo_qa"}:
-                        summary = structured_data.get("audit_report_summary", {})
-                        answer += (
-                            "\n\nDeterministic audit summary: "
-                            f"{summary.get('pages_inspected', 0)} page(s) inspected; "
-                            f"{summary.get('crawl_coverage_percent') if summary.get('crawl_coverage_percent') is not None else 'unknown'}% "
-                            "of known discovered URLs visited; "
-                            f"crawl completion={'complete' if summary.get('crawl_complete') else 'incomplete'}; "
-                            f"{summary.get('broken_internal_links', 0)} broken internal destination(s) confirmed; "
-                            f"{summary.get('off_origin_internal_redirects', 0)} off-origin internal redirect(s); "
-                            f"{summary.get('duplicate_title_groups', 0)} duplicate-title group(s); "
-                            f"{summary.get('duplicate_meta_description_groups', 0)} duplicate-description group(s); "
-                            f"{summary.get('duplicate_content_groups', 0)} duplicate-content group(s)."
+                    limitations = list(dict.fromkeys(limitations))
+                else:
+                    try:
+                        recommendation_ready = [
+                            item for item in findings
+                            if (item.get("validation") or {}).get("verdict") == "confirmed"
+                        ]
+                        synthesis_objective = self._effective_objective(task_id, objective)
+                        if recommendations_skipped():
+                            synthesis_objective += (
+                                "\n\nREPORTING POLICY: Do not make recommendations, prescribe fixes, "
+                                "or infer root causes. Summarise observations and validation outcomes only."
+                            )
+                        synthesis = await self.orchestrator.ollama.synthesise_research(
+                            synthesis_objective, recommendation_ready, sources, round_count,
+                            int(record.get("max_rounds", self.max_rounds)), task_id=task_id,
+                            checklist_markdown=self.checklist.write(record),
                         )
-                        if workflow_value in {"seo", "seo_qa"}:
+                        answer = synthesis.answer
+                        if synthesis.coverage_summary:
+                            answer += "\n\n" + synthesis.coverage_summary
+                        limitations.extend(synthesis.gaps)
+                        if workflow_value in {"seo", "qa", "seo_qa"}:
+                            summary = structured_data.get("audit_report_summary", {})
                             answer += (
-                                f" Sitemap sample coverage: {summary.get('sitemap_sample_coverage_percent') if summary.get('sitemap_sample_coverage_percent') is not None else 'not available'}%; "
-                                f"{summary.get('sitemap_disallowed_by_robots', 0)} sitemap URL(s) excluded by robots policy."
+                                "\n\nDeterministic audit summary: "
+                                f"{summary.get('pages_inspected', 0)} page(s) inspected; "
+                                f"{summary.get('crawl_coverage_percent') if summary.get('crawl_coverage_percent') is not None else 'unknown'}% "
+                                "of known discovered URLs visited; "
+                                f"crawl completion={'complete' if summary.get('crawl_complete') else 'incomplete'}; "
+                                f"{summary.get('broken_internal_links', 0)} broken internal destination(s) confirmed; "
+                                f"{summary.get('off_origin_internal_redirects', 0)} off-origin internal redirect(s); "
+                                f"{summary.get('duplicate_title_groups', 0)} duplicate-title group(s); "
+                                f"{summary.get('duplicate_meta_description_groups', 0)} duplicate-description group(s); "
+                                f"{summary.get('duplicate_content_groups', 0)} duplicate-content group(s)."
                             )
-                        if workflow_value in {"qa", "seo_qa"}:
-                            answer += (
-                                f" QA sampled {summary.get('qa_navigation_destinations_checked', 0)} navigation destination(s) "
-                                f"across {summary.get('responsive_viewports_checked', 0)} responsive viewport(s), "
-                                f"with {summary.get('responsive_viewport_overflows', 0)} overflow condition(s) "
-                                f"and {summary.get('accessibility_findings', 0)} accessibility finding(s); "
-                                f"{summary.get('keyboard_focus_steps_sampled', 0)} keyboard focus step(s) sampled; "
-                                f"{summary.get('qa_interaction_controls_passed', 0)} reversible local interaction(s) passed; "
-                                f"{summary.get('off_origin_internal_redirects', 0)} off-origin internal redirect(s), "
-                                f"{summary.get('browser_console_errors', 0)} console error(s), "
-                                f"{summary.get('browser_page_errors', 0)} page exception(s) and "
-                                f"{summary.get('failed_network_requests', 0)} failed request(s) captured."
-                            )
-                except OllamaUnavailable as exc:
-                    answer = (
-                        f"Captured {len(sources)} sources and {len(findings)} observations. "
-                        "Automated synthesis was unavailable; review the evidence-backed findings."
-                    )
-                    limitations.append(str(exc)[:500])
+                            if workflow_value in {"seo", "seo_qa"}:
+                                answer += (
+                                    f" Sitemap sample coverage: {summary.get('sitemap_sample_coverage_percent') if summary.get('sitemap_sample_coverage_percent') is not None else 'not available'}%; "
+                                    f"{summary.get('sitemap_disallowed_by_robots', 0)} sitemap URL(s) excluded by robots policy."
+                                )
+                            if workflow_value in {"qa", "seo_qa"}:
+                                answer += (
+                                    f" QA sampled {summary.get('qa_navigation_destinations_checked', 0)} navigation destination(s) "
+                                    f"across {summary.get('responsive_viewports_checked', 0)} responsive viewport(s), "
+                                    f"with {summary.get('responsive_viewport_overflows', 0)} overflow condition(s) "
+                                    f"and {summary.get('accessibility_findings', 0)} accessibility finding(s); "
+                                    f"{summary.get('keyboard_focus_steps_sampled', 0)} keyboard focus step(s) sampled; "
+                                    f"{summary.get('qa_interaction_controls_passed', 0)} reversible local interaction(s) passed; "
+                                    f"{summary.get('off_origin_internal_redirects', 0)} off-origin internal redirect(s), "
+                                    f"{summary.get('browser_console_errors', 0)} console error(s), "
+                                    f"{summary.get('browser_page_errors', 0)} page exception(s) and "
+                                    f"{summary.get('failed_network_requests', 0)} failed request(s) captured."
+                                )
+                    except OllamaUnavailable as exc:
+                        answer = (
+                            f"Captured {len(sources)} sources and {len(findings)} observations. "
+                            "Automated synthesis was unavailable; review the evidence-backed findings."
+                        )
+                        limitations.append(str(exc)[:500])
+                    remaining_criteria = (record.get("goal_state") or {}).get("remaining", [])
+                    if remaining_criteria:
+                        limitations.append(
+                            "Success criteria still lacking directly quoted evidence: "
+                            + "; ".join(remaining_criteria)
+                        )
                 remaining_criteria = (record.get("goal_state") or {}).get("remaining", [])
-                if remaining_criteria:
-                    limitations.append("Success criteria still lacking directly quoted evidence: " + "; ".join(remaining_criteria))
                 # Caveats and non-blocking synthesis gaps remain visible in the report.
                 # Task status reflects whether the user's verified success criteria were met.
                 final_status = "completed" if sources and not remaining_criteria else "blocked"
@@ -2168,6 +2549,10 @@ class TaskManager:
                 await self.orchestrator.browser.close_task_session(task_id)
             except (AttributeError, RuntimeError, OSError) as browser_close_error:
                 self._log(task_id, f"Browser session cleanup warning: {browser_close_error}", "warning")
+            if task_id in self._deleted_task_ids:
+                self.state_store.delete(task_id)
+                self.running.pop(task_id, None)
+                return
             record["current_step"] = None
             record["updated_at"] = self._now()
             if record.get("status") in {"completed", "blocked", "failed", "stopped", "planned", "needs_clarification"}:
@@ -2284,9 +2669,10 @@ class TaskManager:
             return None
         if record.get("status") not in {"failed", "blocked"}:
             raise ValueError("Only failed or blocked tasks can be resumed")
-        if is_ecommerce_cart_workflow(str(record.get("objective") or "")) and record.get("workflow_type") != WorkflowType.QA.value:
-            record["workflow_type"] = WorkflowType.QA.value
-            self._persist(task_id)
+        if is_ecommerce_cart_workflow(str(record.get("objective") or "")):
+            if self._migrate_legacy_cart_plan(record) or record.get("workflow_type") != WorkflowType.QA.value:
+                record["workflow_type"] = WorkflowType.QA.value
+                self._persist(task_id)
         reset_steps = reset_retryable_steps(record.get("execution_plan") or {})
         if reset_steps:
             self._log(
@@ -2368,3 +2754,27 @@ class TaskManager:
             self.timing.finish(record)
             self._persist(task_id)
         return self.snapshot(task_id)
+
+    async def delete_mission(self, task_id: str) -> bool:
+        """Remove a mission from the workspace, stopping it first when it is running."""
+        if task_id not in self.tasks:
+            return False
+        self._deleted_task_ids.add(task_id)
+        running = self.running.get(task_id)
+        if running is not None and not running.done():
+            running.cancel()
+            try:
+                await running
+            except asyncio.CancelledError:
+                pass
+        browser = getattr(self.orchestrator, "browser", None)
+        close_session = getattr(browser, "close_task_session", None)
+        if close_session is not None:
+            try:
+                await close_session(task_id)
+            except (AttributeError, RuntimeError, OSError):
+                pass
+        self.tasks.pop(task_id, None)
+        self.running.pop(task_id, None)
+        self.state_store.delete(task_id)
+        return True

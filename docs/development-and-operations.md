@@ -71,8 +71,10 @@ Vite proxies API requests to the local FastAPI service on port 8000.
 | `OLLAMA_BASE_URL_NAVIGATE`, `_INTERACT`, `_EXTRACT`, `_RECOVER` | Capability-specific inference endpoints | Optional; each falls back to `OLLAMA_BASE_URL` |
 | `OLLAMA_API_KEY` | Optional bearer credential | Secret; never commit |
 | `OLLAMA_KEEP_ALIVE` | Ollama model residency after each request (default `0`) | `0` unloads after each call to reduce peak RAM; increase only if the host can keep both models loaded |
-| `OLLAMA_MODEL_DEFAULT` | Main model for planning, navigation, interaction and synthesis (default `qwen3.5:9b`) | Must exist on remote Ollama |
-| `OLLAMA_MODEL_LIGHT` | Smaller model for extraction, recovery and goal-progress proposals (default `qwen3.5:4b`) | Must exist on remote Ollama; Python validates evidence and outputs |
+| `OLLAMA_MODEL_DEFAULT` | Main model for planning, navigation planning and synthesis (default `qwen3.5:9b`) | Must exist on remote Ollama |
+| `OLLAMA_MODEL_LIGHT` | Smaller model for site interactions, extraction, recovery and goal-progress (default `qwen3.5:4b`) | Must exist on remote Ollama; keep this tiny for HTML/ref click-type proposals |
+| `OLLAMA_MODEL_CLASSIFIER` | Tiny Nimble classifier for exact vs flexible cart products (default `nimble`) | `ollama pull nimble` on Ollama ≥0.35; uses `/v1/systemone`; heuristic fallback when unavailable |
+| `OLLAMA_CLASSIFIER_ENABLED` | Enable Nimble cart product-specificity classification (default `true`) | When false, regex heuristic only |
 | `NAVIGATION_TIMEOUT_MS` | Browser navigation timeout | Keep bounded |
 | `BROWSER_BACKEND` | Browser execution provider (`local` or `steel`) | Compose defaults to self-hosted Steel; `local` uses Playwright Chromium |
 | `STEEL_API_KEY` | Optional Steel API credential | Leave blank for an unauthenticated self-hosted instance; never commit secrets |
@@ -82,7 +84,7 @@ Vite proxies API requests to the local FastAPI service on port 8000.
 | `TASK_STATE_DIR` | Optional override for atomic task JSON snapshots | Defaults to `EVIDENCE_DIR/tasks` |
 | `AUDIT_MAX_PAGES` | Maximum page inspections for SEO/QA/combined audits | Defaults to 200; accepted range 1-1,000 |
 
-Night Walker intentionally routes across two model names only: `OLLAMA_MODEL_DEFAULT` (main) and `OLLAMA_MODEL_LIGHT` (small). Planning and synthesis use the main model; extraction, recovery and goal-progress proposals use the light model. The two tiers may share one Ollama endpoint. Do not set role-specific model overrides. Role-specific endpoint URLs remain optional for deployments that serve the same two models from different trusted endpoints. The experimental standalone integration has its own settings and is not part of this two-model runtime.
+Night Walker intentionally routes across two model names only: `OLLAMA_MODEL_DEFAULT` (main) and `OLLAMA_MODEL_LIGHT` (small). Planning and synthesis use the main model; Steel site interactions (two-stage tool select + args), extraction, recovery and goal-progress use the light model. Point `OLLAMA_MODEL_LIGHT` at a smaller HTML-logic model if wanted — Steel proposals use a capped context (`OLLAMA_STEEL_NUM_CTX`, default 4096) so they stay cheap. The two tiers may share one Ollama endpoint. Do not set role-specific model overrides. Role-specific endpoint URLs remain optional for deployments that serve the same two models from different trusted endpoints. The experimental standalone integration has its own settings and is not part of this two-model runtime.
 
 ## 6. Agent identity and request tracing
 

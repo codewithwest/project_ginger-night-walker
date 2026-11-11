@@ -217,30 +217,33 @@ async def test_steel_session_is_retained_for_report_preview_then_marked_offline(
 def test_steel_urls_use_configured_remote_host_and_api_port(monkeypatch):
     api_base = "http://192.168.100.18:3000/v1"
     monkeypatch.setenv("STEEL_API_BASE_URL", api_base)
+    monkeypatch.setenv("STEEL_VIEWER_HOST", "192.168.100.18")
     debug = BrowserRuntime._normalise_steel_debug_url(
         "http://localhost/v1/sessions/session-1/debug"
     )
     websocket = BrowserRuntime._normalise_steel_websocket_url(
         "ws://localhost:3000/v1/sessions/session-1/cdp", api_base
     )
-    assert debug == "http://192.168.100.18:3000/v1/sessions/session-1/debug"
+    assert debug == "http://192.168.100.18:3000/v1/sessions/debug"
     assert websocket == "ws://192.168.100.18:3000/v1/sessions/session-1/cdp"
 
 
-def test_steel_debug_url_repairs_unscoped_legacy_route(monkeypatch):
+def test_steel_debug_url_uses_served_shared_viewer_route(monkeypatch):
     monkeypatch.setenv("STEEL_API_BASE_URL", "http://192.168.100.18:3000/v1")
+    monkeypatch.setenv("STEEL_VIEWER_HOST", "192.168.100.18")
     debug = BrowserRuntime._normalise_steel_debug_url(
-        "http://localhost:3000/v1/sessions/debug", "session-abc"
+        "http://localhost:3000/v1/sessions/debug"
     )
-    assert debug == "http://192.168.100.18:3000/v1/sessions/session-abc/debug"
+    assert debug == "http://192.168.100.18:3000/v1/sessions/debug"
 
 
-def test_steel_debug_url_preserves_already_scoped_route(monkeypatch):
+def test_steel_debug_url_rewrites_unserved_scoped_route(monkeypatch):
     monkeypatch.setenv("STEEL_API_BASE_URL", "http://192.168.100.18:3000/v1")
+    monkeypatch.setenv("STEEL_VIEWER_HOST", "192.168.100.18")
     debug = BrowserRuntime._normalise_steel_debug_url(
-        "http://localhost:3000/v1/sessions/session-abc/debug", "session-abc"
+        "http://localhost:3000/v1/sessions/session-abc/debug"
     )
-    assert debug == "http://192.168.100.18:3000/v1/sessions/session-abc/debug"
+    assert debug == "http://192.168.100.18:3000/v1/sessions/debug"
 
 
 

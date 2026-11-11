@@ -14,8 +14,9 @@ class ModelRegistry:
         if not main_model or not light_model:
             raise ValueError("OLLAMA_MODEL_DEFAULT and OLLAMA_MODEL_LIGHT must be configured")
 
-        # Navigation and interaction planning benefit from the stronger model.
-        # Extraction and bounded recovery are narrower, cheaper tasks.
-        if capability in {Capability.EXTRACT, Capability.RECOVER}:
+        # Planning / navigate / synthesis stay on the main model.
+        # Site interactions (click/type/ref selection), extraction and recovery
+        # use the light tier so operators can run a much smaller HTML-logic model.
+        if capability in {Capability.INTERACT, Capability.EXTRACT, Capability.RECOVER}:
             return light_model
         return main_model

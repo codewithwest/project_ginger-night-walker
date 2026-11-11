@@ -24,11 +24,28 @@ class SuccessCriterion(BaseModel):
 
 
 class ExecutionBlueprint(BaseModel):
+    """Goal-analysis envelope. Executable steps belong to the Decider, not here."""
     model_config = ConfigDict(extra="forbid")
     version: int = 1
     original_objective: str = Field(min_length=1, max_length=2000)
     interpretation: str = Field(min_length=1, max_length=1000)
     success_criteria: list[SuccessCriterion] = Field(min_length=1, max_length=12)
+    completion_policy: str = Field(default="all_criteria_verified", max_length=100)
+    research_queries: list[str] = Field(default_factory=list, max_length=8)
+
+
+class WorkflowPlanTemplate(BaseModel):
+    """Deterministic executable template for specialised QA journeys.
+
+    Used by cart/product-search coercion and legacy migration. This is not a
+    second Decider plan; it only supplies canonical step IDs and capabilities.
+    """
+    model_config = ConfigDict(extra="forbid")
+    version: int = 1
+    original_objective: str = Field(min_length=1, max_length=2000)
+    interpretation: str = Field(min_length=1, max_length=1000)
+    success_criteria: list[SuccessCriterion] = Field(min_length=1, max_length=20)
+    subtasks: list[PlannedSubtask] = Field(default_factory=list, max_length=20)
     completion_policy: str = Field(default="all_criteria_verified", max_length=100)
     research_queries: list[str] = Field(default_factory=list, max_length=8)
 

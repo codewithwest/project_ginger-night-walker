@@ -64,6 +64,10 @@ class TaskRunTraceStore:
             raise ValueError("Trace records require a task id and phase")
         event = {"event_id": uuid4().hex, "task_id": task_id, "at": datetime.now(UTC).isoformat(), "phase": phase[:40], "details": redact(details or {})}
         self.directory.mkdir(parents=True, exist_ok=True)
+        try:
+            self.directory.chmod(0o777)
+        except OSError:
+            pass
         path = self.directory / self._filename(task_id)
         with self._lock, path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n")

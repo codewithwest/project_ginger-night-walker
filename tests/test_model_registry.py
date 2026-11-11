@@ -2,18 +2,18 @@ from nightwalker.contracts import Capability
 from nightwalker.model_registry import ModelRegistry
 
 
-def test_main_model_handles_planning_navigation_and_interaction(monkeypatch):
+def test_main_model_handles_planning_and_navigation(monkeypatch):
     monkeypatch.setenv("OLLAMA_MODEL_DEFAULT", "main:latest")
     monkeypatch.setenv("OLLAMA_MODEL_LIGHT", "light:latest")
     registry = ModelRegistry()
     assert registry.model_for(Capability.NAVIGATE) == "main:latest"
-    assert registry.model_for(Capability.INTERACT) == "main:latest"
 
 
-def test_light_model_handles_extraction_and_recovery(monkeypatch):
+def test_light_model_handles_interaction_extraction_and_recovery(monkeypatch):
     monkeypatch.setenv("OLLAMA_MODEL_DEFAULT", "main:latest")
     monkeypatch.setenv("OLLAMA_MODEL_LIGHT", "light:latest")
     registry = ModelRegistry()
+    assert registry.model_for(Capability.INTERACT) == "light:latest"
     assert registry.model_for(Capability.EXTRACT) == "light:latest"
     assert registry.model_for(Capability.RECOVER) == "light:latest"
 

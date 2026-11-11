@@ -17,6 +17,10 @@ class TaskScratchpad:
 
     def append(self, task_id: str, entry: dict[str, Any]) -> dict[str, Any]:
         self.directory.mkdir(parents=True, exist_ok=True)
+        try:
+            self.directory.chmod(0o777)
+        except OSError:
+            pass
         safe_id = hashlib.sha256(task_id.encode("utf-8")).hexdigest()
         path = self.directory / f"{safe_id}.json"
         existing = self.read(task_id)

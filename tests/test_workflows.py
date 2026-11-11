@@ -1,8 +1,9 @@
 from nightwalker.workflows import (
     WorkflowType, _qa_content_objective, build_workflow_blueprint, classify_workflow,
     build_cart_journey_blueprint, build_product_search_blueprint,
-    extract_product_search_query, is_ecommerce_cart_workflow,
-    qa_requires_site_crawl, qa_scope_for_objective, target_url_from_objective,
+    coerce_decision_step_capabilities, extract_product_search_query,
+    is_ecommerce_cart_workflow, qa_requires_site_crawl, qa_scope_for_objective,
+    objective_requests_search, step_objective_requires_interaction, target_url_from_objective,
 )
 
 
@@ -54,7 +55,7 @@ def test_explicit_site_wide_qa_blueprint_keeps_a_dedicated_crawl_step():
     objective = 'Run full-site QA testing across every page at https://example.com'
     blueprint = build_workflow_blueprint(objective, WorkflowType.QA)
     crawl_step = next(item for item in blueprint.subtasks if item.subtask_id == "qa-crawl")
-    assert crawl_step.capability.value == "navigate"
+    assert crawl_step.capability == "navigate"
     assert crawl_step.success_criteria == ["qa-coverage"]
 
 
@@ -172,11 +173,11 @@ def test_product_search_blueprint_authorises_search_as_interaction():
         "qa-navigation", "qa-availability", "qa-content",
         "qa-validate", "qa-synthesise",
     ]
-    assert steps["qa-navigation"].capability.value == "navigate"
-    assert steps["qa-availability"].capability.value == "interact"
+    assert steps["qa-navigation"].capability == "navigate"
+    assert steps["qa-availability"].capability == "interact"
     assert 'Search for "Dark Grey"' in steps["qa-availability"].objective
     assert steps["qa-availability"].depends_on == ["qa-navigation"]
-    assert steps["qa-content"].capability.value == "extract"
+    assert steps["qa-content"].capability == "extract"
     assert steps["qa-content"].depends_on == ["qa-availability"]
     assert steps["qa-validate"].depends_on == ["qa-content"]
     assert steps["qa-synthesise"].depends_on == ["qa-validate"]
@@ -222,12 +223,47 @@ def test_cart_journey_uses_deterministic_ordered_interaction_plan():
         "qa-navigation", "qa-discover", "qa-availability",
         "qa-content", "qa-validate", "qa-synthesise",
     ]
-    assert steps["qa-discover"].capability.value == "interact"
-    assert steps["qa-availability"].capability.value == "interact"
-    assert steps["qa-validate"].capability.value == "interact"
+    assert steps["qa-discover"].capability == "interact"
+    assert steps["qa-availability"].capability == "interact"
+    assert steps["qa-validate"].capability == "interact"
     assert steps["qa-availability"].depends_on == ["qa-discover"]
     assert steps["qa-content"].depends_on == ["qa-availability"]
     assert steps["qa-validate"].depends_on == ["qa-content"]
     assert steps["qa-synthesise"].depends_on == ["qa-validate"]
     assert "checkout" in steps["qa-synthesise"].objective.lower()
     assert len(blueprint.success_criteria) == 6
+
+
+def test_coerce_decision_steps_upgrades_stale_search_and_cart_navigate_capabilities():
+    cart_objective = (
+        'Open https://www.weylandts.co.za/. Add "Dark Grey" to the cart, '
+        "verify price and quantity, remove it, and confirm the cart is empty. Do not checkout."
+    )
+    cart_steps = coerce_decision_step_capabilities(cart_objective, [
+        {"step_id": "qa-navigation", "capability": "navigate", "objective": "Open storefront"},
+        {
+            "step_id": "qa-discover",
+            "capability": "navigate",
+            "objective": 'Search for and select a product matching "Dark Grey"',
+        },
+        {"step_id": "qa-availability", "capability": "navigate", "objective": "Add the product to cart"},
+    ])
+    assert [step["capability"] for step in cart_steps] == ["navigate", "interact", "interact"]
+
+    search_objective = (
+        'Open https://www.automationexercise.com/products. Search for "Blue Top". '
+        "Verify the product appears with its name, image, and price."
+    )
+    search_steps = coerce_decision_step_capabilities(search_objective, [
+        {"step_id": "qa-navigation", "capability": "navigate", "objective": "Open the products page"},
+        {
+            "step_id": "qa-availability",
+            "capability": "navigate",
+            "objective": 'Search for "Blue Top" using the rendered search control',
+        },
+        {"step_id": "qa-content", "capability": "extract", "objective": "Extract the product fields"},
+    ])
+    assert [step["capability"] for step in search_steps] == ["navigate", "interact", "extract"]
+    assert step_objective_requires_interaction(search_steps[1]["objective"]) is True
+    assert objective_requests_search(search_steps[1]["objective"]) == "Blue Top"
+    assert objective_requests_search("Select the 'Dark Grey' variant and check stock") is None

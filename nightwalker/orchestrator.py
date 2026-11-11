@@ -96,6 +96,12 @@ class Orchestrator:
                 return result
             except PermissionError as exc:
                 return {"status": "blocked", "issues": [str(exc)[:500]], "browser_backend": "steel-mcp"}
+            except OllamaUnavailable as exc:
+                return {
+                    "status": "failed",
+                    "issues": [f"Steel MCP tool proposal failed: {str(exc)[:500]}"],
+                    "browser_backend": "steel-mcp",
+                }
             except (RuntimeError, OSError, ValueError) as exc:
                 return {
                     "status": "failed", "issues": [f"Steel MCP execution failed: {str(exc)[:500]}"],

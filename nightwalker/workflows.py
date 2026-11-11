@@ -10,7 +10,12 @@ from enum import StrEnum
 from urllib.parse import urlsplit
 
 from nightwalker.contracts import Capability
-from nightwalker.planning_contracts import ExecutionBlueprint, PlannedSubtask, SuccessCriterion
+from nightwalker.planning_contracts import (
+    ExecutionBlueprint,
+    PlannedSubtask,
+    SuccessCriterion,
+    WorkflowPlanTemplate,
+)
 
 
 class WorkflowType(StrEnum):
@@ -155,10 +160,10 @@ def is_ecommerce_cart_workflow(objective: str) -> bool:
     """Identify an explicitly requested cart-state journey, not ordinary product research."""
     value = " ".join(objective.casefold().split())
     # Allow the product name or a short description between the action and
-    # destination (for example, "add 'Dark Grey' to the cart"). Exact phrase
+    # destination (for example, "add '<product>' to the cart"). Exact phrase
     # matching missed these common natural-language cart requests.
     has_add_action = bool(re.search(
-        r"\b(?:add|put|place)\b.{0,120}\b(?:to|into)\s+(?:the\s+)?(?:shopping\s+)?cart\b",
+        r"\b(?:add|put|place)\b.{0,120}\b(?:to|into)\s+(?:(?:the|my|our)\s+)?(?:shopping\s+)?cart\b",
         value,
     ))
     has_remove_action = bool(re.search(
@@ -177,7 +182,98 @@ def is_ecommerce_cart_workflow(objective: str) -> bool:
     return has_cart_action and has_cart_verification
 
 
-def build_cart_journey_blueprint(objective: str) -> ExecutionBlueprint:
+def objective_requests_search(objective: str) -> str | None:
+    """Return the query when this step must type it into a search box and submit it."""
+    query = extract_product_search_query(objective)
+    if not query:
+        return None
+    value = " ".join(objective.casefold().split())
+    markers = (
+        "search for", "search query", "submit the search", "submit the query",
+        "type the query", "enter the query", "rendered search", "use the search",
+    )
+    if any(marker in value for marker in markers):
+        return query
+    return None
+
+
+def step_objective_requires_interaction(objective: str) -> bool:
+    """True when a step objective needs page interaction, not navigate-only capture."""
+    value = " ".join(objective.casefold().split())
+    markers = (
+        "search for", "search query", "submit the query", "submit the search",
+        "enter the query", "type the query", "use the search", "rendered search",
+        "select a product", "select the product", "identify one exact",
+        "find the exact", "open its product", "product detail", "add to cart",
+        "click add", "remove", "configure", "variant", "colour", "color", "size",
+        "finish", "collection location", "store location",
+    )
+    return any(marker in value for marker in markers)
+
+
+def _capability_value(value) -> str:
+    return str(getattr(value, "value", value) or "")
+
+
+def coerce_decision_step_capabilities(objective: str, steps: list) -> list[dict]:
+    """Coerce Decider-authored QA steps so search/cart discovery uses interact.
+
+    The Decider owns step order and objectives, but navigate-only capabilities
+    on search/discover/add/remove steps skip the browser interaction path.
+    Overlay canonical cart/product-search capabilities when those workflows
+    apply; otherwise upgrade interaction-shaped step objectives from navigate
+    to interact while leaving the first storefront open as navigate.
+    """
+    capability_by_id: dict[str, str] = {}
+    if is_ecommerce_cart_workflow(objective):
+        for item in build_cart_journey_blueprint(objective).subtasks:
+            capability_by_id[item.subtask_id] = _capability_value(item.capability)
+    elif extract_product_search_query(objective) is not None:
+        try:
+            for item in build_product_search_blueprint(objective).subtasks:
+                capability_by_id[item.subtask_id] = _capability_value(item.capability)
+        except ValueError:
+            capability_by_id = {}
+
+    coerced: list[dict] = []
+    for index, item in enumerate(steps, 1):
+        if isinstance(item, dict):
+            step_id = str(item.get("step_id") or "")
+            step_objective = str(item.get("objective") or "")
+            capability = _capability_value(item.get("capability"))
+            payload = {**item}
+        else:
+            step_id = str(getattr(item, "step_id", "") or "")
+            step_objective = str(getattr(item, "objective", "") or "")
+            capability = _capability_value(getattr(item, "capability", ""))
+            payload = {
+                "step_id": step_id,
+                "objective": step_objective,
+                "capability": capability,
+            }
+
+        expected = capability_by_id.get(step_id)
+        if expected and capability != expected:
+            capability = expected
+        elif (
+            capability == Capability.NAVIGATE.value
+            and index > 1
+            and (
+                step_id.endswith(("qa-discover", "qa-availability", "qa-action", "qa-validate"))
+                or step_objective_requires_interaction(step_objective)
+            )
+        ):
+            capability = Capability.INTERACT.value
+
+        payload["step_id"] = step_id
+        payload["objective"] = step_objective
+        payload["capability"] = capability
+        coerced.append(payload)
+
+    return coerced
+
+
+def build_cart_journey_blueprint(objective: str) -> WorkflowPlanTemplate:
     """Create a sequential, explicitly interactive plan for an authorised cart test."""
     if not is_ecommerce_cart_workflow(objective):
         raise ValueError("An explicit ecommerce cart journey is required")
@@ -189,23 +285,23 @@ def build_cart_journey_blueprint(objective: str) -> ExecutionBlueprint:
         ),
         SuccessCriterion(
             criterion_id="sc-product-discovery",
-            description="The requested product and its add-to-cart control are identified.",
-            acceptance_test="Capture the exact matching product card, its visible name and an enabled Add to Cart control within that card.",
+            description="The requested product is identified on its product page, including stock state.",
+            acceptance_test="Capture the matching product identity and whether Add to Cart is enabled or the item is out of stock.",
         ),
         SuccessCriterion(
             criterion_id="sc-product-addition",
-            description="The requested product is added to the cart.",
-            acceptance_test="After an authorised click, capture the product in the cart or a cart count/success state attributable to that product.",
+            description="The requested product is added to the cart, or out-of-stock is verified.",
+            acceptance_test="Capture a cart mutation for the product, or an explicit out-of-stock / sold-out / unavailable state that prevents adding.",
         ),
         SuccessCriterion(
             criterion_id="sc-cart-verification",
-            description="The cart's product, displayed price and quantity are verified.",
-            acceptance_test="Capture the cart line item with exact product name, displayed price and quantity; do not infer missing values.",
+            description="The cart line is verified, or skipped when the product is out of stock.",
+            acceptance_test="Capture cart line name/price/quantity when present; if the product is out of stock and the cart has no line, record that instead of inventing values.",
         ),
         SuccessCriterion(
             criterion_id="sc-cart-removal",
-            description="The requested product is removed from the cart.",
-            acceptance_test="After an authorised remove action, capture that the product line item is absent.",
+            description="The requested product is removed from the cart, or was never addable.",
+            acceptance_test="Capture removal of the line item, or confirm there is no cart line because the product is out of stock.",
         ),
         SuccessCriterion(
             criterion_id="sc-empty-cart-confirmation",
@@ -217,7 +313,7 @@ def build_cart_journey_blueprint(objective: str) -> ExecutionBlueprint:
         PlannedSubtask(
             subtask_id="qa-navigation",
             objective="Navigate to the exact storefront URL and capture its identity.",
-            capability=Capability.NAVIGATE,
+            capability=Capability.NAVIGATE.value,
             required_tools=["browser_navigate", "browser_snapshot"],
             success_criteria=["sc-navigation"],
             depends_on=[],
@@ -225,51 +321,61 @@ def build_cart_journey_blueprint(objective: str) -> ExecutionBlueprint:
         ),
         PlannedSubtask(
             subtask_id="qa-discover",
-            objective="Find the exact requested product card and identify its enabled Add to Cart control. Do not click it in this step.",
-            capability=Capability.INTERACT,
+            objective=(
+                "Find a matching product, open its product page, and record stock state. "
+                "If the user named an exact product and it is out of stock, record that and stop adding. "
+                "If the user did not name an exact product (any / a product / category only) and this "
+                "listing is out of stock, leave it and open a different in-stock product instead. Do not add yet."
+            ),
+            capability=Capability.INTERACT.value,
             required_tools=["browser_snapshot", "browser_interact"],
             success_criteria=["sc-product-discovery"],
             depends_on=["qa-navigation"],
-            expected_output="Product-card identity, price/image observations and grounded add-control locator.",
+            expected_output="In-stock product-page identity, or exact-SKU out-of-stock when the user named one.",
         ),
         PlannedSubtask(
             subtask_id="qa-availability",
-            objective="Click Add to Cart for the verified matching product only; do not checkout.",
-            capability=Capability.INTERACT,
+            objective=(
+                "If the product is in stock, click Add to Cart only. "
+                "If it is out of stock and the user named that exact product, capture out-of-stock and do not invent a cart add. "
+                "If it is out of stock and the user did not name an exact product, switch to another in-stock product first. "
+                "Do not checkout."
+            ),
+            capability=Capability.INTERACT.value,
             required_tools=["browser_interact", "browser_snapshot"],
             success_criteria=["sc-product-addition"],
             depends_on=["qa-discover"],
-            expected_output="Observed cart mutation and evidence that the requested item was added.",
+            expected_output="Observed cart mutation, or verified exact-SKU out-of-stock evidence.",
         ),
         PlannedSubtask(
             subtask_id="qa-content",
-            objective="Read the cart line item and capture the exact product name, displayed price and quantity.",
-            capability=Capability.EXTRACT,
+            objective="If a cart line exists, capture its exact product name, displayed price and quantity; if the product was out of stock, record that the cart line is absent.",
+            capability=Capability.EXTRACT.value,
             required_tools=["browser_snapshot", "browser_extract"],
             success_criteria=["sc-cart-verification"],
             depends_on=["qa-availability"],
-            expected_output="Exact cart line-item name, price, quantity and evidence source.",
+            expected_output="Cart line details, or an explicit out-of-stock / empty-line outcome.",
         ),
         PlannedSubtask(
             subtask_id="qa-validate",
-            objective="Remove only the requested product from the cart using its grounded remove control.",
-            capability=Capability.INTERACT,
+            objective="If the item is in the cart, remove it; if it was out of stock and never added, confirm there is nothing to remove.",
+            capability=Capability.INTERACT.value,
             required_tools=["browser_interact", "browser_snapshot"],
             success_criteria=["sc-cart-removal"],
             depends_on=["qa-content"],
-            expected_output="Observed removal and evidence that the product line item is absent.",
+            expected_output="Observed removal, or confirmation that no cart line existed because of out-of-stock.",
         ),
         PlannedSubtask(
             subtask_id="qa-synthesise",
-            objective="Confirm the cart is empty and report any issues. Never open or submit checkout.",
-            capability=Capability.EXTRACT,
+            objective="Confirm the cart is empty and report stock/add/remove outcomes. Never open or submit checkout.",
+            capability=Capability.EXTRACT.value,
             required_tools=["browser_snapshot", "browser_extract"],
             success_criteria=["sc-empty-cart-confirmation"],
             depends_on=["qa-validate"],
-            expected_output="Explicit empty-cart evidence and a concise account of verified/unverified steps.",
+            expected_output="Explicit empty-cart evidence and a concise account of verified/unverified steps including out-of-stock.",
         ),
     ]
-    return ExecutionBlueprint(
+    return WorkflowPlanTemplate(
         original_objective=objective,
         interpretation="Sequential ecommerce cart QA journey with explicitly authorised add/remove actions and no checkout.",
         success_criteria=criteria,
@@ -279,7 +385,7 @@ def build_cart_journey_blueprint(objective: str) -> ExecutionBlueprint:
     )
 
 
-def build_product_search_blueprint(objective: str) -> ExecutionBlueprint:
+def build_product_search_blueprint(objective: str) -> WorkflowPlanTemplate:
     """Build a deterministic, correctly authorised plan for exact product-search QA."""
     query = extract_product_search_query(objective)
     if not query:
@@ -346,14 +452,14 @@ def build_product_search_blueprint(objective: str) -> ExecutionBlueprint:
         PlannedSubtask(
             subtask_id="qa-navigation",
             objective="Navigate to the supplied website and identify its rendered search interface; if absent, discover the actual same-origin catalogue route from site navigation.",
-            capability=Capability.NAVIGATE,
+            capability=Capability.NAVIGATE.value,
             success_criteria=["sc-navigation"],
             expected_output="Captured target page and grounded search-interface or catalogue-route evidence.",
         ),
         PlannedSubtask(
             subtask_id="qa-availability",
             objective=f'Search for "{query}" using the rendered search control, discover the actual same-origin catalogue route if necessary, submit the query and capture the search outcome.',
-            capability=Capability.INTERACT,
+            capability=Capability.INTERACT.value,
             depends_on=["qa-navigation"],
             success_criteria=["sc-search-submission"],
             expected_output="Evidence that the exact query was entered and the site's search action was triggered, or a precise recorded failure outcome.",
@@ -361,7 +467,7 @@ def build_product_search_blueprint(objective: str) -> ExecutionBlueprint:
         PlannedSubtask(
             subtask_id="qa-content",
             objective=f'Extract only the requested product fields ({", ".join(sorted(requested_fields))}) from the matching search result for "{query}". Preserve exact values and provenance.',
-            capability=Capability.EXTRACT,
+            capability=Capability.EXTRACT.value,
             depends_on=["qa-availability"],
             success_criteria=product_criterion_ids,
             expected_output="Each requested product field captured independently with its source and exact value; missing fields remain explicitly unverified.",
@@ -369,7 +475,7 @@ def build_product_search_blueprint(objective: str) -> ExecutionBlueprint:
         PlannedSubtask(
             subtask_id="qa-validate",
             objective=f'Validate each requested product field ({", ".join(sorted(requested_fields))}) against the matching result card and captured browser evidence for "{query}".',
-            capability=Capability.EXTRACT,
+            capability=Capability.EXTRACT.value,
             depends_on=["qa-content"],
             success_criteria=product_criterion_ids,
             expected_output="Evidence-linked validation verdict for every requested product field.",
@@ -377,13 +483,13 @@ def build_product_search_blueprint(objective: str) -> ExecutionBlueprint:
         PlannedSubtask(
             subtask_id="qa-synthesise",
             objective="Summarize the search submission and each independently verified product field; clearly distinguish confirmed, failed and unverified checks.",
-            capability=Capability.EXTRACT,
+            capability=Capability.EXTRACT.value,
             depends_on=["qa-validate"],
             success_criteria=["sc-navigation", "sc-search-submission", *product_criterion_ids],
             expected_output="Concise evidence-constrained QA report with no unsupported product claims.",
         ),
     ]
-    return ExecutionBlueprint(
+    return WorkflowPlanTemplate(
         original_objective=objective,
         interpretation=f"Search the supplied website for {query!r} and extract the requested product fields: {', '.join(sorted(requested_fields))}.",
         success_criteria=criteria,
@@ -409,7 +515,7 @@ def _qa_content_objective(objective: str) -> str:
     )
 
 
-def build_workflow_blueprint(objective: str, workflow: WorkflowType) -> ExecutionBlueprint:
+def build_workflow_blueprint(objective: str, workflow: WorkflowType) -> WorkflowPlanTemplate:
     if workflow == WorkflowType.SEO:
         criteria = [
             ("seo-scope", "The target website and inspected URL scope are recorded.", "At least one target URL and its captured source are recorded."),
@@ -499,14 +605,19 @@ def build_workflow_blueprint(objective: str, workflow: WorkflowType) -> Executio
         tasks.insert(-2, {
             "subtask_id": "combined-audit-crawl",
             "objective": "Continue the deterministic same-origin crawl for both workstreams until discovered URLs or the page budget are exhausted.",
-            "capability": Capability.NAVIGATE,
+            "capability": Capability.NAVIGATE.value,
             "success_criteria": ["combined-seo-coverage", "combined-qa-coverage"],
             "depends_on": [],
         })
         criteria = criteria[:20]
         tasks = tasks[:20]
 
-    return ExecutionBlueprint(
+    def _task_capability(raw) -> str:
+        if isinstance(raw, tuple):
+            return _capability_value(raw[2])
+        return _capability_value(raw.get("capability"))
+
+    return WorkflowPlanTemplate(
         original_objective=objective,
         interpretation={
             WorkflowType.SEO: "Website SEO audit",
@@ -522,7 +633,7 @@ def build_workflow_blueprint(objective: str, workflow: WorkflowType) -> Executio
         subtasks=[PlannedSubtask(
             subtask_id=item[0] if isinstance(item, tuple) else item["subtask_id"],
             objective=item[1] if isinstance(item, tuple) else item["objective"],
-            capability=item[2] if isinstance(item, tuple) else item["capability"],
+            capability=_task_capability(item),
             required_tools=["browser_navigate", "browser_snapshot", "browser_extract"],
             success_criteria=item[3] if isinstance(item, tuple) else item["success_criteria"],
             depends_on=[],

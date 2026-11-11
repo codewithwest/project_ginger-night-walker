@@ -35,7 +35,16 @@ RUN uv sync --python "$(command -v python3)" --no-dev --no-editable && \
     test -x /app/.venv/bin/python && \
     /app/.venv/bin/python --version && \
     /app/.venv/bin/python -c "import uvicorn, fastapi, playwright"
-RUN useradd --create-home --shell /bin/bash appuser && \
+# Pin to UID/GID 1000 so the bind-mounted ./data/evidence volume (owned by the
+# typical host developer account) stays writable. The Playwright base image
+# already reserves 1000 for pwuser; rename that account instead of creating 1002.
+RUN if id -u pwuser >/dev/null 2>&1; then \
+      usermod -l appuser pwuser && groupmod -n appuser pwuser && \
+      usermod -d /home/appuser -m appuser; \
+    else \
+      groupadd --gid 1000 appuser && \
+      useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash appuser; \
+    fi && \
     mkdir -p /app/evidence && \
     chown -R appuser:appuser /app
 ENV HOME=/home/appuser

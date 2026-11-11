@@ -77,6 +77,16 @@ async def control_centre():
     return FileResponse(UI_FILE)
 
 
+@app.get("/vaimo-logo-white.svg", include_in_schema=False)
+async def vaimo_logo_white():
+    return FileResponse(UI_DIR / "vaimo-logo-white.svg")
+
+
+@app.get("/vaimo-logo-black.svg", include_in_schema=False)
+async def vaimo_logo_black():
+    return FileResponse(UI_DIR / "vaimo-logo-black.svg")
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "ginger-night-walker"}
@@ -212,6 +222,14 @@ async def restart_task(task_id: str):
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.delete("/tasks/{task_id}/workspace")
+async def delete_workspace_mission(task_id: str):
+    removed = await task_manager.delete_mission(task_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"task_id": task_id, "deleted": True}
 
 
 @app.delete("/tasks/{task_id}")
