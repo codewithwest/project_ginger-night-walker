@@ -216,6 +216,8 @@ class SteelMCPClient:
             result = await self.call_tool("steel_navigate", {
                 "session_id": session_id, "url": url, "include_snapshot": True,
             })
+            if result.get("is_error"):
+                raise RuntimeError(str(result.get("content") or [])[:1500])
             selected_tool = "steel_navigate"
         else:
             snapshot = await self.call_tool("steel_snapshot", {
