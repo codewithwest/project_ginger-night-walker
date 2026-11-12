@@ -73,8 +73,6 @@ Vite proxies API requests to the local FastAPI service on port 8000.
 | `OLLAMA_KEEP_ALIVE` | Ollama model residency after each request (default `0`) | `0` unloads after each call to reduce peak RAM; increase only if the host can keep both models loaded |
 | `OLLAMA_MODEL_DEFAULT` | Main model for planning, navigation planning and synthesis (default `qwen3.5:9b`) | Must exist on remote Ollama |
 | `OLLAMA_MODEL_LIGHT` | Smaller model for site interactions, extraction, recovery and goal-progress (default `qwen3.5:4b`) | Must exist on remote Ollama; keep this tiny for HTML/ref click-type proposals |
-| `OLLAMA_MODEL_CLASSIFIER` | Tiny Nimble classifier for exact vs flexible cart products (default `nimble`) | `ollama pull nimble` on Ollama ≥0.35; uses `/v1/systemone`; heuristic fallback when unavailable |
-| `OLLAMA_CLASSIFIER_ENABLED` | Enable Nimble cart product-specificity classification (default `true`) | When false, regex heuristic only |
 | `NAVIGATION_TIMEOUT_MS` | Browser navigation timeout | Keep bounded |
 | `BROWSER_BACKEND` | Browser execution provider (`local` or `steel`) | Compose defaults to self-hosted Steel; `local` uses Playwright Chromium |
 | `STEEL_API_KEY` | Optional Steel API credential | Leave blank for an unauthenticated self-hosted instance; never commit secrets |
