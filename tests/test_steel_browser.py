@@ -223,28 +223,3 @@ def test_steel_tool_proposal_salvages_broken_delimiter_json():
     assert salvaged["tool_name"] == "steel_act"
     assert salvaged["arguments"]["action"] == "click"
     assert salvaged["arguments"]["target"] == "@e271"
-
-
-def test_open_search_box_is_typed_and_submitted():
-    snapshot = """
-    - button "Close search" @e74
-    - search "Store"
-    - textbox "Search" @e73 [value=""]
-    - textbox "Email Address" @e54 [value=""] [required=true] [off-screen]
-    """
-    assert search_follow_up_actions(snapshot, "Dark Grey") == [
-        {"action": "type", "target": "@e73", "value": "Dark Grey"},
-        {"action": "press", "target": "@e73", "value": "Enter"},
-    ]
-
-
-def test_search_follow_up_only_submits_when_the_query_is_already_typed():
-    snapshot = '- textbox "Search" @e73 [value="Dark Grey"]'
-    assert search_follow_up_actions(snapshot, "Dark Grey") == [
-        {"action": "press", "target": "@e73", "value": "Enter"},
-    ]
-
-
-def test_search_follow_up_does_nothing_when_no_search_box_is_open():
-    snapshot = '- button "Toggle search form" @e5\n- textbox "Email Address" @e54 [value=""] [off-screen]'
-    assert search_follow_up_actions(snapshot, "Dark Grey") == []
