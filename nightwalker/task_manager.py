@@ -58,7 +58,6 @@ from nightwalker.workflows import (
     extract_product_search_query,
     objective_requests_search,
     qa_scope_for_objective,
-    step_objective_requires_interaction,
     target_url_from_objective,
 )
 
@@ -1108,10 +1107,7 @@ class TaskManager:
                             ready = ready_steps_for_capture(
                                 execution_plan,
                                 str((active_plan_step or {}).get("step_id") or ""),
-                                # QA is an action-by-action workflow: a navigation capture
-                                # cannot also satisfy availability or page-inspection steps.
-                                # Keep the stricter existing rule for focused product/cart
-                                # journeys even if their workflow metadata is migrated.
+                                # QA plan steps are executed one at a time in Decider order.
                                 one_step_per_capture=(
                                     str(record.get("workflow_type") or "") == "qa"
                                     or focused_product_search
