@@ -414,7 +414,7 @@ export default function App() {
   const [browserExpanded, setBrowserExpanded] = useState(false);
   const [checklistFullscreen, setChecklistFullscreen] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">(() => {
-    try { return (localStorage.getItem("ginger-ginger-night-walker-theme") ?? localStorage.getItem("ginger-night-walker-theme")) === "light" ? "light" : "dark"; }
+    try { return (localStorage.getItem("ginger-night-walker-theme") ?? localStorage.getItem("ginger-night-walker-theme")) === "light" ? "light" : "dark"; }
     catch { return "dark"; }
   });
 
@@ -452,7 +452,7 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    try { localStorage.setItem("ginger-ginger-night-walker-theme", theme); } catch { /* storage is optional */ }
+    try { localStorage.setItem("ginger-night-walker-theme", theme); } catch { /* storage is optional */ }
   }, [theme]);
 
   const selected = useMemo(
