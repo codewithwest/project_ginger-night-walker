@@ -1093,7 +1093,6 @@ class TaskManager:
                         str(record.get("workflow_type") or "") == "qa"
                         and extract_product_search_query(str(objective or "")) is not None
                     )
-                    focused_cart_journey = is_ecommerce_cart_workflow(str(objective or ""))
                     if isinstance(execution_plan, dict) and evidence_refs:
                         # Advance all sequential steps that this single captured page
                         # can actually satisfy. The trusted runtime performs extraction
@@ -1116,7 +1115,6 @@ class TaskManager:
                                 one_step_per_capture=(
                                     str(record.get("workflow_type") or "") == "qa"
                                     or focused_product_search
-                                    or focused_cart_journey
                                 ),
                             )
                             if not ready:
@@ -1177,9 +1175,6 @@ class TaskManager:
                                 seo_checks = (result.get("structured_data") or {}).get("seo_checks") or {}
                                 if seo_checks and result.get("evidence_id"):
                                     verified_result = "Captured page-level title, description, canonical, headings, image and link signals"
-                            elif capability == "extract" and str(step.get("step_id", "")).endswith("qa-availability"):
-                                if result.get("http_status") is not None and result.get("http_status", 0) < 400 and result.get("evidence_id"):
-                                    verified_result = f"Target page returned HTTP {result.get('http_status')}; visible-content issues are tracked separately"
                             elif capability == "interact" and (
                                 requested_query := objective_requests_search(str(step.get("objective") or ""))
                             ):
@@ -1191,81 +1186,6 @@ class TaskManager:
                                     and result.get("evidence_id")
                                 ):
                                     verified_result = f"Submitted search query {requested_query!r} and captured its navigation outcome"
-                            elif capability == "extract" and str(step.get("step_id", "")).endswith("qa-content"):
-                                result_data = result.get("structured_data") or {}
-                                qa_checks = result_data.get("qa_checks") or {}
-                                page_smoke = result_data.get("qa_page_smoke") or {}
-                                if record.get("qa_scope") == "single_page":
-                                    smoke_complete = all(key in page_smoke for key in (
-                                        "url", "document_title", "h1_count", "h1_headings",
-                                        "image_count", "images", "broken_image_count", "pending_image_count",
-                                        "console_error_count", "page_error_count",
-                                    ))
-                                    objective_text = str(objective or record.get("objective") or record.get("original_objective") or "")
-                                    requested_product_search = extract_product_search_query(objective_text) is not None
-                                    product_search = result_data.get("qa_product_search")
-                                    if not isinstance(product_search, dict):
-                                        # Search submission is its own authorised mission step.
-                                        # The later extraction step runs in a separate browser
-                                        # round, so reuse the previously captured search outcome
-                                        # rather than incorrectly requiring it in this round's
-                                        # fresh payload as well.
-                                        prior_searches = structured_data.get("qa_product_search", [])
-                                        if isinstance(prior_searches, list):
-                                            product_search = next(
-                                                (item for item in reversed(prior_searches) if isinstance(item, dict)),
-                                                None,
-                                            )
-                                    product_search_captured = (
-                                        isinstance(product_search, dict)
-                                        and bool(product_search.get("query"))
-                                        and (
-                                            product_search.get("performed") is True
-                                            or product_search.get("status") in {
-                                                "search_control_not_found", "ambiguous_search_control",
-                                                "search_and_product_page_not_found",
-                                                "product_page_navigation_failed", "search_and_catalogue_not_found",
-                                                "catalogue_navigation_failed", "catalogue_discovery_failed",
-                                            }
-                                        )
-                                    )
-                                    if requested_product_search:
-                                        # Search submission alone is not product verification.
-                                        # The extraction step must reuse the prior round's
-                                        # captured cards and prove name, image and price on
-                                        # at least one matching result.
-                                        matching_product_cards = (
-                                            product_search.get("matches", [])
-                                            if isinstance(product_search, dict) else []
-                                        )
-                                        complete_product_card = next((
-                                            item for item in matching_product_cards
-                                            if isinstance(item, dict)
-                                            and str(item.get("name_match") or item.get("product_title") or "").strip()
-                                            and bool(item.get("image_src"))
-                                            and bool(item.get("image_loaded"))
-                                            and bool(item.get("price"))
-                                        ), None)
-                                        smoke_complete = (
-                                            smoke_complete
-                                            and product_search_captured
-                                            and complete_product_card is not None
-                                        )
-                                        if product_search_captured and complete_product_card is None:
-                                            self._log(
-                                                task_id,
-                                                "Product search was submitted, but no matching card has all three verified fields (name, loaded image and displayed price); extraction remains unverified.",
-                                                "warning",
-                                            )
-                                    if smoke_complete and result.get("evidence_id"):
-                                        verified_result = (
-                                            f"Captured title, {page_smoke.get('h1_count')} H1 heading(s), "
-                                            f"{page_smoke.get('image_count')} image load states and "
-                                            f"{page_smoke.get('console_error_count')} console error(s); "
-                                            "page exceptions and failed requests recorded separately"
-                                        )
-                                elif qa_checks and result.get("evidence_id"):
-                                    verified_result = "Captured visible DOM structure, controls, forms, links and duplicate-ID checks"
                             elif capability == "interact" and str(step.get("step_id", "")).endswith(("seo-links", "qa-navigation")):
                                 link_checks = (result.get("structured_data") or {}).get("internal_link_checks") or {}
                                 navigation = (result.get("structured_data") or {}).get("qa_navigation_journeys") or {}
@@ -1283,34 +1203,27 @@ class TaskManager:
                                     f"Completed the authorised {capability} step and captured evidence "
                                     f"for: {step.get('objective') or 'the planned objective'}"
                                 )
-                            mission_objective = str(record.get("objective") or "")
                             if verified_result is None:
-                                workflow_value = str(record.get("workflow_type") or "")
-                                cart_journey = is_ecommerce_cart_workflow(mission_objective or str(record.get("objective") or ""))
-                                deferred_steps = ["seo-crawl", "qa-crawl", "audit-crawl"]
-                                if not cart_journey:
-                                    deferred_steps.extend([
-                                        "seo-validate", "qa-validate", "seo-synthesise", "qa-synthesise",
-                                    ])
-                                if (
-                                    workflow_value in {"seo", "qa", "seo_qa"}
-                                    and capability != "interact"
-                                    and str(step.get("step_id", "")).endswith(tuple(deferred_steps))
-                                ):
-                                    # Long-running crawl and final synthesis are completed only after
-                                    # the deterministic page queue has been exhausted.
+                                step_goal = str(step.get("objective") or "").casefold()
+                                is_long_running_crawl = (
+                                    capability in {"extract", "recover"}
+                                    and any(term in step_goal for term in (
+                                        "crawl", "sitemap", "site coverage", "discover all pages",
+                                        "visit discovered urls", "known urls",
+                                    ))
+                                )
+                                if is_long_running_crawl and next_url:
                                     break
-                                if workflow_value in {"seo", "qa", "seo_qa"} and str(step.get("step_id", "")).startswith(("seo-", "qa-", "combined-")):
-                                    failure_detail = (
-                                        "This step's acceptance test was not met by the available browser evidence. "
-                                        "No success is assumed."
-                                    )
-                                    fail_step(
-                                        execution_plan, step["step_id"],
-                                        failure_detail,
-                                        blocked=True,
-                                    )
-                                    self._log(task_id, f"Plan step blocked: {step['step_id']} — {failure_detail}", "warning")
+                                failure_detail = (
+                                    "The authorised plan step did not produce evidence sufficient "
+                                    "to verify its objective. No success is assumed."
+                                )
+                                fail_step(execution_plan, step["step_id"], failure_detail, blocked=True)
+                                self._log(
+                                    task_id,
+                                    f"Plan step blocked: {step['step_id']} — {failure_detail}",
+                                    "warning",
+                                )
                                 break
                             complete_step(execution_plan, step["step_id"], evidence_refs=evidence_refs, result=verified_result)
                             self._log(task_id, f"Plan step verified: {step['step_id']}")
