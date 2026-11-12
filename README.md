@@ -1,6 +1,6 @@
-# Ginger Way
+# Ginger Night Walker
 
-Ginger Way is Ginger OS's local-first, policy-governed **website SEO and QA audit platform**. Its first product phase has two explicit workflows: evidence-backed SEO audits and read-only website/application QA. General-purpose and deep research are deferred; they are not fallback routes for failed audits.
+Ginger Night Walker is Ginger OS's local-first, policy-governed **website SEO and QA audit platform**. Its first product phase has two explicit workflows: evidence-backed SEO audits and read-only website/application QA. General-purpose and deep research are deferred; they are not fallback routes for failed audits.
 
 The core trust boundary is deliberate:
 
@@ -66,7 +66,7 @@ Partial or not yet implemented:
 - product extraction and generic research code remain for legacy compatibility but are not first-phase product workflows;
 - the service is not hardened or authenticated for hostile multi-user workloads.
 
-The Goal-Aware Strands prototype is retained under `integrations/goal_aware_strands/`. Its goal-state and Strands decision concepts are integrated into the core; its direct Playwright MCP executor and coding-model tool-argument loop are intentionally not used because they bypass Ginger Way's central BrowserRuntime and PolicyEngine.
+The Goal-Aware Strands prototype is retained under `integrations/goal_aware_strands/`. Its goal-state and Strands decision concepts are integrated into the core; its direct Playwright MCP executor and coding-model tool-argument loop are intentionally not used because they bypass Ginger Night Walker's central BrowserRuntime and PolicyEngine.
 
 See the architecture and security documents for the full implementation-status matrix and required hardening.
 
@@ -118,7 +118,7 @@ Documentation is part of the engineering contract: update diagrams, schemas, sec
 
 ## Steel MCP mission execution
 
-Set `STEEL_MCP_ENABLED=true` and `STEEL_MCP_MISSION_ENABLED=true` in `.env`, then rebuild Ginger Way:
+Set `STEEL_MCP_ENABLED=true` and `STEEL_MCP_MISSION_ENABLED=true` in `.env`, then rebuild Ginger Night Walker:
 
 ```bash
 docker compose up -d --build night-walker
