@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 from typing import Any
 
 from nightwalker.cart_progress import (
@@ -247,15 +248,42 @@ class SteelMCPClient:
         self, task_id: str, url: str, objective: str, capability: str,
         propose_tool_call, session_callback=None, *, mission_objective: str | None = None,
     ) -> dict[str, Any]:
-        """Execute one authorised model-authored mission step using registered Steel tools."""
-        # A navigate step starts the journey: always take a brand-new guest session.
+        """Execute exactly one authorised, Decider-authored mission step."""
         session_id = await self.session_for_task(task_id, fresh=(capability == "navigate"))
         if session_callback is not None:
             session_callback(session_id)
+
+        if capability == "navigate":
+            result = await self.call_tool("steel_navigate", {
+                "session_id": session_id, "url": url, "include_snapshot": True,
+            })
+            selected_tool = "steel_navigate"
+        else:
+            snapshot = await self.call_tool("steel_snapshot", {
+                "session_id": session_id, "interactive_only": False,
+            })
+            if snapshot["is_error"]:
+                raise RuntimeError(str(snapshot["content"])[:1000])
+            allowed_by_capability = {
+                "interact": {"steel_find", "steel_act", "steel_wait_for"},
+                "extract": {"steel_snapshot", "steel_scrape"},
+                "recover": {"steel_navigate", "steel_wait_for"},
+            }
+            allowed = allowed_by_capability.get(capability)
+            if not allowed:
+                raise PermissionError(f"Unsupported Steel MCP mission capability: {capability}")
+            available_tools = [tool for tool in self._tools if tool["name"] in allowed]
+            previous_failure: dict[str, Any] | None = None
+            result = {"is_error": True, "content": [{"text": "No tool proposal was executed"}]}
+            selected_tool = ""
+            for attempt in range(2):
+                observation: dict[str, Any] = {
+                    "url": url, "snapshot": snapshot, "session_id": session_id,
+                    "previous_failure": previous_failure,
+                }
                 proposal = await propose_tool_call(
                     task_id=task_id, objective=objective, capability=capability,
-                    observation=observation,
-                    tools=available_tools, session_id=session_id,
+                    observation=observation, tools=available_tools, session_id=session_id,
                 )
                 selected_tool = str(proposal.get("tool_name") or "")
                 if selected_tool not in allowed:
@@ -268,10 +296,7 @@ class SteelMCPClient:
                      if tool.get("name") == selected_tool),
                     {},
                 )
-                schema_properties = selected_schema.get("properties") or {}
-                # Session ownership remains here; pass the ID only if the
-                # selected tool's published schema explicitly declares it.
-                if "session_id" in schema_properties:
+                if "session_id" in (selected_schema.get("properties") or {}):
                     arguments["session_id"] = session_id
                 else:
                     arguments.pop("session_id", None)
@@ -279,10 +304,8 @@ class SteelMCPClient:
                 if not result["is_error"]:
                     break
                 previous_failure = {
-                    "tool_name": selected_tool,
-                    "arguments": arguments,
-                    "error": result.get("content") or [],
-                    "recovery_attempt": attempt + 1,
+                    "tool_name": selected_tool, "arguments": arguments,
+                    "error": result.get("content") or [], "recovery_attempt": attempt + 1,
                 }
                 if attempt == 0:
                     refreshed = await self.call_tool("steel_snapshot", {
@@ -293,6 +316,7 @@ class SteelMCPClient:
                     snapshot = refreshed
             if result.get("is_error"):
                 raise RuntimeError(str(result.get("content") or [])[:1500])
+
         after = await self.call_tool("steel_snapshot", {
             "session_id": session_id, "interactive_only": False,
         })
@@ -300,9 +324,9 @@ class SteelMCPClient:
             raise RuntimeError(str(after["content"])[:1000])
         return {
             "status": "completed", "session_id": session_id,
-            "tool_name": selected_tool, "tool_result": result,
-            "snapshot": after,
+            "tool_name": selected_tool, "tool_result": result, "snapshot": after,
         }
+
     async def release_task_session(self, task_id: str) -> None:
         session_id = self._sessions.pop(task_id, None)
         if not session_id:
