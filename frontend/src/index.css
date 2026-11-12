@@ -657,7 +657,7 @@ body { overscroll-behavior: none; }
 }
 
 
-/* Vaimo brand: English violet grounds, yellow used as the accent, Inter for type. */
+/* Legacy third-party theme override: English violet grounds, yellow used as the accent, Inter for type. */
 :root {
   color-scheme: dark;
   --ink: #ffffff;
@@ -1625,7 +1625,7 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
   .research-report .product-result-card__image img { min-height: 100px; height: 100px; }
 }
 
-/* Vaimo brand centre: white ground, black headings, jet body, violet accent, one yellow rule. */
+/* Legacy third-party theme override centre: white ground, black headings, jet body, violet accent, one yellow rule. */
 .welcome h1 { font-weight: 500; }
 :root[data-theme="light"] .welcome h1,
 :root[data-theme="light"] .compose-card h2,
