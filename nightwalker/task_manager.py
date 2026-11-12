@@ -13,13 +13,6 @@ logger = logging.getLogger(__name__)
 
 from nightwalker.a2a import A2ABus
 from nightwalker.agent_allocator import AgentAllocator
-from nightwalker.cart_progress import (
-    cart_intent,
-    cart_step_verification,
-    on_product_detail_page,
-    product_out_of_stock,
-)
-from nightwalker.nimble_classifier import cart_mission_allows_alternate
 from nightwalker.contracts import AgentTask
 from nightwalker.crawl_intelligence import (
     candidate_exclusion_reason,
@@ -61,7 +54,6 @@ from nightwalker.cart_report import (
 )
 from nightwalker.workflows import (
     WorkflowType,
-    build_cart_journey_blueprint,
     classify_workflow,
     coerce_decision_step_capabilities,
     is_ecommerce_cart_workflow,
@@ -142,151 +134,6 @@ class TaskManager:
                     "at": self._now(), "event_type": "persistence_warning",
                     "status": record.get("status", "unknown"), "message": message[:500],
                 })
-
-    def _migrate_legacy_cart_plan(self, record: dict[str, Any]) -> bool:
-        """Rebuild stale cart blueprints/ledgers onto the canonical interact journey.
-
-        Preserves verified storefront navigation evidence, resets interaction
-        steps that completed under navigate-only semantics, and coerces
-        capabilities so search/discover/add/remove remain authorised as interact.
-        """
-        objective = str(record.get("objective") or "")
-        if not is_ecommerce_cart_workflow(objective):
-            return False
-
-        canonical = build_cart_journey_blueprint(objective).model_dump(mode="json")
-        canonical_ids = [str(item["subtask_id"]) for item in canonical.get("subtasks") or []]
-        capability_by_id = {
-            str(item["subtask_id"]): str(item.get("capability") or "")
-            for item in canonical.get("subtasks") or []
-        }
-        old_blueprint = record.get("execution_blueprint") if isinstance(record.get("execution_blueprint"), dict) else {}
-        old_plan = record.get("execution_plan") if isinstance(record.get("execution_plan"), dict) else {}
-        old_subtasks = list(old_blueprint.get("subtasks") or [])
-        old_steps = [step for step in (old_plan.get("steps") or []) if isinstance(step, dict)]
-        old_ids = [str(item.get("subtask_id") or "") for item in old_subtasks]
-        plan_ids = [str(step.get("step_id") or "") for step in old_steps]
-
-        capability_stale = False
-        for item in old_subtasks:
-            step_id = str(item.get("subtask_id") or "")
-            expected = capability_by_id.get(step_id)
-            if expected and str(item.get("capability") or "") != expected:
-                capability_stale = True
-                break
-        if not capability_stale:
-            for step in old_steps:
-                step_id = str(step.get("step_id") or "")
-                expected = capability_by_id.get(step_id)
-                if expected and str(step.get("capability") or "") != expected:
-                    capability_stale = True
-                    break
-
-        # Only rewrite ledgers that already use the cart QA step vocabulary.
-        # Never replace a live Decider sequence (for example open-site/inspect-site
-        # or a valid Decider cart plan that includes qa-action) while the operator
-        # UI is polling snapshots. Extra Decider steps are not legacy.
-        uses_cart_vocabulary = any(
-            str(step_id).startswith("qa-") for step_id in [*old_ids, *plan_ids]
-        )
-        decider_cart_extension = any(
-            str(step_id).endswith("qa-action") for step_id in [*old_ids, *plan_ids]
-        )
-        needs_migration = uses_cart_vocabulary and capability_stale and not decider_cart_extension
-        if uses_cart_vocabulary and not capability_stale and not decider_cart_extension:
-            # IDs may differ slightly from the template; keep Decider order when
-            # capabilities are already interact-correct.
-            needs_migration = False
-        elif uses_cart_vocabulary and capability_stale and decider_cart_extension:
-            # Coerce capabilities only; do not destroy qa-action or completions.
-            needs_migration = False
-            changed = False
-            for step in old_steps:
-                step_id = str(step.get("step_id") or "")
-                expected = capability_by_id.get(step_id)
-                if step_id.endswith("qa-action") and str(step.get("capability") or "") != "interact":
-                    step["capability"] = "interact"
-                    changed = True
-                elif expected and str(step.get("capability") or "") != expected:
-                    step["capability"] = expected
-                    changed = True
-            if isinstance(old_blueprint, dict):
-                for item in old_subtasks:
-                    step_id = str(item.get("subtask_id") or "")
-                    expected = capability_by_id.get(step_id)
-                    if step_id.endswith("qa-action") and str(item.get("capability") or "") != "interact":
-                        item["capability"] = "interact"
-                        changed = True
-                    elif expected and str(item.get("capability") or "") != expected:
-                        item["capability"] = expected
-                        changed = True
-            return changed
-        if record.get("workflow_type") != WorkflowType.QA.value:
-            record["workflow_type"] = WorkflowType.QA.value
-            if not needs_migration:
-                return True
-        if not needs_migration:
-            return False
-        if str(record.get("status") or "") == "running":
-            # Capability coercion for in-flight qa-* steps is enough; full ledger
-            # replacement mid-round races the executor.
-            changed = False
-            for step in old_steps:
-                step_id = str(step.get("step_id") or "")
-                expected = capability_by_id.get(step_id)
-                if expected and str(step.get("capability") or "") != expected:
-                    step["capability"] = expected
-                    if step.get("status") == "completed" and expected == "interact":
-                        step["status"] = "pending"
-                        step["evidence_refs"] = []
-                        step["result"] = None
-                    changed = True
-            if isinstance(old_blueprint, dict):
-                for item in old_subtasks:
-                    step_id = str(item.get("subtask_id") or "")
-                    expected = capability_by_id.get(step_id)
-                    if expected and str(item.get("capability") or "") != expected:
-                        item["capability"] = expected
-                        changed = True
-            return changed
-
-        previous_by_id = {str(step.get("step_id") or ""): step for step in old_steps}
-        rebuilt = initialise_plan(canonical)
-        for step in rebuilt.get("steps") or []:
-            step_id = str(step.get("step_id") or "")
-            previous = previous_by_id.get(step_id)
-            if previous is None:
-                continue
-            previous_capability = str(previous.get("capability") or "")
-            expected_capability = str(step.get("capability") or "")
-            preserve_completed = (
-                previous.get("status") == "completed"
-                and (
-                    step_id.endswith("qa-navigation")
-                    or previous_capability == expected_capability
-                )
-            )
-            if preserve_completed:
-                step["status"] = "completed"
-                step["evidence_refs"] = list(previous.get("evidence_refs") or [])
-                step["result"] = previous.get("result")
-                step["attempts"] = int(previous.get("attempts") or 0)
-            elif previous_capability and previous_capability != expected_capability:
-                step["status"] = "pending"
-                step["evidence_refs"] = []
-                step["result"] = None
-
-        record["workflow_type"] = WorkflowType.QA.value
-        record["execution_blueprint"] = canonical
-        record["execution_plan"] = rebuilt
-        record["active_plan_step_id"] = None
-        record.setdefault("progress_events", []).append({
-            "at": self._now(),
-            "event_type": "cart_plan_migrated",
-            "status": record.get("status", "unknown"),
-            "message": "Migrated cart plan onto the canonical interact-authorised journey.",
-        })
-        return True
 
     def _save_checkpoint(
         self, task_id: str, initial_plan: DecisionPlan, *, sources: list[dict[str, Any]],
@@ -384,7 +231,6 @@ class TaskManager:
             objective_text = str(record.get("objective") or "")
             if is_ecommerce_cart_workflow(objective_text):
                 record["workflow_type"] = WorkflowType.QA.value
-                self._migrate_legacy_cart_plan(record)
             if record.get("execution_plan") is None and isinstance(record.get("execution_blueprint"), dict):
                 record["execution_plan"] = initialise_plan(record["execution_blueprint"])
             record.setdefault("agent_assignments", [])
@@ -1490,76 +1336,6 @@ class TaskManager:
                                         f"and {navigation.get('checked_count', 0)} browser navigation journey(s)"
                                     )
                             mission_objective = str(record.get("objective") or "")
-                            if (
-                                verified_result is None
-                                and is_ecommerce_cart_workflow(mission_objective)
-                            ):
-                                step_objective = str(step.get("objective") or "")
-                                step_id_value = str(step.get("step_id") or "")
-                                # Decider may split add into qa-action; treat that as add.
-                                if step_id_value.endswith("qa-action") and "cart" not in step_objective.casefold():
-                                    step_objective = step_objective + " add to cart"
-                                snapshot_blob = "\n".join(
-                                    part for part in (
-                                        str(result.get("text") or ""),
-                                        str(result.get("title") or ""),
-                                        str(result.get("final_url") or ""),
-                                    ) if part
-                                )
-                                allow_alternate = cart_mission_allows_alternate(mission_objective)
-                                record["cart_product_mode"] = (
-                                    "flexible" if allow_alternate else "exact"
-                                )
-                                verified_result = cart_step_verification(
-                                    step_objective,
-                                    snapshot_blob,
-                                    mission_objective=mission_objective,
-                                    allow_alternate=allow_alternate,
-                                )
-                                attempts = int(step.get("attempts") or 0)
-                                on_pdp = on_product_detail_page(snapshot_blob)
-                                if (
-                                    verified_result is None
-                                    and on_pdp
-                                    and product_out_of_stock(snapshot_blob)
-                                    and allow_alternate
-                                    and attempts < 6
-                                ):
-                                    # Flexible product request on a real PDP: try another listing.
-                                    step["status"] = "pending"
-                                    step["result"] = (
-                                        "Opened product was out of stock; objective did not "
-                                        "name an exact product — try a different in-stock listing."
-                                    )
-                                    record["cart_alternate_product"] = True
-                                    # Allow the next attempt to land on a new URL/product.
-                                    record.setdefault("plan_step_urls", {}).pop(step["step_id"], None)
-                                    self._log(
-                                        task_id,
-                                        f"Plan step {step['step_id']}: out of stock on a flexible "
-                                        "product request — will try another product",
-                                        "warning",
-                                    )
-                                    break
-                                if (
-                                    verified_result is None
-                                    and cart_intent(step_objective) in {"select", "add"}
-                                    and attempts < 6
-                                ):
-                                    # Discover/add not evidenced yet (e.g. still on listing/home).
-                                    # Keep retrying the authored interact step instead of blocking.
-                                    step["status"] = "pending"
-                                    step["result"] = (
-                                        "Product page or cart add not yet evidenced; retrying interaction."
-                                    )
-                                    record.setdefault("plan_step_urls", {}).pop(step["step_id"], None)
-                                    self._log(
-                                        task_id,
-                                        f"Plan step {step['step_id']}: cart interaction incomplete — "
-                                        "retrying before blocking",
-                                        "warning",
-                                    )
-                                    break
                             if verified_result is None:
                                 workflow_value = str(record.get("workflow_type") or "")
                                 cart_journey = is_ecommerce_cart_workflow(mission_objective or str(record.get("objective") or ""))
@@ -2670,7 +2446,7 @@ class TaskManager:
         if record.get("status") not in {"failed", "blocked"}:
             raise ValueError("Only failed or blocked tasks can be resumed")
         if is_ecommerce_cart_workflow(str(record.get("objective") or "")):
-            if self._migrate_legacy_cart_plan(record) or record.get("workflow_type") != WorkflowType.QA.value:
+            if record.get("workflow_type") != WorkflowType.QA.value:
                 record["workflow_type"] = WorkflowType.QA.value
                 self._persist(task_id)
         reset_steps = reset_retryable_steps(record.get("execution_plan") or {})
