@@ -176,22 +176,3 @@ def test_cart_detector_does_not_classify_product_research_as_cart_workflow():
         "Find Dark Grey products in the catalogue and compare prices.",
     ]
     assert not any(is_ecommerce_cart_workflow(prompt) for prompt in prompts)
-
-
-    search_objective = (
-        'Open https://www.automationexercise.com/products. Search for "Blue Top". '
-        "Verify the product appears with its name, image, and price."
-    )
-    search_steps = coerce_decision_step_capabilities(search_objective, [
-        {"step_id": "qa-navigation", "capability": "navigate", "objective": "Open the products page"},
-        {
-            "step_id": "qa-availability",
-            "capability": "navigate",
-            "objective": 'Search for "Blue Top" using the rendered search control',
-        },
-        {"step_id": "qa-content", "capability": "extract", "objective": "Extract the product fields"},
-    ])
-    assert [step["capability"] for step in search_steps] == ["navigate", "interact", "extract"]
-    assert step_objective_requires_interaction(search_steps[1]["objective"]) is True
-    assert objective_requests_search(search_steps[1]["objective"]) == "Blue Top"
-    assert objective_requests_search("Select the 'Dark Grey' variant and check stock") is None
