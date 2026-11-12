@@ -414,7 +414,7 @@ export default function App() {
   const [browserExpanded, setBrowserExpanded] = useState(false);
   const [checklistFullscreen, setChecklistFullscreen] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">(() => {
-    try { return localStorage.getItem("night-walker-theme") === "light" ? "light" : "dark"; }
+    try { return (localStorage.getItem("ginger-way-theme") ?? localStorage.getItem("night-walker-theme")) === "light" ? "light" : "dark"; }
     catch { return "dark"; }
   });
 
@@ -452,7 +452,7 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    try { localStorage.setItem("night-walker-theme", theme); } catch { /* storage is optional */ }
+    try { localStorage.setItem("ginger-way-theme", theme); } catch { /* storage is optional */ }
   }, [theme]);
 
   const selected = useMemo(
@@ -671,12 +671,11 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <a className="wordmark" href="/" aria-label="Vaimo Night Walker home">
-          <img className="wordmark__logo wordmark__logo--dark" src="/vaimo-logo-white.svg" alt="" />
-          <img className="wordmark__logo wordmark__logo--light" src="/vaimo-logo-black.svg" alt="" />
+        <a className="wordmark" href="/" aria-label="Ginger Way home">
+          <span className="wordmark__mark" aria-hidden="true">G</span>
           <span>
-            <strong>Night Walker</strong>
-            <small>Vaimo</small>
+            <strong>GINGER WAY</strong>
+            <small>THOUGHTFUL WORK, MADE SIMPLE</small>
           </span>
         </a>
 
@@ -700,7 +699,7 @@ export default function App() {
             <div className="eyebrow">PERSONAL AUTOMATION, WITH GUARDRAILS</div>
             <h1>Make it happen.</h1>
             <p>
-              Set an objective. Night Walker plans the steps, works within its
+              Set an objective. Ginger Way plans the steps, works within its
               permissions, and brings back the result.
             </p>
           </div>
@@ -1406,7 +1405,7 @@ export default function App() {
         )}
 
         <footer className="footer">
-          <span>Vaimo · Night Walker</span>
+          <span>Ginger Way · Ginger OS</span>
           <span><ShieldCheck size={13} /> READ-ONLY BROWSER · POLICY-GOVERNED · LOCAL-FIRST</span>
         </footer>
       </main>
