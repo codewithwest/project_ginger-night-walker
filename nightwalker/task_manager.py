@@ -1190,24 +1190,25 @@ class TaskManager:
                                         f"Captured {link_checks.get('checked_count', 0)} same-origin link destination check(s) "
                                         f"and {navigation.get('checked_count', 0)} browser navigation journey(s)"
                                     )
+                            step_goal = str(step.get("objective") or "").casefold()
+                            is_long_running_crawl = (
+                                capability in {"extract", "recover"}
+                                and any(term in step_goal for term in (
+                                    "crawl", "sitemap", "site coverage", "discover all pages",
+                                    "visit discovered urls", "known urls",
+                                ))
+                            )
                             if (
                                 verified_result is None
                                 and result.get("evidence_id")
                                 and capability in {"interact", "extract", "recover"}
+                                and not (is_long_running_crawl and next_url)
                             ):
                                 verified_result = (
                                     f"Completed the authorised {capability} step and captured evidence "
                                     f"for: {step.get('objective') or 'the planned objective'}"
                                 )
                             if verified_result is None:
-                                step_goal = str(step.get("objective") or "").casefold()
-                                is_long_running_crawl = (
-                                    capability in {"extract", "recover"}
-                                    and any(term in step_goal for term in (
-                                        "crawl", "sitemap", "site coverage", "discover all pages",
-                                        "visit discovered urls", "known urls",
-                                    ))
-                                )
                                 if is_long_running_crawl and next_url:
                                     break
                                 failure_detail = (
