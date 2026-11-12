@@ -1,4 +1,4 @@
-"""First-phase product workflow routing and deterministic plans.
+"""First-phase SEO/QA workflow routing and scope classification.
 
 SEO and QA are first-class workflows. Unknown/general research is deliberately
 not used as a fallback in this product phase.
