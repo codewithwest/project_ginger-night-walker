@@ -4,6 +4,7 @@ import pytest
 
 from nightwalker.browser_runtime import BrowserRuntime
 from nightwalker.ollama_client import OllamaClient
+from nightwalker.steel_mcp import normalise_steel_target, normalise_steel_tool_arguments
 
 def test_browser_backend_defaults_to_local(monkeypatch):
     monkeypatch.delenv("BROWSER_BACKEND", raising=False)
