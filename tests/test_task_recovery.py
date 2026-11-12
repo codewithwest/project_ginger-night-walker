@@ -247,136 +247,54 @@ async def test_restart_retries_legacy_website_only_clarification(tmp_path):
 
 
 
-def test_loaded_legacy_cart_task_is_migrated_before_snapshot_or_retry(tmp_path):
+@pytest.mark.asyncio
+async def test_cart_retry_preserves_decider_authored_step_sequence(tmp_path, monkeypatch):
     manager = TaskManager(NoExecutionOrchestrator())
     manager.state_store = TaskStateStore(str(tmp_path / "tasks"))
     manager.scratchpad = TaskScratchpad(str(tmp_path / "evidence"))
-    manager.tasks["legacy-cart"] = {
-        "task_id": "legacy-cart",
-        "objective": (
-            'Open https://www.weylandts.co.za/. Add "Dark Grey" to the cart, '
-            "verify price and quantity, remove it, and confirm the cart is empty. Do not checkout."
-        ),
-        "status": "failed",
-        "execution_blueprint": {
-            "version": 1,
-            "subtasks": [
-                {"subtask_id": "qa-navigation"},
-                {"subtask_id": "qa-availability"},
-                {"subtask_id": "qa-content"},
-                {"subtask_id": "qa-validate"},
-                {"subtask_id": "qa-crawl"},
-                {"subtask_id": "qa-synthesise"},
-            ],
-        },
-        "execution_plan": {
-            "steps": [
-                {
-                    "step_id": "qa-navigation",
-                    "status": "completed",
-                    "evidence_refs": ["ev-storefront"],
-                    "result": "Storefront loaded",
-                },
-                {"step_id": "qa-availability", "status": "blocked", "evidence_refs": []},
-            ],
-            "history": [],
-        },
-        "result": {"evidence": [{"evidence_id": "ev-storefront"}]},
-        "progress_events": [],
-    }
-
-    record = manager.tasks["legacy-cart"]
-    assert manager._migrate_legacy_cart_plan(record) is True
-    ids = [item["subtask_id"] for item in record["execution_blueprint"]["subtasks"]]
-    assert ids == [
-        "qa-navigation", "qa-discover", "qa-availability",
-        "qa-content", "qa-validate", "qa-synthesise",
-    ]
-    steps = record["execution_plan"]["steps"]
-    assert steps[0]["status"] == "completed"
-    assert steps[0]["evidence_refs"] == ["ev-storefront"]
-    assert steps[1]["step_id"] == "qa-discover"
-    assert steps[1]["status"] == "pending"
-    assert record["active_plan_step_id"] is None
-    assert record["workflow_type"] == "qa"
-
-
-def test_cart_plan_with_canonical_ids_but_stale_capabilities_is_migrated(tmp_path):
-    from nightwalker.workflows import build_cart_journey_blueprint
-
-    manager = TaskManager(NoExecutionOrchestrator())
-    manager.state_store = TaskStateStore(str(tmp_path / "tasks"))
-    manager.scratchpad = TaskScratchpad(str(tmp_path / "evidence"))
-    objective = (
-        'Open https://www.weylandts.co.za/. Add "Dark Grey" to the cart, '
-        "verify price and quantity, remove it, and confirm the cart is empty. Do not checkout."
-    )
-    canonical = build_cart_journey_blueprint(objective).model_dump(mode="json")
-    stale = {
-        **canonical,
-        "subtasks": [
-            {**item, "capability": "navigate"} if item["subtask_id"] == "qa-discover" else item
-            for item in canonical["subtasks"]
+    authored_plan = {
+        "steps": [
+            {"step_id": "open-store", "objective": "Open the requested storefront",
+             "capability": "navigate", "status": "completed", "evidence_refs": ["ev-open"]},
+            {"step_id": "inspect-product-options", "objective": "Inspect available product options",
+             "capability": "extract", "status": "pending", "depends_on": ["open-store"]},
+            {"step_id": "perform-authorised-action", "objective": "Perform the specifically authorised action",
+             "capability": "interact", "status": "pending", "depends_on": ["inspect-product-options"]},
         ],
+        "history": [],
     }
-    manager.tasks["stale-semantics"] = {
-        "task_id": "stale-semantics",
-        "objective": objective,
-        "status": "failed",
-        "execution_blueprint": stale,
-        "execution_plan": {
-            "steps": [
-                {"step_id": "qa-navigation", "status": "completed",
-                 "evidence_refs": ["ev-storefront"], "result": "Storefront loaded"},
-                {"step_id": "qa-discover", "status": "completed",
-                 "evidence_refs": ["ev-storefront"], "result": "Captured homepage"},
-            ],
-            "history": [],
-        },
-        "result": {"evidence": [{"evidence_id": "ev-storefront"}]},
-        "progress_events": [],
-    }
-
-    record = manager.tasks["stale-semantics"]
-    assert manager._migrate_legacy_cart_plan(record) is True
-    steps = record["execution_plan"]["steps"]
-    assert steps[0]["status"] == "completed"
-    assert steps[0]["evidence_refs"] == ["ev-storefront"]
-    assert steps[1]["step_id"] == "qa-discover"
-    assert steps[1]["capability"] == "interact"
-    assert steps[1]["status"] == "pending"
-
-
-def test_cart_task_migrates_stale_execution_ledger_even_when_blueprint_is_current(tmp_path):
-    from nightwalker.plan_execution import initialise_plan
-    from nightwalker.workflows import build_cart_journey_blueprint
-
-    manager = TaskManager(NoExecutionOrchestrator())
-    manager.state_store = TaskStateStore(str(tmp_path / "tasks"))
-    manager.scratchpad = TaskScratchpad(str(tmp_path / "evidence"))
-    objective = (
-        'Open https://www.weylandts.co.za/. Add "Dark Grey" to the cart, '
-        "verify price and quantity, remove it, and confirm the cart is empty. Do not checkout."
-    )
-    blueprint = build_cart_journey_blueprint(objective).model_dump(mode="json")
-    stale_plan = initialise_plan(blueprint)
-    stale_plan["steps"] = stale_plan["steps"][:-1]
-    manager.tasks["stale-ledger"] = {
-        "task_id": "stale-ledger",
-        "objective": objective,
+    manager.tasks["decider-cart"] = {
+        "task_id": "decider-cart",
+        "objective": (
+            'Open https://example.com. Add "Example item" to the cart, '
+            "verify it and remove it without checkout."
+        ),
+        "execution_objective": "original objective",
+        "execution_plan": authored_plan,
         "workflow_type": "qa",
-        "status": "failed",
-        "execution_blueprint": blueprint,
-        "execution_plan": stale_plan,
+        "status": "blocked",
+        "logs": [],
         "progress_events": [],
+        "checkpoint": None,
+        "retry_count": 0,
     }
 
-    assert manager._migrate_legacy_cart_plan(manager.tasks["stale-ledger"]) is True
-    steps = manager.tasks["stale-ledger"]["execution_plan"]["steps"]
-    assert len(steps) == 6
-    assert steps[1]["step_id"] == "qa-discover"
-    assert steps[1]["capability"] == "interact"
-    assert steps[1]["status"] == "pending"
+    async def no_wait_retry(task_id, objective, delay_seconds):
+        return None
+
+    monkeypatch.setattr(manager, "_retry_after_backoff", no_wait_retry)
+    result = manager.retry("decider-cart")
+    await manager.running["decider-cart"]
+
+    assert result is not None
+    assert manager.tasks["decider-cart"]["execution_plan"] == authored_plan
+    assert [step["step_id"] for step in manager.tasks["decider-cart"]["execution_plan"]["steps"]] == [
+        "open-store", "inspect-product-options", "perform-authorised-action",
+    ]
+    assert [step["capability"] for step in manager.tasks["decider-cart"]["execution_plan"]["steps"]] == [
+        "navigate", "extract", "interact",
+    ]
+    assert not hasattr(manager, "_migrate_legacy_cart_plan")
 
 
 @pytest.mark.asyncio
