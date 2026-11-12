@@ -667,11 +667,6 @@ body { overscroll-behavior: none; }
   --green-soft: #4b3f72;
   --paper: #342b56;
   --serif: Inter, ui-sans-serif, system-ui, sans-serif;
-  --vaimo-yellow: #f5b000;
-  --vaimo-violet: #4b3f72;
-  --vaimo-violet-dark: #2e2646;
-  --vaimo-jet: #333333;
-  --vaimo-black: #1a1a1a;
 }
 html, body, #root { background: #2e2646; color: var(--ink); }
 body {
