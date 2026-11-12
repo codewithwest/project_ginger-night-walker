@@ -48,7 +48,6 @@ from nightwalker.task_checklist import TaskChecklist
 from nightwalker.task_state_store import TaskStateStore
 from nightwalker.task_timing import TaskTiming
 from nightwalker.cart_report import (
-    apply_cart_goal_from_plan,
     build_cart_journey_report,
     cart_limitations_from_plan,
 )
@@ -2147,7 +2146,6 @@ class TaskManager:
                     "status": "running", "message": "Research collection is complete; preparing the final synthesis.",
                 })
                 if cart_journey:
-                    apply_cart_goal_from_plan(record.get("goal_state"), record.get("execution_plan"))
                     self.checklist.write(record)
                     out_of_stock = any(
                         "out of stock" in str(step.get("result") or "").casefold()
