@@ -6,20 +6,6 @@ import os
 import re
 from typing import Any
 
-from nightwalker.cart_progress import (
-    cart_follow_up_actions,
-    cart_intent,
-    minicart_count,
-    on_product_detail_page,
-    product_out_of_stock,
-)
-from nightwalker.nimble_classifier import cart_mission_allows_alternate
-from nightwalker.workflows import objective_requests_search
-
-_SEARCH_TEXTBOX = re.compile(
-    r"""(?im)^[ \t]*-[ \t]+(?P<role>textbox|searchbox)\s+"(?P<name>[^"]+)"\s+@(?P<ref>e\d+)(?P<rest>[^\n]*)"""
-)
-_FIELD_VALUE = re.compile(r'\[value="([^"]*)"\]')
 _STEEL_REF = re.compile(r"^@?e\d+$", re.IGNORECASE)
 
 
