@@ -1,4 +1,4 @@
-# Ginger Way product scope
+# Ginger Night Walker product scope
 
 **Phase:** Initial product focus  
 **In-scope capabilities:** SEO auditing and website/application QA  
@@ -6,7 +6,7 @@
 
 ## Product purpose
 
-Ginger Way is a website quality-analysis tool. In its initial release it helps an operator understand and improve a website through two deliberately scoped workflows:
+Ginger Night Walker is a website quality-analysis tool. In its initial release it helps an operator understand and improve a website through two deliberately scoped workflows:
 
 1. SEO audit: inspect a website's discoverability, crawlability, indexability, technical configuration, page-level optimisation, content structure and search presentation.
 2. QA testing: exercise a website's observable user journeys and report reproducible functional, navigation, rendering, accessibility and usability defects.
@@ -122,7 +122,7 @@ The current code path is a partial implementation of the initial scope, not a co
 - **QA — implemented read-only smoke layer and bounded journeys, still partial:** same-origin navigation, browser console/page/network diagnostics, policy-checked link checks, responsive overflow measurements, accessible-name and ARIA heuristics, and dedicated product-search/cart journeys. SEO metadata, heading hierarchy, canonical/indexing and schema findings belong to SEO workflows, not functional QA. Stateful/authenticated journeys, form validation execution, broad SPA interaction coverage, visual regression, exhaustive keyboard testing and automated WCAG conformance are not implemented.
 - **Combined workflow — routed and planned:** both workstreams are represented in the execution blueprint; end-to-end combined completion still requires live validation.
 - **Reporting — improved foundation:** evidence-linked findings include P0-P4 priorities, impact rationale, effort and remediation defaults. The report includes discovered/sitemap coverage and duplicate/link/QA summary metrics; these metrics are bounded by crawl and sampling limits.
-- **Validation — not yet verified end to end:** unit tests have been added for deterministic analysis and page-signal helpers, but tests/build have not been executed in the current implementation session and no live Ginger Way run against a public website has been verified.
+- **Validation — not yet verified end to end:** unit tests have been added for deterministic analysis and page-signal helpers, but tests/build have not been executed in the current implementation session and no live Ginger Night Walker run against a public website has been verified.
 
 See [SEO/QA audit engine](seo-qa-audit-engine.md) for exact bounds and safety behaviour. Do not describe the current checks as a full WCAG audit or an exhaustive crawl.
 
