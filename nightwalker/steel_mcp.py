@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import re
 from typing import Any
 
 from nightwalker.cart_progress import (
@@ -253,58 +252,6 @@ class SteelMCPClient:
         session_id = await self.session_for_task(task_id, fresh=(capability == "navigate"))
         if session_callback is not None:
             session_callback(session_id)
-        product_scope = mission_objective or objective
-        if capability == "navigate":
-            result = await self.call_tool("steel_navigate", {
-                "session_id": session_id, "url": url, "include_snapshot": True,
-            })
-            selected_tool = "steel_navigate"
-        else:
-            snapshot = await self.call_tool("steel_snapshot", {
-                "session_id": session_id, "interactive_only": False,
-            })
-            if snapshot["is_error"]:
-                raise RuntimeError(str(snapshot["content"])[:1000])
-            allowed_by_capability = {
-                "interact": {"steel_find", "steel_act", "steel_wait_for"},
-                "extract": {"steel_snapshot", "steel_scrape"},
-                "recover": {"steel_navigate", "steel_wait_for"},
-            }
-            allowed = allowed_by_capability.get(capability)
-            if not allowed:
-                raise PermissionError(f"Unsupported Steel MCP mission capability: {capability}")
-            available_tools = [tool for tool in self._tools if tool["name"] in allowed]
-            previous_failure: dict[str, Any] | None = None
-            result = {"is_error": True, "content": [{"text": "No tool proposal was executed"}]}
-            selected_tool = ""
-            # A failed selector/DOM operation gets one fresh, model-directed
-            # recovery proposal against the latest page state. Never replay the
-            # same arguments blindly and never change the authorised objective.
-            for attempt in range(2):
-                snapshot_text = "\n".join(
-                    str(item.get("text") or "")
-                    for item in (snapshot.get("content") or [])
-                    if isinstance(item, dict)
-                )
-                observation: dict[str, Any] = {
-                    "url": url, "snapshot": snapshot, "session_id": session_id,
-                    "previous_failure": previous_failure,
-                }
-                if (
-                    on_product_detail_page(snapshot_text)
-                    and product_out_of_stock(snapshot_text)
-                    and cart_mission_allows_alternate(product_scope)
-                ):
-                    observation["guidance"] = (
-                        "Current product is out of stock and the objective did not name an "
-                        "exact product. Leave this PDP and open a different in-stock listing "
-                        "to continue the cart journey."
-                    )
-                elif cart_intent(objective) in {"select", "add"} and not on_product_detail_page(snapshot_text):
-                    observation["guidance"] = (
-                        "Not on a product detail page yet. Search or open a catalogue product "
-                        "with an Add to Cart / Quantity control before verifying stock."
-                    )
                 proposal = await propose_tool_call(
                     task_id=task_id, objective=objective, capability=capability,
                     observation=observation,
@@ -344,34 +291,8 @@ class SteelMCPClient:
                     if refreshed["is_error"]:
                         break
                     snapshot = refreshed
-            # A bare eN / stale model click must not skip the deterministic cart
-            # follow-up, which re-reads live @eN refs from the current snapshot.
-            model_failed = bool(result.get("is_error"))
-            if model_failed and not (
-                capability == "interact" and cart_intent(objective) in {
-                    "remove", "confirm_empty", "verify_line", "add",
-                }
-            ):
-                raise RuntimeError(str(result["content"])[:1500])
-        search_submission = None
-        query = objective_requests_search(objective) if capability == "interact" else None
-        if query:
-            # The model is allowed one action. Opening the search form is not the
-            # search: type the exact query and press Enter before this step ends.
-            search_submission = await self._submit_open_search(session_id, query)
-            result.setdefault("content", []).extend(search_submission.pop("notes", []))
-        cart_progress = None
-        if capability in {"interact", "extract"} and cart_intent(objective):
-            # Opening the minicart is only the first click. Removal, and reading
-            # the cart line, continue in this same step. An add waits until the
-            # cart count actually changes before the step is judged.
-            cart_progress = await self._advance_cart(session_id, objective)
-            if cart_progress:
-                result.setdefault("content", []).extend(cart_progress.pop("notes", []))
-        if capability != "navigate" and result.get("is_error"):
-            cart_actions = list((cart_progress or {}).get("actions") or [])
-            if not cart_actions:
-                raise RuntimeError(str(result["content"])[:1500])
+            if result.get("is_error"):
+                raise RuntimeError(str(result.get("content") or [])[:1500])
         after = await self.call_tool("steel_snapshot", {
             "session_id": session_id, "interactive_only": False,
         })
@@ -380,128 +301,8 @@ class SteelMCPClient:
         return {
             "status": "completed", "session_id": session_id,
             "tool_name": selected_tool, "tool_result": result,
-            "snapshot": after, "search_submission": search_submission,
-            "cart_progress": cart_progress,
+            "snapshot": after,
         }
-
-    async def _submit_open_search(self, session_id: str, query: str) -> dict[str, Any]:
-        """Type and submit when a search textbox is already open. Leave other pages untouched."""
-        observed = await self.call_tool("steel_snapshot", {
-            "session_id": session_id, "interactive_only": False,
-        })
-        text = "\n".join(
-            str(item.get("text") or "") for item in observed.get("content") or [] if isinstance(item, dict)
-        )
-        actions = search_follow_up_actions(text, query)
-        if not actions:
-            return {
-                "query": query, "performed": False, "status": "search_control_not_found",
-                "actions": [], "notes": [],
-            }
-        completed: list[str] = []
-        notes: list[dict[str, Any]] = []
-        for action in actions:
-            outcome = await self.call_tool(
-                "steel_act",
-                normalise_steel_tool_arguments(
-                    "steel_act", {"session_id": session_id, **action},
-                ),
-            )
-            notes.extend(outcome.get("content") or [])
-            if outcome.get("is_error"):
-                return {
-                    "query": query, "performed": False, "status": "search_type_failed",
-                    "actions": completed, "notes": notes,
-                    "error": str(outcome.get("content") or "")[:500],
-                }
-            completed.append(action["action"])
-        return {
-            "query": query, "performed": True, "status": "submitted",
-            "actions": completed, "notes": notes,
-        }
-
-    async def _page_text(self, session_id: str) -> tuple[str, list[dict[str, Any]]]:
-        observed = await self.call_tool("steel_snapshot", {
-            "session_id": session_id, "interactive_only": False,
-        })
-        notes = list(observed.get("content") or [])
-        text = "\n".join(
-            str(item.get("text") or "") for item in notes if isinstance(item, dict)
-        )
-        return text, notes
-
-    async def _advance_cart(self, session_id: str, objective: str) -> dict[str, Any]:
-        """Finish the cart action the single model click left incomplete."""
-        intent = cart_intent(objective)
-        text, notes = await self._page_text(session_id)
-        completed: list[str] = []
-        if (
-            intent in {"select", "add"}
-            and on_product_detail_page(text)
-            and product_out_of_stock(text)
-        ):
-            return {
-                "intent": intent, "actions": completed, "notes": notes,
-                "out_of_stock": True,
-            }
-        if intent == "add" and (minicart_count(text) or 0) < 1:
-            waited = await self._wait_for_text(session_id, "1 item", 12000)
-            if waited:
-                notes.extend(waited.get("content") or [])
-                completed.append("wait")
-            text, fresh_notes = await self._page_text(session_id)
-            notes.extend(fresh_notes)
-            if product_out_of_stock(text):
-                return {
-                    "intent": intent, "actions": completed, "notes": notes,
-                    "out_of_stock": True,
-                }
-            return {"intent": intent, "actions": completed, "notes": notes}
-
-        for _ in range(3):
-            actions = cart_follow_up_actions(text, objective)
-            if not actions:
-                break
-            failed = False
-            for action in actions:
-                outcome = await self.call_tool(
-                    "steel_act",
-                    normalise_steel_tool_arguments(
-                        "steel_act", {"session_id": session_id, **action},
-                    ),
-                )
-                notes.extend(outcome.get("content") or [])
-                if outcome.get("is_error"):
-                    failed = True
-                    break
-                completed.append(action["action"])
-            if failed:
-                break
-            if intent == "remove" and actions[0].get("target", "").startswith("@e"):
-                # The remove control was clicked. Wait until the cart reports empty.
-                if "Remove" in text:
-                    waited = await self._wait_for_text(session_id, "Cart is empty", 12000)
-                    if waited:
-                        notes.extend(waited.get("content") or [])
-                        completed.append("wait")
-            text, fresh = await self._page_text(session_id)
-            notes.extend(fresh)
-            if intent == "remove" and (minicart_count(text) == 0 or "cart is empty" in text.casefold()):
-                break
-            if intent != "remove":
-                break
-        return {"intent": intent, "actions": completed, "notes": notes}
-
-    async def _wait_for_text(self, session_id: str, text: str, timeout_ms: int) -> dict[str, Any] | None:
-        if "steel_wait_for" not in {tool["name"] for tool in self._tools}:
-            return None
-        try:
-            return await self.call_tool("steel_wait_for", {
-                "session_id": session_id, "text": text, "timeout_ms": timeout_ms,
-            })
-        except (RuntimeError, OSError, ValueError):
-            return None
-
     async def release_task_session(self, task_id: str) -> None:
         session_id = self._sessions.pop(task_id, None)
         if not session_id:
