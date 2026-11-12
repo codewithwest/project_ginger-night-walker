@@ -77,16 +77,6 @@ async def control_centre():
     return FileResponse(UI_FILE)
 
 
-@app.get("/vaimo-logo-white.svg", include_in_schema=False)
-async def vaimo_logo_white():
-    return FileResponse(UI_DIR / "vaimo-logo-white.svg")
-
-
-@app.get("/vaimo-logo-black.svg", include_in_schema=False)
-async def vaimo_logo_black():
-    return FileResponse(UI_DIR / "vaimo-logo-black.svg")
-
-
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "ginger-night-walker"}
