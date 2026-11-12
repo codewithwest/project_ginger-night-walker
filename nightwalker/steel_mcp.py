@@ -47,33 +47,6 @@ def normalise_steel_tool_arguments(tool_name: str, arguments: dict[str, Any]) ->
     return normalised
 
 
-def search_follow_up_actions(snapshot_text: str, query: str) -> list[dict[str, str]]:
-    """Type the requested query into an open search box, then submit it with Enter.
-
-    A click that only opens the search form leaves the textbox empty. That is not
-    a completed search. Email and off-screen fields are ignored.
-    """
-    field: tuple[str, str] | None = None
-    for match in _SEARCH_TEXTBOX.finditer(snapshot_text or ""):
-        name = match.group("name").casefold()
-        rest = match.group("rest") or ""
-        if "off-screen" in rest.casefold() or "email" in name:
-            continue
-        if not any(token in name for token in ("search", "find", "query")):
-            continue
-        value_match = _FIELD_VALUE.search(rest)
-        field = (match.group("ref"), value_match.group(1) if value_match else "")
-        break
-    if field is None:
-        return []
-    ref, current = field
-    actions: list[dict[str, str]] = []
-    if current.strip().casefold() != query.strip().casefold():
-        actions.append({"action": "type", "target": "@" + ref, "value": query})
-    actions.append({"action": "press", "target": "@" + ref, "value": "Enter"})
-    return actions
-
-
 class SteelMCPClient:
     """Lifecycle-managed stdio client for Steel's official self-hosted MCP server."""
 
