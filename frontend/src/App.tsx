@@ -414,7 +414,7 @@ export default function App() {
   const [browserExpanded, setBrowserExpanded] = useState(false);
   const [checklistFullscreen, setChecklistFullscreen] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">(() => {
-    try { return (localStorage.getItem("ginger-way-theme") ?? localStorage.getItem("night-walker-theme")) === "light" ? "light" : "dark"; }
+    try { return (localStorage.getItem("ginger-ginger-night-walker-theme") ?? localStorage.getItem("ginger-night-walker-theme")) === "light" ? "light" : "dark"; }
     catch { return "dark"; }
   });
 
@@ -452,7 +452,7 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    try { localStorage.setItem("ginger-way-theme", theme); } catch { /* storage is optional */ }
+    try { localStorage.setItem("ginger-ginger-night-walker-theme", theme); } catch { /* storage is optional */ }
   }, [theme]);
 
   const selected = useMemo(
@@ -671,11 +671,11 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <a className="wordmark" href="/" aria-label="Ginger Way home">
+        <a className="wordmark" href="/" aria-label="Ginger Night Walker home">
           <span className="wordmark__mark" aria-hidden="true">G</span>
           <span>
-            <strong>GINGER WAY</strong>
-            <small>THOUGHTFUL WORK, MADE SIMPLE</small>
+            <strong>GINGER NIGHT WALKER</strong>
+            <small>GINGER OS · WEBSITE QA</small>
           </span>
         </a>
 
@@ -699,7 +699,7 @@ export default function App() {
             <div className="eyebrow">PERSONAL AUTOMATION, WITH GUARDRAILS</div>
             <h1>Make it happen.</h1>
             <p>
-              Set an objective. Ginger Way plans the steps, works within its
+              Set an objective. Ginger Night Walker plans the steps, works within its
               permissions, and brings back the result.
             </p>
           </div>
@@ -1405,7 +1405,7 @@ export default function App() {
         )}
 
         <footer className="footer">
-          <span>Ginger Way · Ginger OS</span>
+          <span>Ginger Night Walker · Ginger OS</span>
           <span><ShieldCheck size={13} /> READ-ONLY BROWSER · POLICY-GOVERNED · LOCAL-FIRST</span>
         </footer>
       </main>
