@@ -37,8 +37,8 @@ class ExecutionBlueprint(BaseModel):
 class WorkflowPlanTemplate(BaseModel):
     """Deterministic executable template for specialised QA journeys.
 
-    Used by cart/product-search coercion and legacy migration. This is not a
-    second Decider plan; it only supplies canonical step IDs and capabilities.
+    Used by the general QA/SEO goal-analysis layer to describe criteria and
+    subtasks. It is not an executable replacement for the Decider plan.
     """
     model_config = ConfigDict(extra="forbid")
     version: int = 1
