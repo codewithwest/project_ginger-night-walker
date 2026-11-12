@@ -1,6 +1,6 @@
 # Documentation
 
-This documentation is the engineering source of truth for Ginger Night Walker.
+This documentation is the engineering source of truth for Ginger Way.
 
 ## Product workflows
 
