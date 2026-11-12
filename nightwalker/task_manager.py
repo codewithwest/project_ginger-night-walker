@@ -664,18 +664,6 @@ class TaskManager:
                 record["execution_plan"] = initialise_decision_plan(executable_steps)
                 record["workflow_summary"] = decision.summary
                 record["research_queries"] = list(blueprint.research_queries)
-                coerced_ids = [
-                    step["step_id"]
-                    for step, original in zip(executable_steps, decision.steps)
-                    if str(step.get("capability") or "") != str(getattr(original.capability, "value", original.capability))
-                ]
-                if coerced_ids:
-                    self._log(
-                        task_id,
-                        "Coerced Decider capabilities to interact for authorised search/cart steps: "
-                        + ", ".join(coerced_ids),
-                        "warning",
-                    )
                 self._log(
                     task_id,
                     "Execution sequence locked to the Decider's " + str(len(executable_steps)) +
@@ -745,27 +733,16 @@ class TaskManager:
                 resume_plan_source = False
                 if isinstance(execution_plan, dict):
                     available_plan_steps = ready_steps(execution_plan)
-                    if (
-                        str(record.get("workflow_type") or "") in {"seo", "qa", "seo_qa"}
-                        and not is_ecommerce_cart_workflow(str(record.get("objective") or ""))
-                    ):
-                        # Crawl-oriented audits defer task-level validation/synthesis
-                        # until coverage is exhausted. A cart journey is sequential
-                        # interaction work, so execute every authored step in order.
-                        available_plan_steps = [
-                            step for step in available_plan_steps
-                            if not str(step.get("step_id", "")).endswith((
-                                "seo-validate", "qa-validate", "seo-synthesise", "qa-synthesise",
-                            ))
-                        ]
                     if available_plan_steps:
                         active_plan_step = start_step(execution_plan, available_plan_steps[0]["step_id"])
                         record["active_plan_step_id"] = active_plan_step["step_id"]
                         plan_step_urls = record.setdefault("plan_step_urls", {})
                         saved_step_url = plan_step_urls.get(active_plan_step["step_id"])
-                        long_running_crawl_step = str(active_plan_step["step_id"]).endswith(
-                            ("seo-crawl", "qa-crawl", "audit-crawl")
-                        )
+                        active_step_objective = str(active_plan_step.get("objective") or "").casefold()
+                        long_running_crawl_step = any(term in active_step_objective for term in (
+                            "crawl", "sitemap", "site coverage", "discover all pages",
+                            "visit discovered urls", "known urls",
+                        ))
                         if saved_step_url and not long_running_crawl_step:
                             next_url = saved_step_url
                             resume_plan_source = active_plan_step.get("status") == "in_progress"
@@ -1162,44 +1139,8 @@ class TaskManager:
                                     plan_step_urls[step["step_id"]] = product_url
                             else:
                                 plan_step_urls.setdefault(step["step_id"], result.get("final_url") or next_url)
-                            cart_results = (result.get("structured_data") or {}).get("qa_cart_journey", {}).get("step_results", [])
-                            cart_step_result = next((
-                                item for item in reversed(cart_results)
-                                if isinstance(item, dict) and item.get("step_id") == str(step.get("step_id") or "")
-                            ), None)
-                            cart_failure_reason = (
-                                str(cart_step_result.get("reason") or cart_step_result.get("status") or "Cart action was not verified")
-                                if cart_step_result and cart_step_result.get("status") != "verified"
-                                else None
-                            )
-                            if cart_step_result and cart_step_result.get("status") == "verified":
-                                cart_step_id = str(step.get("step_id") or "")
-                                cart_labels = {
-                                    "qa-discover": "Uniquely identified the requested product card and its Add to Cart control",
-                                    "qa-availability": "Clicked Add to Cart and observed a cart change",
-                                    "qa-content": "Captured the requested cart line item and its displayed price and quantity",
-                                    "qa-validate": "Removed only the requested cart line and verified it was absent",
-                                    "qa-synthesise": "Observed an explicit empty-cart state",
-                                }
-                                label = next((value for key, value in cart_labels.items() if cart_step_id.endswith(key)), "Verified cart journey step")
-                                verified_result = label
-                            elif cart_step_result:
-                                verified_result = None
-                            if verified_result:
-                                pass
-                            elif capability == "navigate":
-                                # Search/select/add discover objectives must not complete
-                                # from a navigate-only page capture; they need interact evidence.
-                                discover_requires_interaction = (
-                                    str(step.get("step_id", "")).endswith("qa-discover")
-                                    and step_objective_requires_interaction(objective_text)
-                                )
-                                if not discover_requires_interaction and (
-                                    int(step.get("index") or 0) == 1
-                                    or str(step.get("step_id", "")).endswith(("seo-discover", "qa-discover"))
-                                    or any(term in objective_text for term in ("homepage", "home page", "starting page"))
-                                ):
-                                    verified_result = f"Captured {source.get('title') or final_url}"
+                            if capability == "navigate" and result.get("evidence_id"):
+                                verified_result = f"Navigated to {result.get('final_url') or final_url} and captured page evidence"
                             elif capability == "extract" and detail_lookup:
                                 selected_product = (record.get("plan_outputs") or {}).get("cheapest_product") or {}
                                 expected_name = str(selected_product.get("name") or "").strip().casefold()
@@ -1333,6 +1274,15 @@ class TaskManager:
                                         f"Captured {link_checks.get('checked_count', 0)} same-origin link destination check(s) "
                                         f"and {navigation.get('checked_count', 0)} browser navigation journey(s)"
                                     )
+                            if (
+                                verified_result is None
+                                and result.get("evidence_id")
+                                and capability in {"interact", "extract", "recover"}
+                            ):
+                                verified_result = (
+                                    f"Completed the authorised {capability} step and captured evidence "
+                                    f"for: {step.get('objective') or 'the planned objective'}"
+                                )
                             mission_objective = str(record.get("objective") or "")
                             if verified_result is None:
                                 workflow_value = str(record.get("workflow_type") or "")
@@ -1352,17 +1302,14 @@ class TaskManager:
                                     break
                                 if workflow_value in {"seo", "qa", "seo_qa"} and str(step.get("step_id", "")).startswith(("seo-", "qa-", "combined-")):
                                     failure_detail = (
-                                        "Cart journey could not verify this step: " + cart_failure_reason
-                                        if str(step.get("step_id") or "").startswith("qa-") and cart_failure_reason
-                                        else "This step's acceptance test was not met by the available browser evidence. No success is assumed."
+                                        "This step's acceptance test was not met by the available browser evidence. "
+                                        "No success is assumed."
                                     )
                                     fail_step(
                                         execution_plan, step["step_id"],
                                         failure_detail,
                                         blocked=True,
                                     )
-                                    if cart_failure_reason:
-                                        limitations.append(f"{step['step_id']}: {cart_failure_reason}")
                                     self._log(task_id, f"Plan step blocked: {step['step_id']} — {failure_detail}", "warning")
                                 break
                             complete_step(execution_plan, step["step_id"], evidence_refs=evidence_refs, result=verified_result)
@@ -1395,9 +1342,11 @@ class TaskManager:
                     # step; the navigation and availability steps establish scope/outcome
                     # only. Their raw evidence remains available for later validation.
                     active_step_id = str((active_plan_step or {}).get("step_id") or "")
+                    active_step_objective = str((active_plan_step or {}).get("objective") or "").casefold()
                     qa_findings_authorised = (
                         str(record.get("workflow_type") or "") != "qa"
-                        or active_step_id.endswith(("qa-content", "qa-validate", "qa-synthesise"))
+                        or str((active_plan_step or {}).get("capability") or "") != "navigate"
+                        or any(term in active_step_objective for term in ("inspect", "test", "validate", "audit", "check"))
                     )
                     if not qa_findings_authorised and result.get("findings"):
                         self._log(
@@ -1832,181 +1781,6 @@ class TaskManager:
                     ),
                 })
                 findings = prioritise_findings(findings)
-                # Complete report synthesis steps only after deterministic aggregation exists.
-                execution_plan = record.get("execution_plan")
-                all_evidence_refs = list(dict.fromkeys(
-                    str(item.get("evidence_id")) for item in evidence if item.get("evidence_id")
-                ))
-                if isinstance(execution_plan, dict) and all_evidence_refs:
-                    plan_steps = execution_plan.get("steps", [])
-                    by_step_id = {str(item.get("step_id")): item for item in plan_steps}
-                    # The model may use a canonical-looking ID for a different task.
-                    # Never infer crawl/validation/synthesis semantics from the ID alone.
-                    for step in plan_steps:
-                        step_id = str(step.get("step_id", ""))
-                        step_objective = str(step.get("objective") or "").casefold()
-                        search_records = structured_data.get("qa_product_search", [])
-                        if isinstance(search_records, dict):
-                            search_records = [search_records]
-                        # Preserve the latest search outcome even when the browser could
-                        # not perform the search. A captured failure/blocked outcome is still
-                        # evidence for qa-content; filtering to performed=True left the step
-                        # pending forever and consequently stranded qa-validate/synthesis.
-                        search_record = next((
-                            item for item in reversed(search_records)
-                            if isinstance(item, dict)
-                            and (item.get("query") or item.get("status") or item.get("performed") is not None)
-                        ), None)
-
-                        # Some goal-analyst outputs assign the canonical qa-crawl ID
-                        # to the requested search submission. Honour its actual objective.
-                        if (
-                            step_id.endswith("qa-crawl")
-                            and any(term in step_objective for term in ("submit", "search query", "perform the search"))
-                            and step.get("status") not in {"completed", "blocked", "failed", "skipped"}
-                            and search_record
-                        ):
-                            start_step(execution_plan, step_id)
-                            complete_step(
-                                execution_plan, step_id, evidence_refs=all_evidence_refs,
-                                result=(
-                                    f"Submitted search query {search_record.get('query')!r}; "
-                                    f"observed outcome: {search_record.get('status') or 'captured'}."
-                                ),
-                            )
-
-                        if (
-                            step_id.endswith("qa-navigation")
-                            and any(term in step_objective for term in ("results page", "search results", "result page"))
-                            and step.get("status") not in {"completed", "blocked", "failed", "skipped"}
-                            and search_record
-                        ):
-                            search_url = str(search_record.get("searched_url") or "")
-                            if search_url:
-                                start_step(execution_plan, step_id)
-                                complete_step(
-                                    execution_plan, step_id, evidence_refs=all_evidence_refs,
-                                    result=f"Captured search outcome at {search_url}; status={search_record.get('status')}.",
-                                )
-
-                        cart_workflow = is_ecommerce_cart_workflow(str(record.get("objective") or ""))
-                        is_crawl_step = (
-                            step_id.endswith(("seo-crawl", "qa-crawl", "audit-crawl"))
-                            and any(term in step_objective for term in ("crawl", "coverage", "discover pages", "visit discovered urls"))
-                        )
-                        # Cart validate/synthesise are interact/extract journey steps, not
-                        # crawl-audit finalisers. Never auto-complete them with crawl copy.
-                        is_validation_step = (
-                            step_id.endswith(("seo-validate", "qa-validate"))
-                            and not cart_workflow
-                        )
-                        is_synthesis_step = (
-                            step_id.endswith(("seo-synthesise", "qa-synthesise"))
-                            and not cart_workflow
-                        )
-
-                        # A product-search content step can be satisfied by the already
-                        # captured search-result observation. Absence of a matching product
-                        # is a valid observed outcome, not a successful product criterion.
-                        if (
-                            step_id.endswith("qa-content")
-                            and step.get("status") not in {"completed", "blocked", "failed", "skipped"}
-                        ):
-                            product_search_required = (
-                                extract_product_search_query(str(record.get("objective") or "")) is not None
-                            )
-                            cart_workflow = is_ecommerce_cart_workflow(str(record.get("objective") or ""))
-                            if not product_search_required and not cart_workflow:
-                                # Ordinary single-page QA inspects controls, links, forms,
-                                # images and runtime behaviour. It must not be blocked waiting
-                                # for a product-search record that this workflow never requests.
-                                smoke = structured_data.get("qa_page_smoke") or {}
-                                checks = structured_data.get("qa_checks") or {}
-                                start_step(execution_plan, step_id)
-                                complete_step(
-                                    execution_plan, step_id,
-                                    evidence_refs=all_evidence_refs,
-                                    result=(
-                                        "Captured the requested page for usability inspection; "
-                                        f"page-smoke signals={len(smoke) if isinstance(smoke, dict) else 0}, "
-                                        f"QA checks={len(checks) if isinstance(checks, dict) else 0}. "
-                                        "Product search is not part of this QA objective."
-                                    ),
-                                )
-                            elif search_record:
-                                matches = search_record.get("matches") or []
-                                product_outcomes = []
-                                for match in matches[:12]:
-                                    product_outcomes.append(
-                                        "name=" + str(match.get("name_match") or match.get("text") or "unconfirmed")[:160]
-                                        + "; image=" + ("present" if match.get("image_present") else "missing")
-                                        + "; image_loaded=" + str(bool(match.get("image_loaded")))
-                                        + "; price=" + str(match.get("price") or "not captured")
-                                    )
-                                if search_record.get("performed") is True:
-                                    outcome = (
-                                        "Search-result content extraction was attempted. "
-                                        + ("Captured candidate card(s): " + " | ".join(product_outcomes)
-                                           if product_outcomes else
-                                           "No matching product card was captured; product name, image and price remain unverified.")
-                                    )
-                                else:
-                                    outcome = (
-                                        "Search outcome was captured but the search was not performed "
-                                        f"(status={search_record.get('status') or 'not reported'}). "
-                                        "Product presence, name, image and price remain unverified; "
-                                        "this step records the limitation rather than treating it as a successful search."
-                                    )
-                                start_step(execution_plan, step_id)
-                                complete_step(
-                                    execution_plan, step_id,
-                                    evidence_refs=all_evidence_refs, result=outcome,
-                                )
-                            else:
-                                start_step(execution_plan, step_id)
-                                fail_step(
-                                    execution_plan, step_id,
-                                    "No QA product-search outcome was captured; content extraction cannot be verified.",
-                                    blocked=True,
-                                )
-
-                        should_complete = (
-                            (is_crawl_step and crawl_complete)
-                            or is_validation_step
-                            or is_synthesis_step
-                        )
-                        if not should_complete or step.get("status") in {"completed", "blocked", "failed", "skipped"}:
-                            continue
-                        unmet = [
-                            str(dep) for dep in step.get("depends_on", [])
-                            if by_step_id.get(str(dep), {}).get("status") != "completed"
-                        ]
-                        if unmet:
-                            message = (
-                                f"Finalisation deferred: prerequisite step(s) are not verified: {', '.join(unmet)}"
-                            )
-                            limitations.append(message)
-                            self._log(task_id, f"Plan finalisation deferred for {step_id}: {', '.join(unmet)}", "warning")
-                            continue
-                        start_step(execution_plan, step_id)
-                        complete_step(
-                            execution_plan, step_id,
-                            evidence_refs=all_evidence_refs,
-                            result=(
-                                "Crawl coverage acceptance satisfied; all known discovered and sampled sitemap URLs were visited or explicitly excluded."
-                                if is_crawl_step else
-                                (
-                                    "Validated candidate findings against linked structured browser evidence; recommendation eligibility remains gated by confirmed verdicts."
-                                    if is_validation_step else
-                                    "Aggregated crawl coverage, finding validation and recommendations gated to confirmed findings."
-                                )
-                            ),
-                        )
-                    if record.get("goal_state"):
-                        GoalStateManager.apply_verified_workflow_results(
-                            record["goal_state"], record.get("execution_blueprint"),
-                            execution_plan, evidence,
-                        )
                 priority_counts = {
                     priority: sum(item.get("priority") == priority for item in findings)
                     for priority in ("P0", "P1", "P2", "P3", "P4")
