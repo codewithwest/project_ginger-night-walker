@@ -1442,14 +1442,6 @@ class BrowserRuntime:
                 "steel_tool": result.get("tool_name"),
                 "steel_session_id": result.get("session_id"),
                 "mission_step": {"step_id": step_id, "capability": capability},
-                **(
-                    {"qa_product_search": result.get("search_submission")}
-                    if isinstance(result.get("search_submission"), dict) else {}
-                ),
-                **(
-                    {"qa_cart_progress": result.get("cart_progress")}
-                    if isinstance(result.get("cart_progress"), dict) else {}
-                ),
             },
         }
         evidence_id = self.evidence.save(task_id, evidence_payload)
