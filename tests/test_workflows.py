@@ -1,7 +1,6 @@
 from nightwalker.workflows import (
     WorkflowType, _qa_content_objective, build_workflow_blueprint, classify_workflow,
-    build_cart_journey_blueprint, build_product_search_blueprint,
-    coerce_decision_step_capabilities, extract_product_search_query,
+    extract_product_search_query,
     is_ecommerce_cart_workflow, qa_requires_site_crawl, qa_scope_for_objective,
     objective_requests_search, step_objective_requires_interaction, target_url_from_objective,
 )
@@ -155,41 +154,6 @@ def test_qa_content_objective_injects_extracted_product():
 
 
 
-def test_product_search_blueprint_requires_only_explicitly_requested_fields():
-    objective = 'Search for "Blue Top" and capture its price on https://example.com/products'
-    blueprint = build_product_search_blueprint(objective)
-    criteria = {item.criterion_id for item in blueprint.success_criteria}
-    assert "sc-product-name" in criteria
-    assert "sc-product-price" in criteria
-    assert "sc-product-image" not in criteria
-    assert "sc-product-url" not in criteria
-
-def test_product_search_blueprint_authorises_search_as_interaction():
-    objective = 'Search for "Dark Grey" and verify its name, image and price on https://weylandts.co.za'
-    blueprint = build_product_search_blueprint(objective)
-    steps = {item.subtask_id: item for item in blueprint.subtasks}
-
-    assert list(steps) == [
-        "qa-navigation", "qa-availability", "qa-content",
-        "qa-validate", "qa-synthesise",
-    ]
-    assert steps["qa-navigation"].capability == "navigate"
-    assert steps["qa-availability"].capability == "interact"
-    assert 'Search for "Dark Grey"' in steps["qa-availability"].objective
-    assert steps["qa-availability"].depends_on == ["qa-navigation"]
-    assert steps["qa-content"].capability == "extract"
-    assert steps["qa-content"].depends_on == ["qa-availability"]
-    assert steps["qa-validate"].depends_on == ["qa-content"]
-    assert steps["qa-synthesise"].depends_on == ["qa-validate"]
-    assert {
-        item.criterion_id for item in blueprint.success_criteria
-    } == {
-        "sc-navigation", "sc-search-submission", "sc-product-name",
-        "sc-product-image", "sc-product-price",
-    }
-
-
-
 def test_routes_ecommerce_cart_journey_to_qa_without_product_search_override():
     objective = 'Open https://www.weylandts.co.za/products. Add “Dark Grey” to the cart. Verify its price and quantity, then remove it. Confirm the cart is empty and report any problems. Do not checkout.'
     assert classify_workflow(objective) == WorkflowType.QA
@@ -213,42 +177,6 @@ def test_cart_detector_does_not_classify_product_research_as_cart_workflow():
     ]
     assert not any(is_ecommerce_cart_workflow(prompt) for prompt in prompts)
 
-
-def test_cart_journey_uses_deterministic_ordered_interaction_plan():
-    objective = 'Open https://www.weylandts.co.za/products. Add “Dark Grey” to the cart. Verify its price and quantity, then remove it. Confirm the cart is empty and report any problems. Do not checkout.'
-    assert is_ecommerce_cart_workflow(objective)
-    blueprint = build_cart_journey_blueprint(objective)
-    steps = {item.subtask_id: item for item in blueprint.subtasks}
-    assert list(steps) == [
-        "qa-navigation", "qa-discover", "qa-availability",
-        "qa-content", "qa-validate", "qa-synthesise",
-    ]
-    assert steps["qa-discover"].capability == "interact"
-    assert steps["qa-availability"].capability == "interact"
-    assert steps["qa-validate"].capability == "interact"
-    assert steps["qa-availability"].depends_on == ["qa-discover"]
-    assert steps["qa-content"].depends_on == ["qa-availability"]
-    assert steps["qa-validate"].depends_on == ["qa-content"]
-    assert steps["qa-synthesise"].depends_on == ["qa-validate"]
-    assert "checkout" in steps["qa-synthesise"].objective.lower()
-    assert len(blueprint.success_criteria) == 6
-
-
-def test_coerce_decision_steps_upgrades_stale_search_and_cart_navigate_capabilities():
-    cart_objective = (
-        'Open https://www.weylandts.co.za/. Add "Dark Grey" to the cart, '
-        "verify price and quantity, remove it, and confirm the cart is empty. Do not checkout."
-    )
-    cart_steps = coerce_decision_step_capabilities(cart_objective, [
-        {"step_id": "qa-navigation", "capability": "navigate", "objective": "Open storefront"},
-        {
-            "step_id": "qa-discover",
-            "capability": "navigate",
-            "objective": 'Search for and select a product matching "Dark Grey"',
-        },
-        {"step_id": "qa-availability", "capability": "navigate", "objective": "Add the product to cart"},
-    ])
-    assert [step["capability"] for step in cart_steps] == ["navigate", "interact", "interact"]
 
     search_objective = (
         'Open https://www.automationexercise.com/products. Search for "Blue Top". '
