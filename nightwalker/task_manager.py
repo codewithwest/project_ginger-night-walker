@@ -1201,6 +1201,8 @@ class TaskManager:
                             if (
                                 verified_result is None
                                 and result.get("evidence_id")
+                                and not result.get("error")
+                                and result.get("status") not in {"failed", "error", "blocked"}
                                 and capability in {"interact", "extract", "recover"}
                                 and not (is_long_running_crawl and next_url)
                             ):
