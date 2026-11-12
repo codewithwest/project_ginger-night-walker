@@ -414,7 +414,7 @@ export default function App() {
   const [browserExpanded, setBrowserExpanded] = useState(false);
   const [checklistFullscreen, setChecklistFullscreen] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">(() => {
-    try { return (localStorage.getItem("ginger-night-walker-theme") ?? localStorage.getItem("ginger-night-walker-theme")) === "light" ? "light" : "dark"; }
+    try { return (localStorage.getItem("ginger-night-walker-theme") ?? localStorage.getItem("night-walker-theme")) === "light" ? "light" : "dark"; }
     catch { return "dark"; }
   });
 
