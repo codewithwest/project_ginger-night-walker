@@ -1139,3 +1139,81 @@ body { overscroll-behavior: none; }
   .progress-event__meta { flex-wrap:wrap; } .progress-event__meta time { font-size:8px; }
   .markdown-content { font-size:11px; } .markdown-content table { font-size:10px; }
 }
+
+/* Mission list metadata and job timing visualisation. */
+.mission-item { min-width:0; cursor:pointer; }
+.mission-item:focus-visible { position:relative; z-index:1; outline:2px solid #00a88b; outline-offset:-2px; }
+.mission-item > strong { overflow-wrap:anywhere; }
+.mission-item__duration {
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  margin:2px 7px 3px 0;
+  padding:4px 7px;
+  border:1px solid #e1e9df;
+  border-radius:5px;
+  background:#f5f8f2;
+  color:#55715b;
+  font-size:9px;
+  font-weight:650;
+  font-variant-numeric:tabular-nums;
+}
+.job-duration {
+  display:inline-flex;
+  align-items:center;
+  padding:3px 7px;
+  border:1px solid #e1e9df;
+  border-radius:6px;
+  background:#f5f8f2;
+  color:#496b51;
+  font-size:10px;
+  font-weight:700;
+  font-variant-numeric:tabular-nums;
+}
+.timing-panel {
+  margin:18px 0 22px;
+  padding:17px 19px;
+  border:1px solid #dfe8dc;
+  border-radius:11px;
+  background:linear-gradient(135deg,#f7faf4 0%,#fffefa 100%);
+}
+.timing-panel__top {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  padding-bottom:13px;
+  border-bottom:1px solid #e5ece2;
+}
+.timing-panel__top > div > strong { display:block; margin-top:5px; color:#334b38; font-size:12px; }
+.timing-panel__total {
+  color:#244b3a;
+  font:700 24px/1.1 var(--serif);
+  letter-spacing:-.04em;
+  font-variant-numeric:tabular-nums;
+  white-space:nowrap;
+}
+.timing-panel__phases { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:13px 20px; padding-top:15px; }
+.timing-phase { min-width:0; }
+.timing-phase__meta { display:flex; align-items:center; justify-content:space-between; gap:9px; margin-bottom:6px; }
+.timing-phase__meta span:first-child { color:#5b6d5d; font-size:10px; font-weight:750; text-transform:capitalize; }
+.timing-phase__meta span:last-child { color:#7e8d7e; font-size:10px; font-weight:650; font-variant-numeric:tabular-nums; }
+.timing-phase__track { height:7px; overflow:hidden; border-radius:20px; background:#e7eee5; }
+.timing-phase__track > span { display:block; height:100%; min-width:0; border-radius:inherit; background:linear-gradient(90deg,#244b3a,#00a88b); transition:width .25s ease; }
+.timing-panel__active { margin-top:13px; padding:8px 10px; border:1px solid #d8e9df; border-radius:7px; background:#edf6ef; color:#3d7454; font-size:10px; font-weight:650; }
+:root[data-theme="dark"] .mission-item__duration,
+:root[data-theme="dark"] .job-duration { border-color:#315448; background:#19372d; color:#a9d9bf; }
+:root[data-theme="dark"] .timing-panel { border-color:#315448; background:linear-gradient(135deg,#172c24,#14231e); }
+:root[data-theme="dark"] .timing-panel__top { border-bottom-color:#315448; }
+:root[data-theme="dark"] .timing-panel__top > div > strong { color:#d7e7dc; }
+:root[data-theme="dark"] .timing-panel__total { color:#8dd8b6; }
+:root[data-theme="dark"] .timing-phase__meta span:first-child { color:#c5d8cb; }
+:root[data-theme="dark"] .timing-phase__meta span:last-child { color:#9db4a5; }
+:root[data-theme="dark"] .timing-phase__track { background:#29483b; }
+:root[data-theme="dark"] .timing-panel__active { border-color:#315c49; background:#193b30; color:#9ed9b8; }
+@media (max-width:640px) {
+  .timing-panel { padding:13px; }
+  .timing-panel__phases { grid-template-columns:minmax(0,1fr); gap:11px; }
+  .timing-panel__total { font-size:21px; }
+  .mission-item__duration { margin-top:4px; }
+}
