@@ -61,9 +61,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Ginger Night Walker",
+    title="Ginger Way",
     version="0.4.0",
-    description="Local-first, least-privilege Playwright agent with remote Ollama planning",
+    description="Ginger OS workspace for thoughtful, policy-governed website work",
     lifespan=lifespan,
 )
 
