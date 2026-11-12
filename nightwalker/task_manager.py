@@ -55,7 +55,6 @@ from nightwalker.cart_report import (
 from nightwalker.workflows import (
     WorkflowType,
     classify_workflow,
-    coerce_decision_step_capabilities,
     is_ecommerce_cart_workflow,
     extract_product_search_query,
     objective_requests_search,
@@ -628,11 +627,12 @@ class TaskManager:
                 decided_site_name = urlsplit(explicit_target).hostname
                 if decision.site_name:
                     decided_site_name = decision.site_name
-                # Preserve Decider order/objectives, but coerce search/cart discovery
-                # capabilities to interact so the browser is authorised to act.
-                executable_steps = coerce_decision_step_capabilities(
-                    objective, [step.model_dump(mode="python") for step in decision.steps],
-                )
+                # Preserve the Decider's complete authored sequence, objectives,
+                # capabilities and ordering. Runtime policy may reject a capability,
+                # but must never promote or rewrite the planner's permission choice.
+                executable_steps = [
+                    step.model_dump(mode="python") for step in decision.steps
+                ]
                 decision_payload = normalise_decision_plan({
                     "status": decision.status,
                     "summary": decision.summary,
@@ -647,8 +647,7 @@ class TaskManager:
                     "goal_analysis": "ollama.create_execution_blueprint",
                     "execution_order_source": "decider_plan",
                     "objective_sha256": hashlib.sha256(objective.encode("utf-8")).hexdigest(),
-                    "capability_coercion": "workflows.coerce_decision_step_capabilities",
-                }
+                                    }
                 # The Decider's ordered steps are the sole executable sequence.
                 # Goal analysis may contribute acceptance criteria and interpretation,
                 # but its separately generated subtasks are never executable.
