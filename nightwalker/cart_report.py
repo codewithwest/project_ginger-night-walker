@@ -1,8 +1,7 @@
-"""Deterministic cart-journey final report and goal reconciliation.
+"""Cart QA report formatting from the Decider-authored execution plan.
 
-Cart missions are not site crawls. Their answer must read as a presentable
-step-by-step breakdown of what the browser verified, without SEO/QA crawl
-boilerplate.
+This module formats the plan as recorded. It does not create steps, infer
+completion, or reconcile criteria from step names.
 """
 from __future__ import annotations
 
