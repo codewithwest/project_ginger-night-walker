@@ -855,17 +855,19 @@ export default function App() {
                     {["failed", "blocked"].includes(selected.status) && (
                       <button className="stop-button" onClick={() => void retryTask()} disabled={retrying}>
                         {retrying ? <LoaderCircle size={13} /> : <RefreshCw size={13} />}
-                        {retrying ? "Resuming…" : selected.status === "blocked" ? "Continue task" : "Retry task"}
+                        <span>{retrying ? "Resuming…" : selected.status === "blocked" ? "Continue task" : "Retry task"}</span>
                       </button>
                     )}
                     {isTerminal(selected.status) && selected.status !== "planned" && (
                       <button className="stop-button" onClick={() => void restartTask()} disabled={retrying}>
-                        <Play size={12} /> Restart from beginning
+                        <Play size={12} />
+                        <span>Restart from beginning</span>
                       </button>
                     )}
                     {!isTerminal(selected.status) && (
                       <button className="stop-button" onClick={() => void stop()}>
-                        <Square size={12} /> Stop
+                        <Square size={12} />
+                        <span>Stop</span>
                       </button>
                     )}
                   </div>
