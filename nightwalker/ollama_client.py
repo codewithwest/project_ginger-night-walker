@@ -1281,7 +1281,7 @@ class OllamaClient:
             "url": str(item.get("url") or item.get("source_url") or "")[:500],
             "title": str(item.get("title") or "")[:240],
             "captured_text": str(item.get("captured_text") or "")[:5000],
-            "html_skeleton": item.get("html_skeleton") or [],
+            "html_skeleton": (item.get("html_skeleton") or [])[:40],
         } for item in evidence_records[:8]]
         body = {
             "model": model, "stream": False,
