@@ -73,7 +73,14 @@ def build_cart_journey_report(
         )
     elif steps and len(completed) == len(steps):
         remaining = list((goal_state or {}).get("remaining") or [])
-        if remaining:
+        checkout_requested = any(term in objective.casefold() for term in ("checkout", "check out"))
+        checkout_verified = any(
+            step.get("status") == "completed"
+            and any(term in (str(step.get("objective") or "") + " " + str(step.get("result") or "")).casefold()
+                    for term in ("checkout", "check out"))
+            for step in steps
+        )
+        if remaining or (checkout_requested and not checkout_verified):
             lines.append(
                 "The Decider-authored plan finished, but the requested shopping journey was NOT verified. "
                 "The plan did not establish evidence for every success criterion."
@@ -81,6 +88,8 @@ def build_cart_journey_report(
             lines.append("")
             lines.append("**Unverified requested outcomes:**")
             lines.extend(f"- {item}" for item in remaining)
+            if checkout_requested and not checkout_verified and not any("checkout" in str(item).casefold() for item in remaining):
+                lines.append("- Reach and verify the checkout page.")
         else:
             lines.append(
                 "All steps in the Decider-authored plan were verified, and the goal criteria recorded by the Goal State Manager are satisfied."
