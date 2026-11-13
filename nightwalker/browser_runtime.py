@@ -1733,6 +1733,15 @@ class BrowserRuntime:
                 for text in (await page.locator("h1, h2").all_text_contents())[:40]
                 if text.strip()
             ]
+            # Keep the page's semantic skeleton separately from its visible prose.
+            # This gives planners a low-noise structural view without discarding
+            # the full bounded text needed for evidence and final reporting.
+            from nightwalker.html_skeleton import extract_html_skeleton
+            try:
+                skeleton_html = (await page.content())[:500000]
+                html_skeleton = extract_html_skeleton(skeleton_html, limit=120)
+            except (PlaywrightError, RuntimeError):
+                html_skeleton = []
             main = page.locator("main")
             if await main.count():
                 body_text = await main.first.evaluate(
@@ -2064,6 +2073,7 @@ class BrowserRuntime:
                     "evidence_id": None,
                     "source_id": "s-001",
                     "kind": "visible_text",
+                    "html_skeleton": html_skeleton,
                     "captured_at": retrieved_at,
                     "source_url": page.url,
                     "captured_text": body_text,
@@ -2082,6 +2092,7 @@ class BrowserRuntime:
                 "http_status": http_status,
                 "title": title,
                 "headings": headings,
+                "html_skeleton": html_skeleton,
                 "text": body_text,
                 "visited_urls": visited[:10],
                 "candidate_urls": candidates,
@@ -2101,6 +2112,7 @@ class BrowserRuntime:
                 "http_status": http_status,
                 "title": title,
                 "headings": headings,
+                "html_skeleton": html_skeleton,
                 "text": body_text,
                 "products": products,
                 "qa_product_search": qa_product_search,
