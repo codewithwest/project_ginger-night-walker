@@ -19,6 +19,7 @@ from nightwalker.goal_state import GoalCriteriaPlan, GoalProgressProposal
 from nightwalker.model_registry import ModelRegistry
 from nightwalker.planning_contracts import ExecutionBlueprint
 from nightwalker.research_contracts import ResearchRoundPlan, ResearchSynthesis
+from nightwalker.workflows import is_ecommerce_cart_workflow
 
 SYSTEM_PROMPTS = {
     "navigate": (
@@ -269,28 +270,20 @@ class OllamaClient:
             "essential research parameter is genuinely missing (for example which product, city, date "
             "or variant), not merely because no website was named. A ready plan must include a plausible "
             "public HTTP(S) URL. "
-            "For an ecommerce/cart task (for example add a named product to cart, verify cart price/quantity, then remove it), "
-            "plan a complete adaptive shopping journey, not a homepage-link lookup. Use ordered, distinct steps with stable IDs: "
-            "qa-navigation (open storefront, capability navigate); qa-discover (search/browse catalogue, identify one exact "
-            "matching product, open its product detail page when the listing has no add control — capability MUST be interact, "
-            "never navigate); qa-availability (always check stock first: if out of stock / sold out / unavailable, record that "
-            "and do not claim an add; only click Add to Cart when in stock — capability interact); "
-            "qa-content (verify the exact cart line, price and quantity when present, otherwise record out-of-stock — "
-            "capability extract); qa-validate (remove that exact line when present, otherwise confirm nothing to remove — "
-            "capability interact); qa-synthesise (verify the cart is empty, never checkout — capability extract). "
-            "Always check stock. If the user named an exact product (quoted SKU/name) and it is out of stock, "
-            "record out-of-stock as a valid verified outcome — not a browser failure. "
-            "If the user did NOT name an exact product (for example 'any tile', 'a product', 'any item') and the "
-            "opened product is out of stock / sold out / unavailable, do NOT stop: leave that PDP, pick a different "
-            "in-stock catalogue result, and continue the add → verify → remove → empty-cart journey. "
-            "Keep these stages separate and sequential. "
-            "For product-search QA (for example Search for \"Blue Top\" and verify name/image/price), use qa-navigation "
-            "(navigate) then qa-availability with capability interact to submit the exact search query; never mark search "
-            "submission as navigate. Any step whose objective searches, submits a query, clicks, configures a variant, or "
-            "removes a cart line MUST use capability interact. "
-            "If a cart or product-search request does not name a specific product (for example only 'add an item'), "
-            "return status needs_clarification asking which product to use; do not invent a product or emit a ready "
-            "homepage-only research plan. "
+            "For every task, author an adaptive ordered plan that covers the user's actual requested outcomes from beginning to end. "
+            "Do not substitute generic website inspection or public-information extraction for requested interactions. "
+            "Do not use canned step sequences, fixed step IDs, or task-specific workflows: derive the necessary actions, "
+            "their order and capabilities from this objective and the live site's requirements. "
+            "For shopping tasks, inspect catalogue and product detail state, establish availability before adding, "
+            "and verify each requested cart mutation from browser evidence. If the user asks for any/a product, that "
+            "explicitly authorises choosing a suitable in-stock catalogue item; do not ask them to name one. "
+            "If a selected item is unavailable, choose another suitable item when the objective permits any product. "
+            "If the user asks to continue to checkout, navigate to the checkout page and verify that it is reached; "
+            "do not submit an order, accept paid commitments, or enter payment details unless explicitly authorised. "
+            "Only ask for clarification when a genuinely essential choice is missing and cannot be resolved from a "
+            "clearly selected/default site option. "
+            "For every state-changing action, use capability interact; use navigate for page navigation and extract "
+            "for reading/verification. Keep distinct user-requested outcomes separately verifiable. "
             "Do not assume Add to Cart exists on a listing card. Many stores expose it only on the PDP, or only after selecting "
             "a variant, checking stock, or choosing a store/fulfilment location. If the page requires a choice that the user "
             "has not specified and there is no clearly preselected/default option, inspect and report the available choices "
@@ -344,9 +337,9 @@ class OllamaClient:
                 ):
                     from urllib.parse import urlsplit
 
-                    if plan.status.value == "needs_clarification":
-                        # The user already supplied the destination. Do not ask them
-                        # to repeat it; make a minimal, read-only browse/extract plan.
+                    if plan.status.value == "needs_clarification" and not is_ecommerce_cart_workflow(objective):
+                        # An explicit URL resolves website-only clarification for read-only research.
+                        # Never downgrade an interaction mission to a generic open/inspect plan.
                         plan = DecisionPlan.model_validate(
                             {
                                 "status": "ready",
