@@ -1421,6 +1421,10 @@ class BrowserRuntime:
             str(item.get("text") or "") for item in tool_content if isinstance(item, dict)
         )[:12000]
         combined_text = "\n".join(part for part in (action_text, captured_text) if part).strip()
+        html_skeleton = []
+        if "<html" in combined_text.casefold() or "<body" in combined_text.casefold():
+            from nightwalker.html_skeleton import extract_html_skeleton
+            html_skeleton = extract_html_skeleton(combined_text, limit=120)
         # Steel's snapshot identifies the actual live URL and document title.
         # Prefer that observed state over the task's original/previous URL.
         page_match = re.search(
@@ -1431,9 +1435,9 @@ class BrowserRuntime:
         page_title = page_match.group(2).strip()[:240] if page_match else ""
         evidence_payload = {
             "url": final_url, "final_url": final_url, "title": page_title,
-            "text": combined_text, "headings": [],
+            "text": combined_text, "headings": [], "html_skeleton": html_skeleton,
             "evidence": [{
-                "url": final_url, "title": page_title, "captured_text": combined_text[:15000],
+                "url": final_url, "title": page_title, "captured_text": combined_text[:15000], "html_skeleton": html_skeleton,
                 "capture_method": "steel_mcp_snapshot",
             }],
             "sources": [{"url": final_url, "title": page_title, "source_type": "webpage"}],
@@ -1453,7 +1457,7 @@ class BrowserRuntime:
         return {
             "status": "completed" if combined_text else "blocked",
             "final_url": final_url, "http_status": None, "title": page_title,
-            "headings": [], "text": combined_text,
+            "headings": [], "html_skeleton": html_skeleton, "text": combined_text,
             "evidence": evidence_payload["evidence"],
             "sources": evidence_payload["sources"],
             "structured_data": evidence_payload["structured_data"],
