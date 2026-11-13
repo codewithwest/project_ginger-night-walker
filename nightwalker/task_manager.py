@@ -1891,6 +1891,7 @@ class TaskManager:
                         str(record.get("objective") or objective),
                         record.get("execution_plan"),
                         out_of_stock=out_of_stock,
+                        goal_state=record.get("goal_state"),
                     )
                     structured_data["report_kind"] = "cart_journey"
                     structured_data["cart_journey_report"] = answer
