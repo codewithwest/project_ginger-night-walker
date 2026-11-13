@@ -11,10 +11,10 @@ from urllib.parse import urlsplit
 
 logger = logging.getLogger(__name__)
 
-from nightwalker.a2a import A2ABus
+from nightwalker.a2a import A2ABus, A2AMessage, A2AMessageType
 from nightwalker.agent_allocator import AgentAllocator
 from nightwalker.mission_verifier import MissionVerifier
-from nightwalker.contracts import AgentTask
+from nightwalker.contracts import AgentTask, Capability
 from nightwalker.crawl_intelligence import (
     candidate_exclusion_reason,
     crawl_candidate_metrics,
@@ -1227,9 +1227,33 @@ class TaskManager:
                                     "warning",
                                 )
                                 break
-                            # Hand the worker's claim and immutable evidence packet to
-                            # a separate verifier. Its JSON memory is private to the
-                            # verifier and is never injected into worker prompts.
+                            # Explicit worker -> verifier hand-off. The verifier receives
+                            # the bounded claim and evidence references, never browser tools.
+                            assignment = next(
+                                (item for item in record.get("agent_assignments", [])
+                                 if item.get("subtask_id") == step["step_id"]),
+                                {},
+                            )
+                            worker_id = str(assignment.get("agent_id") or "night-walker-worker")
+                            self.a2a_bus.send(A2AMessage(
+                                parent_task_id=task_id,
+                                subtask_id=str(step["step_id"]),
+                                sender_agent_id=worker_id,
+                                recipient_agent_id="night-walker-verifier",
+                                message_type=A2AMessageType.RESULT,
+                                capability=Capability(str(step.get("capability") or "extract")),
+                                objective=str(step.get("objective") or ""),
+                                payload={
+                                    "worker_status": str(result.get("status") or "unknown"),
+                                    "worker_claim": verified_result[:1000],
+                                    "verification_boundary": "evidence_refs_only",
+                                },
+                                evidence_refs=evidence_refs,
+                            ))
+                            record["a2a_messages"] = self.a2a_bus.history(task_id)
+                            self._persist(task_id)
+                            # The verifier's private JSON memory is never injected
+                            # into worker prompts or returned to capability agents.
                             verifier_decision = self.mission_verifier.verify_step(
                                 task_id=task_id,
                                 step_id=str(step["step_id"]),
