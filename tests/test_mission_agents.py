@@ -55,3 +55,19 @@ def test_verifier_owns_separate_json_memory_and_rejects_missing_evidence(tmp_pat
     saved = memory_path.read_text(encoding="utf-8")
     assert "ev-missing" in saved
     assert "verification-memory" not in str(verifier._path("task-1").parent.parent)
+
+
+def test_verifier_accepts_only_existing_nonempty_evidence(tmp_path):
+    verifier = MissionVerifier(str(tmp_path))
+    decision = verifier.verify_step(
+        task_id="task-2",
+        step_id="step-1",
+        objective="Inspect the page",
+        worker_status="completed",
+        worker_claim="The page was inspected",
+        evidence_refs=["ev-1"],
+        evidence_records=[{"evidence_id": "ev-1", "captured_text": "Page title and visible page content"}],
+    )
+
+    assert decision["status"] == "verified"
+    assert decision["evidence_refs"] == ["ev-1"]
