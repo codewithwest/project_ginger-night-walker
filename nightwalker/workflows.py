@@ -205,7 +205,9 @@ def step_objective_requires_interaction(objective: str) -> bool:
         "enter the query", "type the query", "use the search", "rendered search",
         "select a product", "select the product", "identify one exact",
         "find the exact", "open its product", "product detail", "add to cart",
-        "click add", "remove", "configure", "variant", "colour", "color", "size",
+        "click add", "remove", "increase quantity", "decrease quantity",
+        "change quantity", "update quantity", "set quantity", "checkout",
+        "configure", "variant", "colour", "color", "size",
         "finish", "collection location", "store location",
     )
     return any(marker in value for marker in markers)
