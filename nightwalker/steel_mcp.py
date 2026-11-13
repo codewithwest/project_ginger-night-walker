@@ -6,6 +6,8 @@ import os
 import re
 from typing import Any
 
+from nightwalker.mcp_ontology import native_tool_name, semantic_tool_view
+
 _STEEL_REF = re.compile(r"^@?e\d+$", re.IGNORECASE)
 
 
@@ -225,15 +227,9 @@ class SteelMCPClient:
             })
             if snapshot["is_error"]:
                 raise RuntimeError(str(snapshot["content"])[:1000])
-            allowed_by_capability = {
-                "interact": {"steel_find", "steel_act", "steel_wait_for"},
-                "extract": {"steel_snapshot", "steel_scrape"},
-                "recover": {"steel_navigate", "steel_wait_for"},
-            }
-            allowed = allowed_by_capability.get(capability)
-            if not allowed:
-                raise PermissionError(f"Unsupported Steel MCP mission capability: {capability}")
-            available_tools = [tool for tool in self._tools if tool["name"] in allowed]
+            available_tools = semantic_tool_view(self._tools, capability)
+            if not available_tools:
+                raise PermissionError(f"No ontology-defined Steel functions are available for capability: {capability}")
             previous_failure: dict[str, Any] | None = None
             result = {"is_error": True, "content": [{"text": "No tool proposal was executed"}]}
             selected_tool = ""
@@ -246,26 +242,28 @@ class SteelMCPClient:
                     task_id=task_id, objective=objective, capability=capability,
                     observation=observation, tools=available_tools, session_id=session_id,
                 )
-                selected_tool = str(proposal.get("tool_name") or "")
-                if selected_tool not in allowed:
-                    raise PermissionError("Model selected a Steel tool outside the capability allowlist")
+                semantic_name = str(proposal.get("tool_name") or "")
+                native_name = native_tool_name(semantic_name, available_tools)
+                if not native_name:
+                    raise PermissionError("Model selected a function outside the capability ontology")
                 arguments = normalise_steel_tool_arguments(
-                    selected_tool, dict(proposal.get("arguments") or {}),
+                    native_name, dict(proposal.get("arguments") or {}),
                 )
                 selected_schema = next(
                     (tool.get("input_schema") or {} for tool in available_tools
-                     if tool.get("name") == selected_tool),
+                     if tool.get("name") == semantic_name),
                     {},
                 )
                 if "session_id" in (selected_schema.get("properties") or {}):
                     arguments["session_id"] = session_id
                 else:
                     arguments.pop("session_id", None)
-                result = await self.call_tool(selected_tool, arguments)
+                result = await self.call_tool(native_name, arguments)
+                selected_tool = native_name
                 if not result["is_error"]:
                     break
                 previous_failure = {
-                    "tool_name": selected_tool, "arguments": arguments,
+                    "tool_name": native_name, "arguments": arguments,
                     "error": result.get("content") or [], "recovery_attempt": attempt + 1,
                 }
                 if attempt == 0:
