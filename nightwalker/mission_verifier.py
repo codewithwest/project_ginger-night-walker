@@ -12,6 +12,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from nightwalker.ollama_client import OllamaUnavailable
+
 
 class MissionVerifier:
     """Independent, read-only-to-browser verifier with exclusive memory ownership."""
@@ -24,10 +26,11 @@ class MissionVerifier:
         safe_id = re.sub(r"[^a-zA-Z0-9_-]", "_", task_id)[:120]
         return self.directory / f"{safe_id}.json"
 
-    def verify_step(
+    async def verify_step(
         self,
         *,
         task_id: str,
+        ollama: Any,
         step_id: str,
         objective: str,
         worker_status: str,
@@ -42,6 +45,15 @@ class MissionVerifier:
         this independent stage validates the evidence chain and rejects claims
         whose cited records are missing or empty.
         """
+        path = self._path(task_id)
+        try:
+            memory = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {
+                "schema_version": 1, "task_id": task_id, "events": [],
+            }
+        except (OSError, ValueError):
+            memory = {"schema_version": 1, "task_id": task_id, "events": []}
+        prior_events = memory.get("events", []) if isinstance(memory, dict) else []
+
         evidence_by_id = {
             str(item.get("evidence_id")): item
             for item in evidence_records if item.get("evidence_id")
@@ -68,8 +80,27 @@ class MissionVerifier:
             status = "needs_more_evidence"
             reason = "One or more cited evidence records contain no captured content."
         else:
-            status = "verified"
-            reason = "The worker's objective check passed and every cited evidence record is present and non-empty."
+            try:
+                model_review = await ollama.review_mission_evidence(
+                    task_id=task_id,
+                    step_id=step_id,
+                    objective=objective,
+                    worker_claim=worker_claim or "",
+                    evidence_records=evidence_records,
+                    verifier_memory=prior_events,
+                )
+            except (OllamaUnavailable, AttributeError, RuntimeError, ValueError):
+                model_review = {
+                    "status": "needs_more_evidence",
+                    "reason": "The independent verifier model was unavailable; completion is not authorised.",
+                }
+            status = str(model_review.get("status") or "needs_more_evidence")
+            reason = str(model_review.get("reason") or "The independent verifier returned no reason.")
+            # The model may reject or request more evidence, but it cannot bypass
+            # the deterministic evidence-reference and non-empty-content gates.
+            if status == "verified" and (missing or empty or not refs):
+                status = "needs_more_evidence"
+                reason = "The model review passed, but the deterministic evidence integrity gate failed."
 
         decision = {
             "step_id": step_id,
@@ -83,15 +114,9 @@ class MissionVerifier:
             "reason": reason,
             "verified_at": datetime.now(UTC).isoformat(),
             "verifier": "ginger-independent-verifier",
+            "model_review": model_review if worker_status not in {"failed", "error", "blocked"} and worker_claim and refs and not missing and not empty else None,
         }
-        path = self._path(task_id)
         path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            memory = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {
-                "schema_version": 1, "task_id": task_id, "events": [],
-            }
-        except (OSError, ValueError):
-            memory = {"schema_version": 1, "task_id": task_id, "events": []}
         memory.setdefault("events", []).append(decision)
         temporary = path.with_suffix(".tmp")
         temporary.write_text(
