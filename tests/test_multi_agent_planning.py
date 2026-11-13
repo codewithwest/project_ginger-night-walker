@@ -46,6 +46,7 @@ def test_allocator_assigns_only_decider_steps_and_emits_a2a_assignments():
     assert [item["subtask_id"] for item in assignments] == ["decider-discover", "decider-prices"]
     assert assignments[0]["agent_id"] == "night-walker-navigator"
     assert assignments[1]["agent_id"] == "night-walker-extractor"
+    assert assignments[0]["verifier_agent_id"] == "night-walker-verifier"
     messages = bus.history("task-1")
     assert len(messages) == 2
     assert messages[0]["message_type"] == "assignment"
