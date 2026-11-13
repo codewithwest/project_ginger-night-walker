@@ -52,7 +52,11 @@ class MissionVerifier:
             }
         except (OSError, ValueError):
             memory = {"schema_version": 1, "task_id": task_id, "events": []}
-        prior_events = memory.get("events", []) if isinstance(memory, dict) else []
+        if not isinstance(memory, dict):
+            memory = {"schema_version": 1, "task_id": task_id, "events": []}
+        prior_events = memory.get("events", [])
+        if not isinstance(prior_events, list):
+            prior_events = []
 
         evidence_by_id = {
             str(item.get("evidence_id")): item
