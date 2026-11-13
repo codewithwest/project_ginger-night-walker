@@ -19,6 +19,7 @@ def build_cart_journey_report(
     execution_plan: dict[str, Any] | None,
     *,
     out_of_stock: bool = False,
+    goal_state: dict[str, Any] | None = None,
 ) -> str:
     """Build a markdown mission report from verified plan-step results."""
     steps = _steps(execution_plan)
@@ -71,9 +72,19 @@ def build_cart_journey_report(
             "Blocked or failed steps are listed above with their findings."
         )
     elif steps and len(completed) == len(steps):
-        lines.append(
-            "All authorised steps in the requested shopping journey were verified."
-        )
+        remaining = list((goal_state or {}).get("remaining") or [])
+        if remaining:
+            lines.append(
+                "The Decider-authored plan finished, but the requested shopping journey was NOT verified. "
+                "The plan did not establish evidence for every success criterion."
+            )
+            lines.append("")
+            lines.append("**Unverified requested outcomes:**")
+            lines.extend(f"- {item}" for item in remaining)
+        else:
+            lines.append(
+                "All steps in the Decider-authored plan were verified, and the goal criteria recorded by the Goal State Manager are satisfied."
+            )
     else:
         lines.append(
             f"{len(completed)} of {len(steps)} cart steps verified before the mission ended."
@@ -81,10 +92,19 @@ def build_cart_journey_report(
     lines.append("")
     lines.append("## Checkout")
     lines.append("")
-    lines.append(
-        "The report reflects the checkout-page navigation and verification steps, if requested. "
-        "No order is placed and no payment is submitted unless that is explicitly authorised."
+    checkout_requested = any(term in objective.casefold() for term in ("checkout", "check out"))
+    checkout_verified = any(
+        step.get("status") == "completed"
+        and any(term in (str(step.get("objective") or "") + " " + str(step.get("result") or "")).casefold()
+                for term in ("checkout", "check out"))
+        for step in steps
     )
+    if checkout_requested and not checkout_verified:
+        lines.append("Checkout was requested but was not reached or verified.")
+    elif checkout_requested:
+        lines.append("The checkout page was reached and verified. No order was placed and no payment was submitted.")
+    else:
+        lines.append("No checkout navigation was requested. No order was placed and no payment was submitted.")
     lines.append("")
     return "\n".join(lines).strip() + "\n"
 
