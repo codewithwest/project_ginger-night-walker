@@ -369,12 +369,25 @@ class BrowserRuntime:
         state["activity"] = state["activity"][-30:]
 
     def steel_mcp_status(self) -> dict:
+        from nightwalker.mcp_ontology import TOOL_ONTOLOGY
+
+        native_tools = self.steel_mcp.tools
+        functions = [
+            {
+                "name": TOOL_ONTOLOGY[item["name"]]["function"],
+                "concept": TOOL_ONTOLOGY[item["name"]]["concept"],
+                "description": TOOL_ONTOLOGY[item["name"]]["description"],
+            }
+            for item in native_tools if item.get("name") in TOOL_ONTOLOGY
+        ]
         return {
             "enabled": os.getenv("STEEL_MCP_ENABLED", "false").strip().lower() == "true",
             "mission_execution_enabled": os.getenv("STEEL_MCP_MISSION_ENABLED", "true").strip().lower() == "true",
             "connected": self.steel_mcp.connected,
-            "tool_count": len(self.steel_mcp.tools),
-            "tools": [item["name"] for item in self.steel_mcp.tools],
+            "tool_count": len(functions),
+            "tools": [item["name"] for item in functions],
+            "functions": functions,
+            "native_tool_count": len(native_tools),
             "startup_error": self._steel_mcp_start_error,
         }
 
