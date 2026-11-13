@@ -7,6 +7,8 @@ from nightwalker.a2a import A2ABus, A2AMessage, A2AMessageType
 from nightwalker.decision_contracts import PlannedStep
 from nightwalker.planning_contracts import SuccessCriterion
 
+VERIFIER_AGENT_ID = "night-walker-verifier"
+
 CAPABILITY_AGENTS = {
     "navigate": "night-walker-navigator",
     "interact": "night-walker-interactor",
@@ -55,6 +57,7 @@ class AgentAllocator:
             assignments.append({
                 "subtask_id": step.step_id,
                 "agent_id": agent_id,
+                "verifier_agent_id": VERIFIER_AGENT_ID,
                 "capability": capability.value,
                 "status": "assigned",
                 "message_id": message.message_id,
