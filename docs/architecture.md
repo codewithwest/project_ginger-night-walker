@@ -140,7 +140,17 @@ flowchart TB
 
 Website text, metadata, links and embedded instructions are untrusted input. They must never override system policy, task permissions or model instructions.
 
-## 7. Current implementation status
+## 7. Semantic browser functions, compact observations and independent verification
+
+The Steel MCP adapter exposes a small semantic function vocabulary to the model rather than the upstream server's entire tool catalogue. Each function has a stable name, ontology concept, plain-language purpose and the upstream input schema. The adapter maps an approved semantic function back to its native MCP tool and applies the existing capability allowlist. Session lifecycle functions are never model-selectable.
+
+The browser capture path extracts a bounded HTML skeleton alongside visible text: landmarks, headings, forms, controls and links. Scripts, styles, SVG payloads and other non-structural noise are excluded from the skeleton. Full bounded visible text remains in immutable evidence for reporting; the skeleton is the compact structural representation for inspection and context.
+
+Every Decider-authored step is paired with a capability worker and the independent `night-walker-verifier`. The worker executes the authorised step and supplies a completion claim plus evidence references. The verifier has no browser tools and independently checks the evidence hand-off before the execution ledger can mark the step complete. Worker claims alone never advance verified progress.
+
+Verifier memory is a separate per-task JSON file under `EVIDENCE_DIR/verification-memory`. Only the verifier component reads and appends this file. It records the worker claim, evidence references, verification decision, reason and timestamp. The worker receives neither this file nor its contents in its prompt/context. The normal task snapshot remains the operator-facing progress surface; verifier memory is private verification state, not a second executable plan.
+
+## 8. Current implementation status
 
 | Capability | Status | Notes |
 |---|---|---|
@@ -152,6 +162,9 @@ Website text, metadata, links and embedded instructions are untrusted input. The
 | Strands Decider integration | Optional | `STRANDS_DECIDER_URL` selects only among discovered source candidates; falls back to Ollama planner; no direct browser tools |
 | Task-scoped Playwright context | Implemented | Context is reused across page rounds and closed when the task reaches a terminal state |
 | Two-stage tool proposal | Initial implementation | Model selects only from workflow-allowlisted read-only tools; a second structured call fills arguments against the selected Pydantic schema. Proposals are not execution authorisation. |
+| Semantic MCP function ontology | Initial implementation | Small capability-scoped function catalogue with explicit names, ontology concepts, descriptions and upstream schema mapping. |
+| Compact HTML skeleton | Initial implementation | Captures landmarks, headings, forms, controls and links while excluding script/style/SVG noise; full visible text remains evidence. |
+| Independent mission verifier | Initial implementation | Capability worker and verifier are separate roles; verifier validates evidence hand-off before step completion and owns a separate JSON memory file. |
 | Element resolution | Initial implementation | Accessibility-grounded refs only; unique high-confidence matches resolve, ambiguous/no-match cases do not trigger an action. |
 | Deterministic action verification | Initial implementation | Python verifies browser status and matching persisted evidence; model evaluation cannot upgrade an unverified result. |
 | Run traces | Initial implementation | Redacted per-task JSONL observe/decide/resolve/act/verify/evaluate events; bounded read API and 14-day cleanup. |
@@ -186,7 +199,7 @@ Website text, metadata, links and embedded instructions are untrusted input. The
 | Automatic memory retention | Not implemented by design | Ginger owns this decision |
 | Arbitrary interaction, form submission, transactions | Not supported | Read-only baseline |
 
-## 8. Scaling path
+## 9. Scaling path
 
 1. Stabilise and version the report/evidence contracts.
 2. Move from single-process JSON snapshots to a transactional task store/queue before introducing multiple workers.
