@@ -1254,8 +1254,9 @@ class TaskManager:
                             self._persist(task_id)
                             # The verifier's private JSON memory is never injected
                             # into worker prompts or returned to capability agents.
-                            verifier_decision = self.mission_verifier.verify_step(
+                            verifier_decision = await self.mission_verifier.verify_step(
                                 task_id=task_id,
+                                ollama=self.orchestrator.ollama,
                                 step_id=str(step["step_id"]),
                                 objective=str(step.get("objective") or ""),
                                 worker_status=str(result.get("status") or "unknown"),
