@@ -72,7 +72,7 @@ def build_cart_journey_report(
         )
     elif steps and len(completed) == len(steps):
         lines.append(
-            "All authorised cart steps completed. The journey finished without opening or submitting checkout."
+            "All authorised steps in the requested shopping journey were verified."
         )
     else:
         lines.append(
@@ -81,7 +81,10 @@ def build_cart_journey_report(
     lines.append("")
     lines.append("## Checkout")
     lines.append("")
-    lines.append("No checkout actions were initiated.")
+    lines.append(
+        "The report reflects the checkout-page navigation and verification steps, if requested. "
+        "No order is placed and no payment is submitted unless that is explicitly authorised."
+    )
     lines.append("")
     return "\n".join(lines).strip() + "\n"
 
