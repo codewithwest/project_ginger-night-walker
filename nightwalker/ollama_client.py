@@ -996,6 +996,13 @@ class OllamaClient:
         elif isinstance(snapshot, str):
             texts.append(snapshot)
         joined = "\n".join(texts)
+        # If a provider returns raw HTML, replace its noisy source with a
+        # compact structural skeleton before the model sees the observation.
+        if "<html" in joined.casefold() or "<body" in joined.casefold():
+            from nightwalker.html_skeleton import extract_html_skeleton
+            skeleton = extract_html_skeleton(joined, limit=120)
+            compact["html_skeleton"] = skeleton
+            joined = json.dumps(skeleton, ensure_ascii=False)
         if len(joined) > limit:
             joined = joined[:limit] + "\n…[snapshot truncated]"
         compact["snapshot_text"] = joined
