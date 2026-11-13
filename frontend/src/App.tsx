@@ -859,13 +859,13 @@ export default function App() {
                       </button>
                     )}
                     {isTerminal(selected.status) && selected.status !== "planned" && (
-                      <button className="stop-button" onClick={() => void restartTask()} disabled={retrying}>
+                      <button className="stop-button stop-button--danger" onClick={() => void restartTask()} disabled={retrying}>
                         <Play size={12} />
                         <span>Restart from beginning</span>
                       </button>
                     )}
                     {!isTerminal(selected.status) && (
-                      <button className="stop-button" onClick={() => void stop()}>
+                      <button className="stop-button stop-button--danger" onClick={() => void stop()}>
                         <Square size={12} />
                         <span>Stop</span>
                       </button>

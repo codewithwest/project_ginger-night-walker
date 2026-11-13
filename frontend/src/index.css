@@ -117,8 +117,35 @@ button { cursor: pointer; }
 .result-header h2 { max-width: 650px; margin: 9px 0 7px; color: #27342a; font: 700 19px/1.4 var(--serif); letter-spacing: -.035em; }
 .result-header__meta { display: flex; gap: 8px; color: #92998f; font-size: 10px; }
 .result-header__actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.stop-button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border: 1px solid #ebd9d6; border-radius: 7px; background: #fff8f6; color: #a65f57; font-size: 10px; font-weight: 700; white-space: nowrap; }
+.stop-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border: 1px solid #d7e5db;
+  border-radius: 7px;
+  background: #f3f8f4;
+  color: #285d45;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: background .18s ease, border-color .18s ease, transform .18s ease;
+}
+.stop-button:hover:not(:disabled) {
+  background: #eaf4ed;
+  border-color: #b9d2c1;
+  transform: translateY(-1px);
+}
 .stop-button span { display: inline-block; }
+.stop-button--danger {
+  border-color: #ebd9d6;
+  background: #fff8f6;
+  color: #a65f57;
+}
+.stop-button--danger:hover:not(:disabled) {
+  background: #fff0ee;
+  border-color: #e4c3bc;
+}
 .answer-panel { margin-top: 24px; padding: 22px; border: 1px solid #dfe8dc; border-radius: 12px; background: linear-gradient(135deg, #f5f8f1 0%, #fbfcf8 100%); }
 .answer-panel__topline { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .answer-panel .eyebrow { color: #4d7957; }
@@ -901,6 +928,24 @@ body { overscroll-behavior: none; }
 :root[data-theme="dark"] .status--danger { border-color: #794d47; background: #402925; color: #f0a89d; }
 :root[data-theme="dark"] .status--warning { border-color: #806b39; background: #3a3421; color: #edcf86; }
 :root[data-theme="dark"] .status--active { border-color: #315e59; background: #1b3c38; color: #9bd8cf; }
+:root[data-theme="dark"] .stop-button {
+  border-color: #315448;
+  background: #19312b;
+  color: #dfeee5;
+}
+:root[data-theme="dark"] .stop-button:hover:not(:disabled) {
+  background: #1f4138;
+  border-color: #4a7868;
+}
+:root[data-theme="dark"] .stop-button--danger {
+  border-color: #7b524d;
+  background: #2d1b1b;
+  color: #f2b7ac;
+}
+:root[data-theme="dark"] .stop-button--danger:hover:not(:disabled) {
+  background: #3a2524;
+  border-color: #9d675f;
+}
 :root[data-theme="dark"] .answer-panel { border-color: #315448; background: linear-gradient(135deg, #193b30, #19312b); }
 :root[data-theme="dark"] .answer-panel .eyebrow,
 :root[data-theme="dark"] .answer-highlight > strong,
@@ -1245,10 +1290,13 @@ body { overscroll-behavior: none; }
   width: min(860px, calc(100vw - 32px));
   height: min(820px, calc(100vh - 80px));
 }
-.floating-browser.is-dual-open { right: 22px; }
+.floating-browser.is-dual-open {
+  right: min(430px, calc(100vw - 520px));
+}
 .floating-browser.is-running .floating-browser__trigger { border-color: #00a88b; }
 @media (max-width: 640px) {
   .floating-browser { right: 10px; bottom: 10px; }
+  .floating-browser.is-dual-open { right: 10px; }
   .floating-browser__panel {
     width: calc(100vw - 20px);
     min-width: 0;
@@ -1401,6 +1449,52 @@ body { overscroll-behavior: none; }
 .timing-phase__track { height:7px; overflow:hidden; border-radius:20px; background:#e7eee5; }
 .timing-phase__track > span { display:block; height:100%; min-width:0; border-radius:inherit; background:linear-gradient(90deg,#244b3a,#00a88b); transition:width .25s ease; }
 .timing-panel__active { margin-top:13px; padding:8px 10px; border:1px solid #d8e9df; border-radius:7px; background:#edf6ef; color:#3d7454; font-size:10px; font-weight:650; }
+.inference-panel {
+  margin-top: 22px;
+  padding: 18px 18px 12px;
+  border: 1px solid #dfe8dc;
+  border-radius: 11px;
+  background: linear-gradient(135deg, #f7faf4 0%, #fffefa 100%);
+}
+.inference-panel > .section-kicker {
+  margin-bottom: 12px;
+}
+.inference-panel__list {
+  display: grid;
+  gap: 10px;
+}
+.inference-event {
+  padding: 11px 12px 10px;
+  border: 1px solid #e5ebe3;
+  border-radius: 9px;
+  background: #fbfcf9;
+}
+.inference-event__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.inference-event__top strong {
+  color: #2d4037;
+  font-size: 12px;
+  font-weight: 700;
+}
+.inference-event__top span {
+  color: #647768;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+}
+.inference-event__model,
+.inference-event__metrics {
+  color: #677767;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.inference-event__model { margin-top: 7px; }
+.inference-event__metrics { margin-top: 3px; }
 :root[data-theme="dark"] .mission-item__duration,
 :root[data-theme="dark"] .job-duration { border-color:#315448; background:#19372d; color:#a9d9bf; }
 :root[data-theme="dark"] .timing-panel { border-color:#315448; background:linear-gradient(135deg,#172c24,#14231e); }
@@ -1411,9 +1505,24 @@ body { overscroll-behavior: none; }
 :root[data-theme="dark"] .timing-phase__meta span:last-child { color:#9db4a5; }
 :root[data-theme="dark"] .timing-phase__track { background:#29483b; }
 :root[data-theme="dark"] .timing-panel__active { border-color:#315c49; background:#193b30; color:#9ed9b8; }
+:root[data-theme="dark"] .inference-panel {
+  border-color: #315448;
+  background: linear-gradient(135deg, #172c24, #14231e);
+}
+:root[data-theme="dark"] .inference-event {
+  border-color: #315448;
+  background: #142a24;
+}
+:root[data-theme="dark"] .inference-event__top strong,
+:root[data-theme="dark"] .inference-event__model,
+:root[data-theme="dark"] .inference-event__metrics { color: #dfeee5; }
+:root[data-theme="dark"] .inference-event__top span,
+:root[data-theme="dark"] .inference-event__metrics { color: #9db2a5; }
 @media (max-width:640px) {
   .timing-panel { padding:13px; }
   .timing-panel__phases { grid-template-columns:minmax(0,1fr); gap:11px; }
   .timing-panel__total { font-size:21px; }
   .mission-item__duration { margin-top:4px; }
+  .inference-panel { padding: 14px 12px 10px; }
+  .inference-event__top { align-items: flex-start; flex-direction: column; }
 }
