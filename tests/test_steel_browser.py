@@ -223,3 +223,22 @@ def test_steel_tool_proposal_salvages_broken_delimiter_json():
     assert salvaged["tool_name"] == "steel_act"
     assert salvaged["arguments"]["action"] == "click"
     assert salvaged["arguments"]["target"] == "@e271"
+
+
+def test_steel_observation_replaces_raw_html_with_skeleton():
+    compact = OllamaClient._compact_steel_observation(
+        {
+            "url": "https://example.test",
+            "snapshot": {
+                "content": [{
+                    "type": "text",
+                    "text": '<html><script>large noisy script</script><main><h1>Products</h1><button>Buy</button></main></html>',
+                }]
+            },
+        },
+        limit=1000,
+    )
+
+    assert compact["html_skeleton"]
+    assert "large noisy script" not in compact["snapshot_text"]
+    assert "Products" in compact["snapshot_text"]
