@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 from nightwalker.a2a import A2ABus
 from nightwalker.agent_allocator import AgentAllocator
+from nightwalker.mission_verifier import MissionVerifier
 from nightwalker.contracts import AgentTask
 from nightwalker.crawl_intelligence import (
     candidate_exclusion_reason,
@@ -77,6 +78,8 @@ class TaskManager:
         self.max_rounds = 30
         self.a2a_bus = A2ABus()
         self.agent_allocator = AgentAllocator(self.a2a_bus)
+        # Verifier-owned memory is deliberately separate from worker/task context.
+        self.mission_verifier = MissionVerifier()
         self.shutting_down = False
 
     @staticmethod
@@ -1224,8 +1227,29 @@ class TaskManager:
                                     "warning",
                                 )
                                 break
+                            # Hand the worker's claim and immutable evidence packet to
+                            # a separate verifier. Its JSON memory is private to the
+                            # verifier and is never injected into worker prompts.
+                            verifier_decision = self.mission_verifier.verify_step(
+                                task_id=task_id,
+                                step_id=str(step["step_id"]),
+                                objective=str(step.get("objective") or ""),
+                                worker_status=str(result.get("status") or "unknown"),
+                                worker_claim=verified_result,
+                                evidence_refs=evidence_refs,
+                                evidence_records=round_evidence,
+                            )
+                            if verifier_decision.get("status") != "verified":
+                                failure_detail = str(verifier_decision.get("reason") or "Verifier rejected the evidence")
+                                fail_step(execution_plan, step["step_id"], failure_detail, blocked=True)
+                                self._log(
+                                    task_id,
+                                    f"Independent verifier rejected step {step['step_id']}: {failure_detail}",
+                                    "warning",
+                                )
+                                break
                             complete_step(execution_plan, step["step_id"], evidence_refs=evidence_refs, result=verified_result)
-                            self._log(task_id, f"Plan step verified: {step['step_id']}")
+                            self._log(task_id, f"Independent verifier accepted step: {step['step_id']}")
                         record["active_plan_step_id"] = None
                         self._persist(task_id)
                     if record.get("goal_state") and round_evidence:
