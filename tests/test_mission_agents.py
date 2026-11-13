@@ -3,6 +3,11 @@ from nightwalker.mcp_ontology import native_tool_name, semantic_tool_view
 from nightwalker.mission_verifier import MissionVerifier
 
 
+class _VerifierModel:
+    async def review_mission_evidence(self, **kwargs):
+        return {"status": "verified", "reason": "Evidence directly supports the claim."}
+
+
 def test_ontology_exposes_only_semantic_functions_for_capability():
     tools = [
         {"name": "steel_snapshot", "input_schema": {"type": "object"}},
@@ -37,9 +42,14 @@ def test_html_skeleton_keeps_structure_and_discards_script_noise():
     assert any(item.get("type") == "landmark" and item.get("tag") == "main" for item in skeleton)
 
 
-def test_verifier_owns_separate_json_memory_and_rejects_missing_evidence(tmp_path):
+import pytest
+
+
+@pytest.mark.asyncio
+async def test_verifier_owns_separate_json_memory_and_rejects_missing_evidence(tmp_path):
     verifier = MissionVerifier(str(tmp_path))
-    decision = verifier.verify_step(
+    decision = await verifier.verify_step(
+        ollama=_VerifierModel(),
         task_id="task-1",
         step_id="decider-step",
         objective="Inspect the page",
@@ -57,9 +67,11 @@ def test_verifier_owns_separate_json_memory_and_rejects_missing_evidence(tmp_pat
     assert "verification-memory" not in str(verifier._path("task-1").parent.parent)
 
 
-def test_verifier_accepts_only_existing_nonempty_evidence(tmp_path):
+@pytest.mark.asyncio
+async def test_verifier_accepts_only_existing_nonempty_evidence(tmp_path):
     verifier = MissionVerifier(str(tmp_path))
-    decision = verifier.verify_step(
+    decision = await verifier.verify_step(
+        ollama=_VerifierModel(),
         task_id="task-2",
         step_id="step-1",
         objective="Inspect the page",
