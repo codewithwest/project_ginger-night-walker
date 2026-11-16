@@ -234,20 +234,32 @@ class SteelMCPClient:
             previous_failure: dict[str, Any] | None = None
             result = {"is_error": True, "content": [{"text": "No tool proposal was executed"}]}
             selected_tool = ""
+            step_confirmed = False
+            # The action budget is a safety bound, not a workflow definition. The
+            # executor may adapt to any site/application state within this budget.
+            try:
+                max_proposals = max(4, min(32, int(os.getenv("STEEL_MCP_MAX_PROPOSALS", "16"))))
+            except ValueError:
+                max_proposals = 16
             # An interact-capability step is not complete after observation alone.
             # Element resolution/waiting may precede an action, but at least one
             # ontology-marked page mutation must execute before the step can pass.
-            max_proposals = 8 if capability == "interact" else 2
+            if capability != "interact":
+                max_proposals = 2
             interaction_executed = False
             consecutive_read_only_calls = 0
             for attempt in range(max_proposals):
                 observation: dict[str, Any] = {
                     "url": url, "snapshot": snapshot, "session_id": session_id,
                     "previous_failure": previous_failure,
+                    "mission_objective": str(mission_objective or objective)[:2000],
+                    "step_objective": objective[:1000],
+                    "executed_calls": executed_calls[-12:],
                     "guidance": (
                         "Functions already executed in this step: "
                         + ", ".join(call["semantic_function"] for call in executed_calls)
-                        + ". If these were read-only preparation, now perform the requested page interaction."
+                        + ". Use their outcomes and the latest page state to choose the next useful action. "
+                        "Do not repeat an action that failed or did not change the relevant state."
                     ) if executed_calls else "",
                 }
                 # Repeated read-only discovery must not consume the whole
@@ -282,6 +294,7 @@ class SteelMCPClient:
                             "Interaction step cannot be completed: the model reported the objective "
                             "finished without performing a page interaction."
                         )
+                    step_confirmed = True
                     break
                 selected = next((item for item in available_tools if item.get("name") == semantic_name), None)
                 native_name = native_tool_name(semantic_name, available_tools)
@@ -297,11 +310,16 @@ class SteelMCPClient:
                     arguments.pop("session_id", None)
                 result = await self.call_tool(native_name, arguments)
                 selected_tool = native_name
+                result_excerpt = " ".join(
+                    str(item.get("text") or "") for item in (result.get("content") or [])
+                    if isinstance(item, dict)
+                )[:700]
                 executed_calls.append({
                     "tool_name": native_name,
                     "semantic_function": semantic_name,
                     "status": "failed" if result.get("is_error") else "completed",
                     "reason": str(proposal.get("reason") or "")[:240],
+                    "result_excerpt": result_excerpt,
                 })
                 if result.get("is_error"):
                     previous_failure = {
@@ -345,6 +363,12 @@ class SteelMCPClient:
                 raise RuntimeError(
                     "Interaction step was not executed: the agent only inspected or resolved "
                     f"page elements ({attempted}) and did not perform a page interaction."
+                )
+            if capability == "interact" and not step_confirmed:
+                raise RuntimeError(
+                    "Adaptive execution budget exhausted before the agent confirmed the complete "
+                    "step objective. The last browser state is retained for diagnosis; the step "
+                    "must not be treated as completed."
                 )
 
         after = await self.call_tool("steel_snapshot", {
