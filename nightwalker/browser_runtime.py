@@ -1460,6 +1460,7 @@ class BrowserRuntime:
             "structured_data": {
                 "browser_backend": "steel-mcp",
                 "steel_tool": result.get("tool_name"),
+                "steel_tool_calls": result.get("tool_calls") or [],
                 "steel_session_id": result.get("session_id"),
                 "mission_step": {"step_id": step_id, "capability": capability},
             },
@@ -1467,7 +1468,7 @@ class BrowserRuntime:
         evidence_id = self.evidence.save(task_id, evidence_payload)
         evidence_payload["evidence"][0]["evidence_id"] = evidence_id
         self._browser_event(
-            task_id, f"Steel MCP tool {result.get('tool_name')} completed; snapshot evidence captured",
+            task_id, "Steel MCP executed " + " → ".join(call.get("tool_name", "unknown") for call in (result.get("tool_calls") or [])) + "; snapshot evidence captured",
             url=url, status="active", action="steel_mcp_result", plan_step_id=step_id,
         )
         return {
