@@ -1655,3 +1655,31 @@ body { overscroll-behavior: none; }
   .research-report .audit-completion { margin: 6px 0 0; white-space: normal; }
 }
 
+
+
+/* Mission report and plan cards must use the active dark palette. */
+:root[data-theme="dark"] .report-details { border-top-color: #315448; }
+:root[data-theme="dark"] .report-details > summary {
+  background: #19352c;
+  color: #c4d8cc;
+}
+:root[data-theme="dark"] .report-details > summary > svg { color: #83cbaa; }
+:root[data-theme="dark"] .plan-step {
+  border-color: #315448;
+  background: #142a24;
+}
+:root[data-theme="dark"] .plan-step__heading strong { color: #e2eee6; }
+:root[data-theme="dark"] .plan-step__meta { color: #a4b9ab; }
+:root[data-theme="dark"] .plan-step p { color: #c2d3c8; }
+:root[data-theme="dark"] .plan-step__evidence { color: #8bd4ad; }
+:root[data-theme="dark"] .checklist-actions { color: #a9beb1; }
+:root[data-theme="dark"] .checklist-actions button {
+  border-color: #315448;
+  background: #19352c;
+  color: #cce4d5;
+}
+:root[data-theme="dark"] .error-banner {
+  border-color: #70413b;
+  background: #38211f;
+  color: #f0b3a9;
+}
