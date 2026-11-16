@@ -239,6 +239,7 @@ class SteelMCPClient:
             # ontology-marked page mutation must execute before the step can pass.
             max_proposals = 4 if capability == "interact" else 2
             interaction_executed = False
+            consecutive_read_only_calls = 0
             for attempt in range(max_proposals):
                 observation: dict[str, Any] = {
                     "url": url, "snapshot": snapshot, "session_id": session_id,
@@ -249,9 +250,30 @@ class SteelMCPClient:
                         + ". If these were read-only preparation, now perform the requested page interaction."
                     ) if executed_calls else "",
                 }
+                # Repeated read-only discovery must not consume the whole
+                # interaction budget. After two successful preparation calls,
+                # require the model to choose from the ontology's state-changing
+                # functions; it still selects the target and action from the live
+                # observation and the Decider-authored objective.
+                proposal_tools = available_tools
+                if capability == "interact" and consecutive_read_only_calls >= 2:
+                    proposal_tools = [
+                        item for item in available_tools if item.get("mutates_page")
+                    ]
+                    if not proposal_tools:
+                        raise RuntimeError(
+                            "Interaction step cannot proceed: no state-changing browser "
+                            "function is available in the authorised capability."
+                        )
+                    observation["guidance"] = (
+                        str(observation.get("guidance") or "")
+                        + " Repeated read-only preparation has not advanced the step. "
+                        "Choose a state-changing function now, using only a grounded "
+                        "element and an action authorised by the objective."
+                    )[:700]
                 proposal = await propose_tool_call(
                     task_id=task_id, objective=objective, capability=capability,
-                    observation=observation, tools=available_tools, session_id=session_id,
+                    observation=observation, tools=proposal_tools, session_id=session_id,
                 )
                 semantic_name = str(proposal.get("tool_name") or "")
                 selected = next((item for item in available_tools if item.get("name") == semantic_name), None)
@@ -287,7 +309,11 @@ class SteelMCPClient:
                     snapshot = refreshed
                     continue
 
-                interaction_executed = interaction_executed or bool(selected.get("mutates_page"))
+                if selected.get("mutates_page"):
+                    interaction_executed = True
+                    consecutive_read_only_calls = 0
+                elif capability == "interact":
+                    consecutive_read_only_calls += 1
                 if capability != "interact" or interaction_executed:
                     break
 
