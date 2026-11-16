@@ -1011,12 +1011,23 @@ class OllamaClient:
     @staticmethod
     def _compact_steel_observation(observation: dict[str, Any], *, limit: int) -> dict[str, Any]:
         """Keep tool proposals small so the model returns valid JSON instead of a truncated dump."""
+        history = observation.get("executed_calls") or []
+        compact_history = []
+        for item in history[-8:]:
+            if not isinstance(item, dict):
+                continue
+            compact_history.append({
+                "function": str(item.get("semantic_function") or item.get("tool_name") or "")[:100],
+                "status": str(item.get("status") or "")[:30],
+                "reason": str(item.get("reason") or "")[:180],
+                "result": str(item.get("result_excerpt") or "")[:320],
+            })
         compact = {
             "url": str(observation.get("url") or "")[:1000],
             "session_id": str(observation.get("session_id") or "")[:120],
             "mission_objective": str(observation.get("mission_objective") or "")[:2000],
             "step_objective": str(observation.get("step_objective") or "")[:1000],
-            "executed_calls": observation.get("executed_calls") or [],
+            "executed_calls": compact_history,
         }
         failure = observation.get("previous_failure")
         if isinstance(failure, dict):
