@@ -233,7 +233,13 @@ class SteelMCPClient:
             previous_failure: dict[str, Any] | None = None
             result = {"is_error": True, "content": [{"text": "No tool proposal was executed"}]}
             selected_tool = ""
-            for attempt in range(2):
+            executed_calls: list[dict[str, Any]] = []
+            # An interact-capability step is not complete after observation alone.
+            # Element resolution/waiting may precede an action, but at least one
+            # ontology-marked page mutation must execute before the step can pass.
+            max_proposals = 4 if capability == "interact" else 2
+            interaction_executed = False
+            for attempt in range(max_proposals):
                 observation: dict[str, Any] = {
                     "url": url, "snapshot": snapshot, "session_id": session_id,
                     "previous_failure": previous_failure,
@@ -243,38 +249,61 @@ class SteelMCPClient:
                     observation=observation, tools=available_tools, session_id=session_id,
                 )
                 semantic_name = str(proposal.get("tool_name") or "")
+                selected = next((item for item in available_tools if item.get("name") == semantic_name), None)
                 native_name = native_tool_name(semantic_name, available_tools)
-                if not native_name:
+                if not native_name or selected is None:
                     raise PermissionError("Model selected a function outside the capability ontology")
                 arguments = normalise_steel_tool_arguments(
                     native_name, dict(proposal.get("arguments") or {}),
                 )
-                selected_schema = next(
-                    (tool.get("input_schema") or {} for tool in available_tools
-                     if tool.get("name") == semantic_name),
-                    {},
-                )
+                selected_schema = selected.get("input_schema") or {}
                 if "session_id" in (selected_schema.get("properties") or {}):
                     arguments["session_id"] = session_id
                 else:
                     arguments.pop("session_id", None)
                 result = await self.call_tool(native_name, arguments)
                 selected_tool = native_name
-                if not result["is_error"]:
-                    break
-                previous_failure = {
-                    "tool_name": native_name, "arguments": arguments,
-                    "error": result.get("content") or [], "recovery_attempt": attempt + 1,
-                }
-                if attempt == 0:
+                executed_calls.append({
+                    "tool_name": native_name,
+                    "semantic_function": semantic_name,
+                    "status": "failed" if result.get("is_error") else "completed",
+                    "reason": str(proposal.get("reason") or "")[:240],
+                })
+                if result.get("is_error"):
+                    previous_failure = {
+                        "tool_name": native_name, "arguments": arguments,
+                        "error": result.get("content") or [], "recovery_attempt": attempt + 1,
+                    }
                     refreshed = await self.call_tool("steel_snapshot", {
                         "session_id": session_id, "interactive_only": False,
                     })
-                    if refreshed["is_error"]:
+                    if refreshed.get("is_error"):
                         break
                     snapshot = refreshed
+                    continue
+
+                interaction_executed = interaction_executed or bool(selected.get("mutates_page"))
+                if capability != "interact" or interaction_executed:
+                    break
+
+                # A successful find/wait is preparation, not completion. Refresh
+                # the live page and ask the model for the next authorised function.
+                refreshed = await self.call_tool("steel_snapshot", {
+                    "session_id": session_id, "interactive_only": False,
+                })
+                if refreshed.get("is_error"):
+                    raise RuntimeError(str(refreshed.get("content") or [])[:1000])
+                snapshot = refreshed
+                previous_failure = None
+
             if result.get("is_error"):
                 raise RuntimeError(str(result.get("content") or [])[:1500])
+            if capability == "interact" and not interaction_executed:
+                attempted = ", ".join(call["tool_name"] for call in executed_calls) or "no tool"
+                raise RuntimeError(
+                    "Interaction step was not executed: the agent only inspected or resolved "
+                    f"page elements ({attempted}) and did not perform a page interaction."
+                )
 
         after = await self.call_tool("steel_snapshot", {
             "session_id": session_id, "interactive_only": False,
@@ -283,7 +312,7 @@ class SteelMCPClient:
             raise RuntimeError(str(after["content"])[:1000])
         return {
             "status": "completed", "session_id": session_id,
-            "tool_name": selected_tool, "tool_result": result, "snapshot": after,
+            "tool_name": selected_tool, "tool_calls": executed_calls, "tool_result": result, "snapshot": after,
         }
 
     async def release_task_session(self, task_id: str) -> None:
