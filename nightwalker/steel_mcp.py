@@ -243,6 +243,11 @@ class SteelMCPClient:
                 observation: dict[str, Any] = {
                     "url": url, "snapshot": snapshot, "session_id": session_id,
                     "previous_failure": previous_failure,
+                    "guidance": (
+                        "Functions already executed in this step: "
+                        + ", ".join(call["semantic_function"] for call in executed_calls)
+                        + ". If these were read-only preparation, now perform the requested page interaction."
+                    ) if executed_calls else "",
                 }
                 proposal = await propose_tool_call(
                     task_id=task_id, objective=objective, capability=capability,
