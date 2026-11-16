@@ -900,7 +900,8 @@ export default function App() {
                     <div className="timing-panel__phases">
                       {(["queue", "planning", "browser", "analysis", "reporting"] as const).map((phase) => {
                         const duration = (selected.timing?.phases_ms?.[phase] || 0) + (selected.timing?.active_phase === phase ? (selected.timing?.current_phase_ms || 0) : 0);
-                        const share = selected.timing?.active_elapsed_ms ? Math.min(100, (duration / selected.timing.active_elapsed_ms) * 100) : 0;
+                        const phaseTotal = Object.values(selected.timing?.phases_ms || {}).reduce((total, value) => total + value, 0) + (selected.timing?.current_phase_ms || 0);
+                        const share = phaseTotal ? Math.min(100, (duration / phaseTotal) * 100) : 0;
                         return <div className="timing-phase" key={phase}><div className="timing-phase__meta"><span>{phase}</span><span>{formatDuration(duration)}</span></div><div className="timing-phase__track"><span style={{ width: `${share}%` }} /></div></div>;
                       })}
                     </div>

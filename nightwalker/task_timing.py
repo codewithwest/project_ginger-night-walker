@@ -23,6 +23,10 @@ class TaskTiming:
         self._phase_started: dict[str, float] = {}
 
     @staticmethod
+    def _active_elapsed(phases: dict[str, int]) -> int:
+        return sum(int(duration) for name, duration in phases.items() if name != "queue")
+
+    @staticmethod
     def _state(record: dict[str, Any]) -> dict[str, Any]:
         value = record.setdefault("timing", {})
         value.setdefault("phases_ms", {})
@@ -55,7 +59,7 @@ class TaskTiming:
             elapsed = max(0, round((monotonic() - started) * 1000))
             phases = state.setdefault("phases_ms", {})
             phases[phase] = int(phases.get(phase, 0)) + elapsed
-            state["active_elapsed_ms"] = sum(int(value) for value in phases.values())
+            state["active_elapsed_ms"] = self._active_elapsed(phases)
         state["active_phase"] = None
         state["active_phase_started_at"] = None
         self.refresh(record)
@@ -77,9 +81,10 @@ class TaskTiming:
         if active is not None and state.get("active_phase"):
             current = max(0, round((monotonic() - active) * 1000))
             state["current_phase_ms"] = current
-            state["active_elapsed_ms"] = sum(int(v) for v in state.get("phases_ms", {}).values()) + current
+            phases = state.get("phases_ms", {})
+            state["active_elapsed_ms"] = self._active_elapsed(phases) + (current if state["active_phase"] != "queue" else 0)
         else:
-            state["active_elapsed_ms"] = sum(int(v) for v in state.get("phases_ms", {}).values())
+            state["active_elapsed_ms"] = self._active_elapsed(state.get("phases_ms", {}))
         state["phases"] = {
             name: {"duration_ms": int(duration), "share_percent": round((int(duration) / max(1, state["active_elapsed_ms"])) * 100, 1)}
             for name, duration in state.get("phases_ms", {}).items()

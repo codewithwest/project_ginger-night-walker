@@ -182,11 +182,11 @@ button { cursor: pointer; }
   gap: 12px;
   width: min(380px, calc(100vw - 36px));
   padding: 14px 14px 14px 15px;
-  border: 1px solid #5a5278;
+  border: 1px solid #d6e5dc;
   border-radius: 12px;
-  background: #171328;
-  box-shadow: 0 18px 48px #00000099;
-  color: #efeef6;
+  background: linear-gradient(145deg, #ffffff, #f4faf6);
+  box-shadow: 0 18px 48px #31584b24;
+  color: #30463d;
   animation: toast-in .22s ease-out;
 }
 .app-toast__icon {
@@ -196,27 +196,27 @@ button { cursor: pointer; }
   height: 30px;
   flex: 0 0 auto;
   border-radius: 9px;
-  background: #2b1719;
-  color: #ff9c90;
+  background: #f2f9f4;
+  color: #295d45;
 }
 .app-toast--success .app-toast__icon {
-  background: #0b3331;
-  color: #35c9a7;
+  background: #e1f4eb;
+  color: #0c7d5d;
 }
 .app-toast--info .app-toast__icon {
-  background: #1c2d3a;
-  color: #7ec8ff;
+  background: #edf5ff;
+  color: #2d5a84;
 }
 .app-toast__body { min-width: 0; flex: 1; }
 .app-toast__body strong {
   display: block;
-  color: #f7f5ff;
+  color: #233a31;
   font: 700 12px/1.3 var(--serif);
   letter-spacing: -.01em;
 }
 .app-toast__body p {
   margin: 4px 0 0;
-  color: #b7b3c8;
+  color: #6b8278;
   font-size: 11px;
   line-height: 1.5;
   overflow-wrap: anywhere;
@@ -227,12 +227,12 @@ button { cursor: pointer; }
   width: 28px;
   height: 28px;
   flex: 0 0 auto;
-  border: 1px solid #4d4766;
+  border: 1px solid #d6e5dc;
   border-radius: 8px;
-  background: #221d36;
-  color: #aea8c4;
+  background: #f7fbf8;
+  color: #607c70;
 }
-.app-toast__close:hover { background: #2b2544; color: #efeef6; }
+.app-toast__close:hover { background: #edf5ef; color: #234c3e; }
 @keyframes toast-in {
   from { opacity: 0; transform: translateY(-8px) scale(.98); }
   to { opacity: 1; transform: none; }
@@ -244,7 +244,7 @@ button { cursor: pointer; }
   display: grid;
   place-items: center;
   padding: 24px;
-  background: #07060cd9;
+  background: rgba(15, 31, 27, 0.62);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   animation: toast-in .18s ease-out;
@@ -252,13 +252,11 @@ button { cursor: pointer; }
 .confirm-dialog {
   width: min(440px, 100%);
   padding: 24px;
-  border: 1px solid #5a5278;
+  border: 1px solid #d6e5dc;
   border-radius: 16px;
-  background: #171328;
-  box-shadow:
-    0 0 0 1px #ffffff0a inset,
-    0 28px 80px #000000aa;
-  color: #efeef6;
+  background: linear-gradient(160deg, #ffffff, #f3f9f5);
+  box-shadow: 0 28px 80px rgba(19, 42, 34, 0.18);
+  color: #30463d;
 }
 .confirm-dialog__icon {
   display: grid;
@@ -267,19 +265,19 @@ button { cursor: pointer; }
   height: 42px;
   margin-bottom: 16px;
   border-radius: 12px;
-  background: #3a1d24;
-  color: #ffb0a4;
-  border: 1px solid #8a4f4a;
+  background: #fff0ee;
+  color: #a7473e;
+  border: 1px solid #edc9c4;
 }
 .confirm-dialog__copy h2 {
   margin: 0;
-  color: #f7f5ff;
+  color: #233a31;
   font: 700 18px/1.25 var(--serif);
   letter-spacing: -.03em;
 }
 .confirm-dialog__copy p {
   margin: 10px 0 0;
-  color: #b7b3c8;
+  color: #6b8278;
   font-size: 12px;
   line-height: 1.65;
 }
@@ -302,17 +300,17 @@ button { cursor: pointer; }
   font-weight: 700;
 }
 .confirm-dialog__cancel {
-  border: 1px solid #4d4766;
-  background: #221d36;
-  color: #ddd8ef;
+  border: 1px solid #d6e5dc;
+  background: #f7fbf8;
+  color: #40594e;
 }
-.confirm-dialog__cancel:hover:not(:disabled) { background: #2b2544; }
+.confirm-dialog__cancel:hover:not(:disabled) { background: #edf5ef; }
 .confirm-dialog__confirm {
-  border: 1px solid #c46b62;
-  background: #c4574c;
+  border: 1px solid #d9a39c;
+  background: #a7473e;
   color: #fff8f6;
 }
-.confirm-dialog__confirm:hover:not(:disabled) { background: #d4665b; }
+.confirm-dialog__confirm:hover:not(:disabled) { background: #b45045; }
 .confirm-dialog__cancel:disabled,
 .confirm-dialog__confirm:disabled { opacity: .6; cursor: not-allowed; }
 :root[data-theme="light"] .app-toast {
@@ -321,9 +319,9 @@ button { cursor: pointer; }
   box-shadow: 0 18px 48px #31584b24;
   color: #30463d;
 }
-:root[data-theme="light"] .app-toast__icon { background: #fff0ee; color: #a7473e; }
-:root[data-theme="light"] .app-toast--success .app-toast__icon { background: #e1f4eb; color: #008f7b; }
-:root[data-theme="light"] .app-toast--info .app-toast__icon { background: #eaf3ff; color: #3d6ea5; }
+:root[data-theme="light"] .app-toast__icon { background: #f2f9f4; color: #295d45; }
+:root[data-theme="light"] .app-toast--success .app-toast__icon { background: #e1f4eb; color: #0c7d5d; }
+:root[data-theme="light"] .app-toast--info .app-toast__icon { background: #edf5ff; color: #2d5a84; }
 :root[data-theme="light"] .app-toast__body strong { color: #233a31; }
 :root[data-theme="light"] .app-toast__body p { color: #6b8278; }
 :root[data-theme="light"] .app-toast__close {
@@ -331,11 +329,11 @@ button { cursor: pointer; }
   background: #f7fbf8;
   color: #607c70;
 }
-:root[data-theme="light"] .confirm-overlay { background: #1c322866; }
+:root[data-theme="light"] .confirm-overlay { background: rgba(15, 31, 27, 0.62); }
 :root[data-theme="light"] .confirm-dialog {
   border-color: #d2e5dc;
   background: linear-gradient(160deg, #ffffff, #f3f9f5);
-  box-shadow: 0 24px 70px #31584b28;
+  box-shadow: 0 24px 70px rgba(19, 42, 34, 0.18);
   color: #30463d;
 }
 :root[data-theme="light"] .confirm-dialog__icon {
@@ -361,7 +359,19 @@ button { cursor: pointer; }
 .clarification label { display: block; margin: 13px 0 7px; color: #8d795b; font-size: 10px; font-weight: 700; }
 .clarification textarea { min-height: 78px; background: #fffdf8; }
 .clarification .launch-button { margin-top: 10px; }
-.error-banner { display: flex; align-items: flex-start; gap: 9px; margin-top: 18px; padding: 12px 14px; border: 1px solid #f0d8d4; border-radius: 8px; background: #fff3f0; color: #9b5149; font-size: 11px; line-height: 1.5; }
+.error-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 18px;
+  padding: 12px 14px;
+  border: 1px solid #dfe8dc;
+  border-radius: 8px;
+  background: #f3f8f4;
+  color: #285d45;
+  font-size: 11px;
+  line-height: 1.5;
+}
 .report-details {
   margin-top: 22px;
   border-top: 1px solid #eceee7;

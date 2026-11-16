@@ -38,3 +38,19 @@ def test_task_timing_can_resume_after_clarification():
     time.sleep(0.01)
     timing.finish(record)
     assert record["timing"]["phases_ms"]["planning"] >= 5
+
+
+def test_queue_duration_is_not_counted_as_active_elapsed():
+    timing = TaskTiming()
+    record = {
+        "task_id": "queued-job",
+        "created_at": "2026-01-01T00:00:00+00:00",
+        "timing": {
+            "started_at": "2026-01-01T00:00:00+00:00",
+            "phases_ms": {"queue": 5000, "planning": 12000},
+        },
+    }
+
+    snapshot = timing.snapshot(record)
+
+    assert snapshot["active_elapsed_ms"] == 12000
