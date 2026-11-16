@@ -198,7 +198,7 @@ class TaskManager:
                 (expected_objective_hash and expected_objective_hash != actual_objective_hash)
                 or (
                     goal_state.get("original_goal")
-                    and str(goal_state.get("original_goal")) != objective
+                    and str(goal_state.get("original_goal")) != planner_objective
                 )
                 or (
                     isinstance(record.get("execution_blueprint"), dict)
