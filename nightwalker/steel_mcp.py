@@ -276,6 +276,13 @@ class SteelMCPClient:
                     observation=observation, tools=proposal_tools, session_id=session_id,
                 )
                 semantic_name = str(proposal.get("tool_name") or "")
+                if capability == "interact" and semantic_name == "__complete__":
+                    if not interaction_executed:
+                        raise RuntimeError(
+                            "Interaction step cannot be completed: the model reported the objective "
+                            "finished without performing a page interaction."
+                        )
+                    break
                 selected = next((item for item in available_tools if item.get("name") == semantic_name), None)
                 native_name = native_tool_name(semantic_name, available_tools)
                 if not native_name or selected is None:
