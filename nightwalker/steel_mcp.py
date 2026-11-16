@@ -22,6 +22,25 @@ def normalise_steel_target(target: Any) -> Any:
     return target
 
 
+def classify_steel_recovery_error(result: dict[str, Any]) -> str | None:
+    """Classify transient Steel reference/cursor failures without guessing a page action."""
+    message = " ".join(
+        str(item.get("text") or "")
+        for item in (result.get("content") or [])
+        if isinstance(item, dict)
+    ).casefold()
+    if any(term in message for term in (
+        "no page node", "moving or outside the viewport", "stale element",
+        "element is detached", "not attached to the dom",
+    )):
+        return "stale_element"
+    if "cursor" in message and any(term in message for term in (
+        "not readable", "invalid cursor", "cursor expired", "unknown cursor",
+    )):
+        return "invalid_cursor"
+    return None
+
+
 def normalise_steel_tool_arguments(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
     """Force accessibility refs into the @eN form Steel's act/find tools require."""
     normalised = dict(arguments)
@@ -248,7 +267,12 @@ class SteelMCPClient:
                 max_proposals = 2
             interaction_executed = False
             consecutive_read_only_calls = 0
-            for attempt in range(max_proposals):
+            recovery_mode: str | None = None
+            recovery_attempts = 0
+            # Reserve a small, bounded recovery allowance so transient browser
+            # references do not consume the entire objective-execution budget.
+            recovery_reserve = min(3, max(1, max_proposals // 8)) if capability == "interact" else 0
+            for attempt in range(max_proposals + recovery_reserve):
                 observation: dict[str, Any] = {
                     "url": url, "snapshot": snapshot, "session_id": session_id,
                     "previous_failure": previous_failure,
@@ -268,7 +292,28 @@ class SteelMCPClient:
                 # functions; it still selects the target and action from the live
                 # observation and the Decider-authored objective.
                 proposal_tools = available_tools
-                if capability == "interact" and consecutive_read_only_calls >= 2:
+                if recovery_mode in {"stale_element", "invalid_cursor"}:
+                    # A stale reference must never be sent straight back to an
+                    # interaction call. Re-observe/resolve first; the model still
+                    # chooses the appropriate live target and subsequent action.
+                    proposal_tools = [
+                        item for item in available_tools
+                        if item.get("name") in {"inspect_page", "find_element", "wait_for_condition"}
+                    ]
+                    observation["guidance"] = (
+                        "RECOVERY REQUIRED (" + recovery_mode + "): discard every prior element "
+                        "reference/cursor. Use a fresh page observation and, if needed, resolve "
+                        "the control again from the current page. Do not repeat the failed action "
+                        "or reuse its target. Once the new state is grounded, continue the same "
+                        "step objective. This is a recovery instruction, not a new task workflow."
+                    )
+                    recovery_attempts += 1
+                    if recovery_attempts > recovery_reserve:
+                        raise RuntimeError(
+                            "Browser reference recovery could not re-establish a usable page state; "
+                            "the step remains incomplete."
+                        )
+                if capability == "interact" and consecutive_read_only_calls >= 2 and recovery_mode is None:
                     proposal_tools = [
                         item for item in available_tools if item.get("mutates_page")
                     ]
@@ -322,16 +367,34 @@ class SteelMCPClient:
                     "result_excerpt": result_excerpt,
                 })
                 if result.get("is_error"):
+                    recovery_kind = classify_steel_recovery_error(result)
+                    failed_arguments = dict(arguments)
+                    if recovery_kind == "stale_element":
+                        # Do not feed the invalid element reference back as a
+                        # candidate for the next action.
+                        failed_arguments.pop("target", None)
+                        failed_arguments.pop("selector", None)
+                        failed_arguments.pop("actions", None)
+                        recovery_mode = recovery_kind
+                    elif recovery_kind == "invalid_cursor":
+                        failed_arguments.pop("cursor", None)
+                        recovery_mode = recovery_kind
                     previous_failure = {
-                        "tool_name": native_name, "arguments": arguments,
+                        "tool_name": native_name, "arguments": failed_arguments,
                         "error": result.get("content") or [], "recovery_attempt": attempt + 1,
+                        "recovery_kind": recovery_kind,
                     }
                     refreshed = await self.call_tool("steel_snapshot", {
                         "session_id": session_id, "interactive_only": False,
                     })
                     if refreshed.get("is_error"):
+                        # The next model proposal may select inspect_page with a
+                        # clean argument object; do not reuse a failed cursor.
+                        previous_failure["snapshot_error"] = refreshed.get("content") or []
                         break
                     snapshot = refreshed
+                    if recovery_mode is None:
+                        recovery_mode = "general_failure"
                     continue
 
                 if selected.get("mutates_page"):
@@ -355,6 +418,9 @@ class SteelMCPClient:
                     raise RuntimeError(str(refreshed.get("content") or [])[:1000])
                 snapshot = refreshed
                 previous_failure = None
+                if recovery_mode is not None:
+                    recovery_mode = None
+                    recovery_attempts = 0
 
             if result.get("is_error"):
                 raise RuntimeError(str(result.get("content") or [])[:1500])
