@@ -214,6 +214,7 @@ class SteelMCPClient:
         if session_callback is not None:
             session_callback(session_id)
 
+        executed_calls: list[dict[str, Any]] = []
         if capability == "navigate":
             result = await self.call_tool("steel_navigate", {
                 "session_id": session_id, "url": url, "include_snapshot": True,
@@ -233,7 +234,6 @@ class SteelMCPClient:
             previous_failure: dict[str, Any] | None = None
             result = {"is_error": True, "content": [{"text": "No tool proposal was executed"}]}
             selected_tool = ""
-            executed_calls: list[dict[str, Any]] = []
             # An interact-capability step is not complete after observation alone.
             # Element resolution/waiting may precede an action, but at least one
             # ontology-marked page mutation must execute before the step can pass.
