@@ -210,7 +210,7 @@ class SteelMCPClient:
         propose_tool_call, session_callback=None, *, mission_objective: str | None = None,
     ) -> dict[str, Any]:
         """Execute exactly one authorised, Decider-authored mission step."""
-        session_id = await self.session_for_task(task_id, fresh=(capability == "navigate"))
+        session_id = await self.session_for_task(task_id)
         if session_callback is not None:
             session_callback(session_id)
 
