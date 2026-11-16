@@ -1377,16 +1377,19 @@ class BrowserRuntime:
 
         def expose_live_session(session_id: str) -> None:
             # Publish the viewer as soon as Steel allocates the session, before
-            # navigation or snapshot capture can take a long time.
+            # navigation or snapshot capture can take a long time. The same
+            # session is reported on later steps without claiming it was recreated.
+            is_new_session = state.get("session_id") != session_id
             state["session_id"] = session_id
             state["debug_url"] = self._normalise_steel_debug_url(f"{api_base}/sessions/debug")
             state["steel_ui_url"] = self._steel_ui_url(api_base)
             state["status"] = "active"
             state["active"] = True
-            self._browser_event(
-                task_id, "Steel browser session created; live viewer is available",
-                url=url, action="steel_session_ready", plan_step_id=step_id,
-            )
+            if is_new_session:
+                self._browser_event(
+                    task_id, "Steel browser session created; live viewer is available",
+                    url=url, action="steel_session_ready", plan_step_id=step_id,
+                )
 
         timeout_seconds = max(30, min(300, int(os.getenv("STEEL_MCP_STEP_TIMEOUT_SECONDS", "120"))))
         try:
