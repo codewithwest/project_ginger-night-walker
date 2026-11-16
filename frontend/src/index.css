@@ -1683,3 +1683,22 @@ body { overscroll-behavior: none; }
   background: #38211f;
   color: #f0b3a9;
 }
+
+/* Keep the follow-up research instruction readable in the non-light theme. */
+:root[data-theme="dark"] .clarification {
+  border-color: #315448;
+  background: #142a24;
+}
+:root[data-theme="dark"] .clarification label {
+  color: #f4f3ed;
+}
+:root[data-theme="dark"] .clarification p {
+  color: #d2ded7;
+}
+:root[data-theme="dark"] .clarification textarea {
+  background: #10221e;
+  color: #f4f3ed;
+}
+:root[data-theme="dark"] .clarification textarea::placeholder {
+  color: #a8bdb2;
+}
