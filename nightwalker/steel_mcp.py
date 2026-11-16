@@ -237,7 +237,7 @@ class SteelMCPClient:
             # An interact-capability step is not complete after observation alone.
             # Element resolution/waiting may precede an action, but at least one
             # ontology-marked page mutation must execute before the step can pass.
-            max_proposals = 4 if capability == "interact" else 2
+            max_proposals = 8 if capability == "interact" else 2
             interaction_executed = False
             consecutive_read_only_calls = 0
             for attempt in range(max_proposals):
@@ -314,11 +314,15 @@ class SteelMCPClient:
                     consecutive_read_only_calls = 0
                 elif capability == "interact":
                     consecutive_read_only_calls += 1
-                if capability != "interact" or interaction_executed:
+                if capability != "interact":
                     break
 
-                # A successful find/wait is preparation, not completion. Refresh
-                # the live page and ask the model for the next authorised function.
+                # Keep executing the same Decider-authored objective after the
+                # first mutation. A click may only open a category or reveal a
+                # variant; it does not prove the whole step is complete.
+                # The model can explicitly finish only when the latest snapshot
+                # supports the step objective; the independent verifier remains
+                # the final completion gate.
                 refreshed = await self.call_tool("steel_snapshot", {
                     "session_id": session_id, "interactive_only": False,
                 })
