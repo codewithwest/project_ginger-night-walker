@@ -1391,7 +1391,10 @@ class BrowserRuntime:
                     url=url, action="steel_session_ready", plan_step_id=step_id,
                 )
 
-        timeout_seconds = max(30, min(300, int(os.getenv("STEEL_MCP_STEP_TIMEOUT_SECONDS", "120"))))
+        # Adaptive browser steps can require several observe/decide/act cycles.
+        # Keep a generous wall-clock ceiling so model latency does not turn a
+        # valid multi-action objective into a false browser failure.
+        timeout_seconds = max(60, min(600, int(os.getenv("STEEL_MCP_STEP_TIMEOUT_SECONDS", "300"))))
         try:
             result = await asyncio.wait_for(
                 self.steel_mcp.execute_mission_step(
@@ -1403,8 +1406,9 @@ class BrowserRuntime:
                 timeout=timeout_seconds,
             )
         except asyncio.TimeoutError:
-            await self.steel_mcp.release_task_session(task_id)
-            message = f"Steel MCP {capability} step timed out after {timeout_seconds} seconds"
+            # Preserve the live browser and its current page on timeout. The
+            # mission may be resumed/retried and should not lose useful state.
+            message = f"Steel MCP {capability} step timed out after {timeout_seconds} seconds; browser session retained"
             self._browser_event(
                 task_id, message, url=url, status="failed",
                 action="steel_mcp_timeout", plan_step_id=step_id,
