@@ -1536,3 +1536,55 @@ body { overscroll-behavior: none; }
   .inference-panel { padding: 14px 12px 10px; }
   .inference-event__top { align-items: flex-start; flex-direction: column; }
 }
+
+/* Popup surfaces must follow the active application theme. */
+:root[data-theme="dark"] .app-toast {
+  border-color: #315448;
+  background: linear-gradient(145deg, #19352c, #12251f);
+  box-shadow: 0 18px 48px #00000066;
+  color: #dce9e1;
+}
+:root[data-theme="dark"] .app-toast__icon {
+  background: #244b3a;
+  color: #9ed9b8;
+}
+:root[data-theme="dark"] .app-toast--success .app-toast__icon {
+  background: #174b39;
+  color: #80dfb4;
+}
+:root[data-theme="dark"] .app-toast--info .app-toast__icon {
+  background: #1d3d55;
+  color: #a6d3f4;
+}
+:root[data-theme="dark"] .app-toast__body strong { color: #e5f0e9; }
+:root[data-theme="dark"] .app-toast__body p { color: #a9beb1; }
+:root[data-theme="dark"] .app-toast__close {
+  border-color: #315448;
+  background: #1b392e;
+  color: #b7cfc0;
+}
+:root[data-theme="dark"] .app-toast__close:hover { background: #28513f; color: #effaf3; }
+
+:root[data-theme="dark"] .confirm-dialog {
+  border-color: #315448;
+  background: linear-gradient(160deg, #1b382e, #12251f);
+  box-shadow: 0 28px 80px #00000099;
+  color: #dce9e1;
+}
+:root[data-theme="dark"] .confirm-dialog__icon {
+  background: #482b29;
+  color: #ffaaa0;
+  border-color: #70413b;
+}
+:root[data-theme="dark"] .confirm-dialog__copy h2 { color: #edf5ef; }
+:root[data-theme="dark"] .confirm-dialog__copy p { color: #afc2b6; }
+:root[data-theme="dark"] .confirm-dialog__cancel {
+  border-color: #3b5b4d;
+  background: #203d32;
+  color: #d3e4d9;
+}
+:root[data-theme="dark"] .confirm-dialog__cancel:hover:not(:disabled) {
+  background: #2b5140;
+  color: #f0f8f2;
+}
+
