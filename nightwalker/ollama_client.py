@@ -270,6 +270,7 @@ class OllamaClient:
             "essential research parameter is genuinely missing (for example which product, city, date "
             "or variant), not merely because no website was named. A ready plan must include a plausible "
             "public HTTP(S) URL. "
+            "Every step_id in a plan MUST be unique across the entire steps array; use a distinct concise ID for each action, even when capabilities or action types repeat. Never reuse an ID such as action_type_id for multiple steps. " 
             "For every task, author an adaptive ordered plan that covers the user's actual requested outcomes from beginning to end. "
             "Do not substitute generic website inspection or public-information extraction for requested interactions. "
             "Do not use canned step sequences, fixed step IDs, or task-specific workflows: derive the necessary actions, "
@@ -323,7 +324,48 @@ class OllamaClient:
                 response.raise_for_status()
                 envelope = response.json()
                 content = self._chat_content(envelope, model=model, operation="Decider")
-                plan = DecisionPlan.model_validate_json(content)
+                # Some local models reuse one ID for multiple actions. Do not
+                # silently rewrite the Decider's plan: ask the Decider to repair
+                # only the IDs while preserving its authored actions and order.
+                raw_plan = json.loads(content)
+                raw_steps = raw_plan.get("steps") or []
+                step_ids = [str(step.get("step_id") or "") for step in raw_steps if isinstance(step, dict)]
+                if len(step_ids) != len(set(step_ids)):
+                    repair_body = {
+                        **body,
+                        "messages": [
+                            *body["messages"],
+                            {"role": "assistant", "content": content},
+                            {"role": "user", "content": (
+                                "Your plan contains duplicate step_id values. Return the same plan "
+                                "with a unique step_id for every step. Preserve every step objective, "
+                                "capability, order, target URL, and all other fields exactly. "
+                                "Do not merge, remove, add, or reorder steps. Return only valid JSON."
+                            )},
+                        ],
+                    }
+                    repair_response = await self._post_inference(
+                        client, f"{base_url}/api/chat",
+                        headers=self._headers(
+                            agent="decider", capability="planning",
+                            operation="decide-task-id-repair", model=model, task_id=task_id,
+                        ),
+                        json=repair_body,
+                    )
+                    repair_response.raise_for_status()
+                    repair_envelope = repair_response.json()
+                    content = self._chat_content(
+                        repair_envelope, model=model, operation="Decider ID repair"
+                    )
+                    raw_plan = json.loads(content)
+                    repaired_steps = raw_plan.get("steps") or []
+                    repaired_ids = [
+                        str(step.get("step_id") or "")
+                        for step in repaired_steps if isinstance(step, dict)
+                    ]
+                    if len(repaired_ids) != len(set(repaired_ids)):
+                        raise ValueError("Decider repeated step IDs after one repair attempt")
+                plan = DecisionPlan.model_validate(raw_plan)
                 explicit_url = self._explicit_target_url(objective)
                 if explicit_url and (
                     not plan.target_url
