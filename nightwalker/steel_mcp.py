@@ -185,8 +185,20 @@ class SteelMCPClient:
             for item in result.get("content", [])
             if item.get("type") == "text"
         ]
+        is_error = bool(result.get("isError"))
+        message = " ".join(str(item.get("text") or "") for item in content).casefold()
+        if is_error and (
+            ("hard timeout" in message and "released" in message)
+            or ("session" in message and "has been released by steel" in message)
+        ):
+            # Steel has already destroyed this browser. Never leave its ID cached
+            # against the mission: retry/resume must allocate a genuinely new one.
+            expired_id = str(arguments.get("session_id") or "")
+            for task_id, cached_id in list(self._sessions.items()):
+                if expired_id and cached_id == expired_id:
+                    self._sessions.pop(task_id, None)
         return {
-            "is_error": bool(result.get("isError")),
+            "is_error": is_error,
             "content": content,
             "structured_content": result.get("structuredContent"),
         }
