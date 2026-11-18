@@ -191,12 +191,13 @@ class SteelMCPClient:
             ("hard timeout" in message and "released" in message)
             or ("session" in message and "has been released by steel" in message)
         ):
-            # Steel has already destroyed this browser. Never leave its ID cached
-            # against the mission: retry/resume must allocate a genuinely new one.
+            # Steel's timeout response does not reliably free the self-hosted
+            # single-session slot. Run the normal release path while the cached
+            # ID is still available; it attempts both MCP release and REST cleanup.
             expired_id = str(arguments.get("session_id") or "")
             for task_id, cached_id in list(self._sessions.items()):
                 if expired_id and cached_id == expired_id:
-                    self._sessions.pop(task_id, None)
+                    await self.release_task_session(task_id)
         return {
             "is_error": is_error,
             "content": content,
