@@ -233,10 +233,26 @@ class SteelMCPClient:
         try:
             return await self._create_session(task_id)
         except RuntimeError as exc:
-            slots_exhausted = "session slots" in str(exc).casefold()
-            if not slots_exhausted or self.reclaim_sessions is None:
+            create_error = str(exc).casefold()
+            slot_occupied = (
+                "session slots" in create_error
+                or ("self-hosted steel" in create_error and "one browser session at a time" in create_error)
+                or ("runs one browser session at a time" in create_error)
+            )
+            if not slot_occupied or self.reclaim_sessions is None:
                 raise
-            await self.reclaim_sessions()
+
+            # The self-hosted server may report its single-session limit using
+            # wording that does not contain "session slots". Reconcile the
+            # server registry, then retry creation exactly once.
+            reclaimed = await self.reclaim_sessions()
+            if not reclaimed:
+                raise RuntimeError(
+                    "Steel refused a replacement browser session because its single-session "
+                    "slot is occupied, and the server registry did not confirm a reclaim. "
+                    "The mission remains incomplete; inspect Steel's /v1/sessions registry "
+                    "and release response before retrying."
+                ) from exc
             return await self._create_session(task_id)
 
     async def execute_mission_step(
