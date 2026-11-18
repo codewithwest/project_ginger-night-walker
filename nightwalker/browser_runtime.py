@@ -604,7 +604,7 @@ class BrowserRuntime:
             try:
                 await page.wait_for_load_state(
                     "domcontentloaded",
-                    timeout=int(os.getenv("QA_SEARCH_DOM_TIMEOUT_MS", "8000")),
+                    timeout=int(os.getenv("QA_SEARCH_DOM_TIMEOUT_MS", "5000")),
                 )
             except Exception:
                 # Some pages are already past DOMContentLoaded or expose unusual
@@ -620,7 +620,7 @@ class BrowserRuntime:
                 '[role="button"][aria-label*="search" i]'
             )
             timeout_ms = max(1000, min(
-                20000, int(os.getenv("QA_SEARCH_UI_TIMEOUT_MS", "10000"))
+                12000, int(os.getenv("QA_SEARCH_UI_TIMEOUT_MS", "5000"))
             ))
             try:
                 await page.wait_for_function(
@@ -700,7 +700,8 @@ class BrowserRuntime:
                     continue
                 signal = (label + " " + parsed.path).casefold()
                 if not re.search(
-                    r"\b(products?|product range|furniture|homeware|shop|catalogue|catalog|collection|store)\b",
+                    r"\b(products?|product range|shop|catalogue|catalog|collection|store|"
+                    r"browse|categories|category|parts|spares|accessories|components|inventory)\b",
                     signal,
                 ):
                     continue
@@ -709,7 +710,11 @@ class BrowserRuntime:
                     seen.add(clean)
                     candidates.append({"url": clean, "label": label[:160]})
             candidates.sort(key=lambda item: (
-                0 if re.search(r"\b(furniture|products?|shop|catalogue|catalog)\b", item["label"], re.I) else 1,
+                0 if re.search(
+                    r"\b(products?|shop|catalogue|catalog|browse|categories|category|"
+                    r"parts|spares|accessories|components|inventory)\b",
+                    item["label"], re.I,
+                ) else 1,
                 0 if re.search(r"/(furniture|products?|shop|catalogue|catalog)(/|$)", urlparse(item["url"]).path, re.I) else 1,
             ))
             return candidates
