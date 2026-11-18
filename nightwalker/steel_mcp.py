@@ -249,7 +249,7 @@ class SteelMCPClient:
             if not reclaimed:
                 raise RuntimeError(
                     "Steel refused a replacement browser session because its single-session "
-                    "slot is occupied, and the server registry did not confirm a reclaim. "
+                    "slot is occupied, but the cleanup pass found no reclaimable session. "
                     "The mission remains incomplete; inspect Steel's /v1/sessions registry "
                     "and release response before retrying."
                 ) from exc
