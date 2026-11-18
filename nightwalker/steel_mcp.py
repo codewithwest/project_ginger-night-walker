@@ -32,6 +32,8 @@ def classify_steel_recovery_error(result: dict[str, Any]) -> str | None:
     if any(term in message for term in (
         "no page node", "moving or outside the viewport", "stale element",
         "element is detached", "not attached to the dom",
+        "belongs to snapshot", "element changed role",
+        "accessible name", "current snapshot is",
     )):
         return "stale_element"
     if "cursor" in message and any(term in message for term in (
@@ -315,10 +317,12 @@ class SteelMCPClient:
                     ]
                     observation["guidance"] = (
                         "RECOVERY REQUIRED (" + recovery_mode + "): discard every prior element "
-                        "reference/cursor. Use a fresh page observation and, if needed, resolve "
-                        "the control again from the current page. Do not repeat the failed action "
-                        "or reuse its target. Once the new state is grounded, continue the same "
-                        "step objective. This is a recovery instruction, not a new task workflow."
+                        "reference/cursor, including the failed ref even if the snapshot ID "
+                        "appears unchanged. Use steel_find/find_element to relocate the specific "
+                        "control from its current role, accessible name, or nearby page context; "
+                        "use a fresh whole-page snapshot only when targeted relocation is insufficient. "
+                        "Do not repeat the failed action or reuse its target. Once the new state is "
+                        "grounded, continue the same step objective. This is recovery, not a new workflow."
                     )
                     recovery_attempts += 1
                     if recovery_attempts > recovery_reserve:
