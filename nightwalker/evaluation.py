@@ -119,3 +119,43 @@ def aggregate_evaluations(records: list[dict[str, Any]]) -> dict[str, Any]:
         "failure_classes": dict(failures),
         "missions": results,
     }
+
+
+def evaluate_task_record(
+    record: dict[str, Any], trace: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Derive a conservative evaluation view from a persisted Ginger task snapshot."""
+    goal = record.get("goal_state") or {}
+    criteria = goal.get("criteria") or []
+    completed = set(goal.get("completed") or [])
+    normalized_criteria = [
+        {"criterion_id": str(index), "status": "verified" if item in completed else "pending"}
+        for index, item in enumerate(criteria)
+    ]
+    events = trace if trace is not None else record.get("execution_trace") or []
+    actions: list[dict[str, Any]] = []
+    recoveries: list[dict[str, Any]] = []
+    for event in events:
+        details = event.get("details") if isinstance(event, dict) else {}
+        if not isinstance(details, dict):
+            continue
+        if "intended_state_change" in details and "observed_state_change" in details:
+            actions.append({
+                "intended_state_change": bool(details["intended_state_change"]),
+                "observed_state_change": bool(details["observed_state_change"]),
+            })
+        if details.get("recovery_attempted") is True:
+            recoveries.append({
+                "attempted": True,
+                "recovered": details.get("recovery_succeeded") is True,
+            })
+    timing = record.get("timing") or {}
+    return evaluate_mission({
+        "task_id": record.get("task_id"),
+        "status": record.get("status"),
+        "criteria": normalized_criteria,
+        "actions": actions,
+        "recoveries": recoveries,
+        "trace": events,
+        "duration_ms": timing.get("elapsed_ms", 0),
+    })
