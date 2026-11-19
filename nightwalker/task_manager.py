@@ -22,6 +22,7 @@ from nightwalker.crawl_intelligence import (
 )
 from nightwalker.decision_contracts import DecisionPlan, DecisionStatus, normalise_decision_plan
 from nightwalker.execution_control import ActionVerifier
+from nightwalker.evaluation import evaluate_task_record
 from nightwalker.finding_validation import validate_findings, recommendations_skipped
 from nightwalker.goal_state import GoalStateManager
 from nightwalker.ollama_client import OllamaUnavailable
@@ -378,6 +379,7 @@ class TaskManager:
         snapshot["execution_trace"] = self.trace_store.read(task_id, limit=30)
         snapshot["timing"] = self.timing.snapshot(record)
         snapshot["inference_events"] = self.orchestrator.ollama.inference_events_for_task(task_id)
+        snapshot["evaluation"] = evaluate_task_record(snapshot, snapshot["execution_trace"])
         plan = record.get("execution_plan") or {}
         steps = plan.get("steps") or []
         snapshot["plan_progress"] = {
