@@ -66,3 +66,25 @@ def test_recovery_rate_and_failure_class_are_aggregated():
 
 def test_failure_classifier_has_safe_fallback():
     assert classify_failure([]) == "unclassified"
+
+
+
+def test_task_record_evaluation_uses_goal_ledger_and_never_infers_action_success():
+    from nightwalker.evaluation import evaluate_task_record
+
+    result = evaluate_task_record({
+        "task_id": "task-42",
+        "status": "completed",
+        "goal_state": {
+            "criteria": ["Search submitted", "Results inspected"],
+            "completed": ["Search submitted"],
+        },
+        "timing": {"elapsed_ms": 2500},
+    }, trace=[
+        {"phase": "act", "details": {"reason": "Typed query"}},
+    ])
+
+    assert result["false_completion"] is True
+    assert result["objective_completion_rate"] == 0.5
+    assert result["action_effectiveness_rate"] is None
+    assert result["duration_ms"] == 2500
